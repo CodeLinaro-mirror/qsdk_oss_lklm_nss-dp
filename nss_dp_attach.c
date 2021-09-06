@@ -1,6 +1,6 @@
 /*
  **************************************************************************
- * Copyright (c) 2016-2017, 2019-2020 The Linux Foundation. All rights reserved.
+ * Copyright (c) 2016-2017, 2019-2021 The Linux Foundation. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -45,7 +45,7 @@ void nss_dp_receive(struct net_device *netdev, struct sk_buff *skb,
 	netdev_dbg(netdev, "Rx on port%d, packet len %d, CSUM %d\n",
 			dp_dev->macid, skb->len, skb->ip_summed);
 
-#ifdef CONFIG_NET_SWITCHDEV
+#ifdef NSS_DP_PPE_SWITCHDEV
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
 	skb->offload_fwd_mark = netdev->offload_fwd_mark;
 #else

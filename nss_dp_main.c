@@ -543,7 +543,7 @@ static struct mii_bus *nss_dp_mdio_attach(struct platform_device *pdev)
 	return mdio_data->mii_bus;
 }
 
-#ifdef CONFIG_NET_SWITCHDEV
+#ifdef NSS_DP_PPE_SWITCHDEV
 /*
  * nss_dp_is_phy_dev()
  *	Check if it is dp device
@@ -629,7 +629,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	netdev->watchdog_timeo = 5 * HZ;
 	netdev->netdev_ops = &nss_dp_netdev_ops;
 	nss_dp_set_ethtool_ops(netdev);
-#ifdef CONFIG_NET_SWITCHDEV
+#ifdef NSS_DP_PPE_SWITCHDEV
 	nss_dp_switchdev_setup(netdev);
 #endif
 

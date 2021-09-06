@@ -10,10 +10,6 @@ qca-nss-dp-objs += nss_dp_attach.o \
 		   nss_dp_ethtools.o \
 		   nss_dp_main.o
 
-ifneq ($(CONFIG_NET_SWITCHDEV),)
-qca-nss-dp-objs += nss_dp_switchdev.o
-endif
-
 ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64 ipq60xx ipq60xx_64))
 qca-nss-dp-objs += hal/edma/edma_cfg.o \
 		   hal/edma/edma_data_plane.o \
@@ -34,6 +30,10 @@ ccflags-y += -Wall -Werror
 
 ifeq ($(SoC),$(filter $(SoC),ipq807x ipq807x_64 ipq60xx ipq60xx_64))
 ccflags-y += -DNSS_DP_PPE_SUPPORT
+ifneq ($(CONFIG_NET_SWITCHDEV),)
+qca-nss-dp-objs += nss_dp_switchdev.o
+ccflags-y += -DNSS_DP_PPE_SWITCHDEV
+endif
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq60xx ipq60xx_64))

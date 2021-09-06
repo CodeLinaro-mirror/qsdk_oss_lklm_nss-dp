@@ -376,7 +376,7 @@ static uint32_t edma_clean_rx(struct edma_hw *ehw,
 		skb->skb_iif = ndev->ifindex;
 		skb_put(skb, pkt_length);
 		skb->protocol = eth_type_trans(skb, skb->dev);
-#ifdef CONFIG_NET_SWITCHDEV
+#ifdef NSS_DP_PPE_SWITCHDEV
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
 		skb->offload_fwd_mark = ndev->offload_fwd_mark;
 #else
