@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -41,7 +43,38 @@
 #define EDMA_START_GMACS		NSS_DP_HAL_START_IFNUM
 #define EDMA_MAX_GMACS			NSS_DP_HAL_MAX_PORTS
 #define EDMA_IRQ_NAME_SIZE		32
-#define EDMA_SC_BYPASS		1
+#define EDMA_SC_BYPASS			1
+#define EDMA_NETDEV_FEATURES		NETIF_F_FRAGLIST \
+					| NETIF_F_SG \
+					| NETIF_F_RXCSUM \
+					| NETIF_F_HW_CSUM \
+					| NETIF_F_TSO \
+					| NETIF_F_TSO6;
+
+#define EDMA_SWITCH_DEV_ID	0
+#define EDMA_PPE_QUEUE_LEVEL	0
+#define EDMA_BITS_IN_WORD	32
+
+/*
+ * Bitmap for ring to PPE queue's mapping.
+ *
+ * A bitmap for 300 PPE queues requires 10 32bit integers
+ */
+#define EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT	10
+
+/*
+ * EDMA clock frequency: 352 MHZ
+ * So, one clock cycle = (1/352) micro seconds
+ *
+ * One timer unit is 128 clock cycles.
+ *
+ * So, therefore the microsecond to timer unit calculation is:
+ * Timer unit	= time in microseconds / (one clock cycle in microsecond * cycles in 1 timer unit)
+ * 		= ('x' microsecond * 352 / 128)
+ */
+#define EDMA_CLK_FREQ		352
+#define CYCLE_PER_TIMER_UNIT	128
+#define MICROSEC_TO_TIMER_UNIT(x)	(((x) * EDMA_CLK_FREQ) / CYCLE_PER_TIMER_UNIT)
 
 /*
  * EDMA common clocks
@@ -108,6 +141,22 @@
 #define EDMA_MISC_TX_TIMEOUT_STATUS_GET(x)		(((x) & EDMA_MISC_TX_TIMEOUT_MASK) >> 7)
 
 /*
+ * edma_misc_stats
+ *	EDMA miscellaneous stats
+ */
+struct edma_misc_stats {
+	uint64_t edma_misc_axi_read_err;		/* AXI read error */
+	uint64_t edma_misc_axi_write_err;		/* AXI write error */
+	uint64_t edma_misc_rx_desc_fifo_full;		/* Rx descriptor FIFO full error */
+	uint64_t edma_misc_rx_buf_size_err;		/* Rx buffer size too small error */
+	uint64_t edma_misc_tx_sram_full;		/* Tx packet SRAM buffer full error */
+	uint64_t edma_misc_tx_data_len_err;		/* Tx data length error */
+	uint64_t edma_misc_tx_timeout;			/* Tx timeout error */
+	uint64_t edma_misc_tx_cmpl_buf_full;		/* Tx completion buffer full error */
+	struct u64_stats_sync syncp;			/* Synchronization pointer */
+};
+
+/*
  * edma_pcpu_stats
  *	EDMA per cpu stats data structure
  */
@@ -137,6 +186,9 @@ struct edma_gbl_ctx {
 	bool napi_added;
 			/* NAPI flag */
 
+	struct ctl_table_header *ctl_table_hdr;
+			/* sysctl table entry */
+
 	struct edma_rxfill_ring *rxfill_rings;
 			/* Rx Fill Rings, SW is producer */
 	struct edma_rxdesc_ring *rxdesc_rings;
@@ -150,12 +202,22 @@ struct edma_gbl_ctx {
 			/* Rx Fill ring per-core mapping from device tree */
 	uint32_t rxdesc_ring_map[EDMA_RXDESC_RING_PER_CORE_MAX][NR_CPUS];
 			/* Rx Descriptor ring per-core mapping from device tree */
+	uint32_t (*rxdesc_ring_to_queue_bm)[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT];
+			/* Bitmap of mapped PPE queue ids of the Rx descriptor rings */
 	int32_t tx_to_txcmpl_map[EDMA_MAX_TXDESC_RINGS];
 			/* Tx ring to Tx complete ring mapping */
 	int32_t tx_map[EDMA_TX_RING_PER_CORE_MAX][NR_CPUS];
 			/* Per core Tx ring to core mapping */
+	int32_t tx_fc_grp_map[EDMA_MAX_GMACS];
+			/* Per GMAC TxDesc ring to flow control group mapping */
 	int32_t txcmpl_map[EDMA_TXCMPL_RING_PER_CORE_MAX][NR_CPUS];
 			/* Tx complete ring to core mapping */
+
+	struct dentry *root_dentry;	/* Root debugfs entry */
+	struct dentry *stats_dentry;	/* Statistics debugfs entry */
+
+	struct edma_misc_stats __percpu *misc_stats;
+			/* Per CPU miscellaneous statistics */
 
 	uint32_t tx_priority_level;
 			/* Tx priority level per port */
@@ -204,6 +266,10 @@ struct edma_gbl_ctx {
 			/* Misc interrupt interrupt mask */
 	uint32_t dp_override_cnt;
 			/* Number of interfaces overriden */
+	uint32_t rx_page_mode;
+			/* Page mode enabled or disabled */
+	uint32_t rx_jumbo_mru;
+			/* Jumbo MRU value */
 	bool edma_initialized;
 			/* Flag to check initialization status */
 };
@@ -212,6 +278,8 @@ extern struct edma_gbl_ctx edma_gbl_ctx;
 
 int edma_irq_init(void);
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx);
+int32_t edma_misc_stats_alloc(void);
+void edma_misc_stats_free(void);
 void edma_enable_interrupts(struct edma_gbl_ctx *egc);
 void edma_disable_interrupts(struct edma_gbl_ctx *egc);
 
