@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -173,7 +175,14 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
 			(uint32_t)(txdesc_ring->count &
 			EDMA_TXDESC_RING_SIZE_MASK));
 
-	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id), EDMA_TX_INITIAL_PROD_IDX);
+	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id),
+			(uint32_t)EDMA_TX_INITIAL_PROD_IDX);
+
+	/*
+	 * Configure group ID for flow control for this Tx ring
+	 */
+	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id),
+			EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id));
 }
 
 /*
@@ -182,7 +191,7 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
  */
 static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 {
-	uint32_t tx_mod_timer;
+	uint32_t data;
 
 	/*
 	 * Configure TxCmpl ring base address
@@ -200,12 +209,45 @@ static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring
 			EDMA_TXCMPL_RETMODE_OPAQUE);
 
 	/*
-	 * Configure the default timer mitigation value
+	 * Validate mitigation timer value
 	 */
-	tx_mod_timer = (EDMA_TX_MOD_TIMER & EDMA_TX_MOD_TIMER_INIT_MASK)
-			<< EDMA_TX_MOD_TIMER_INIT_SHIFT;
-	edma_reg_write(EDMA_REG_TX_MOD_TIMER(txcmpl_ring->id),
-				tx_mod_timer);
+	if ((nss_dp_tx_mitigation_timer < EDMA_TX_MITIGATION_TIMER_MIN) ||
+			(nss_dp_tx_mitigation_timer > EDMA_TX_MITIGATION_TIMER_MAX)) {
+		edma_err("Invalid Tx mitigation timer configured:%d for ring:%d."
+				" Using the default timer value:%d\n",
+				nss_dp_tx_mitigation_timer, txcmpl_ring->id,
+				NSS_DP_TX_MITIGATION_TIMER_DEF);
+		nss_dp_tx_mitigation_timer = NSS_DP_TX_MITIGATION_TIMER_DEF;
+	}
+
+	/*
+	 * Validate mitigation packet count value
+	 */
+	if ((nss_dp_tx_mitigation_pkt_cnt < EDMA_TX_MITIGATION_PKT_CNT_MIN) ||
+			(nss_dp_tx_mitigation_pkt_cnt > EDMA_TX_MITIGATION_PKT_CNT_MAX)) {
+		edma_err("Invalid Tx mitigation packet count configured:%d for ring:%d."
+				" Using the default packet counter value:%d\n",
+				nss_dp_tx_mitigation_timer, txcmpl_ring->id,
+				NSS_DP_TX_MITIGATION_PKT_CNT_DEF);
+		nss_dp_tx_mitigation_pkt_cnt = NSS_DP_TX_MITIGATION_PKT_CNT_DEF;
+	}
+
+	/*
+	 * Configure the Mitigation timer
+	 */
+	data = MICROSEC_TO_TIMER_UNIT(nss_dp_tx_mitigation_timer);
+	data = ((data & EDMA_TX_MOD_TIMER_INIT_MASK)
+			<< EDMA_TX_MOD_TIMER_INIT_SHIFT);
+	edma_info("EDMA Tx mitigation timer value: %d\n", data);
+	edma_reg_write(EDMA_REG_TX_MOD_TIMER(txcmpl_ring->id), data);
+
+	/*
+	 * Configure the Mitigation packet count
+	 */
+	data = (nss_dp_tx_mitigation_pkt_cnt & EDMA_TXCMPL_LOW_THRE_MASK)
+			<< EDMA_TXCMPL_LOW_THRE_SHIFT;
+	edma_info("EDMA Tx mitigation packet count value: %d\n", data);
+	edma_reg_write(EDMA_REG_TXCMPL_UGT_THRE(txcmpl_ring->id), data);
 
 	edma_reg_write(EDMA_REG_TX_INT_CTRL(txcmpl_ring->id), EDMA_TX_NE_INT_EN);
 }
@@ -264,14 +306,14 @@ void edma_cfg_tx_rings_enable(struct edma_gbl_ctx *egc)
 	/*
 	 * Enable Tx rings
 	 */
-	for (i = egc->txdesc_ring_start; i < egc->txdesc_ring_end; i++) {
+	for (i = 0; i < egc->num_txdesc_rings; i++) {
 		uint32_t data;
+		struct edma_txdesc_ring *txdesc_ring = &egc->txdesc_rings[i];
 
-		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(i));
-		data |= EDMA_TXDESC_TX_EN;
-		edma_reg_write(EDMA_REG_TXDESC_CTRL(i), data);
+		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
+		data |= EDMA_TXDESC_CTRL_TXEN_SET(EDMA_TXDESC_TX_ENABLE);
+		edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
 	}
-
 }
 
 /*
@@ -291,7 +333,7 @@ void edma_cfg_tx_rings_disable(struct edma_gbl_ctx *egc)
 
 		txdesc_ring = &egc->txdesc_rings[i];
 		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
-		data &= ~EDMA_TXDESC_TX_EN;
+		data &= ~EDMA_TXDESC_TX_ENABLE;
 		edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
 	}
 }
@@ -375,7 +417,21 @@ void edma_cfg_tx_mapping(struct edma_gbl_ctx *egc)
  */
 static int edma_cfg_tx_rings_setup(struct edma_gbl_ctx *egc)
 {
-	uint32_t i;
+	uint32_t i, j = 0;
+
+	/*
+	 * Set Txdesc flow control group id
+	 */
+	for (i = 0; i < EDMA_TX_RING_PER_CORE_MAX; i++) {
+		for_each_possible_cpu(j) {
+			struct edma_txdesc_ring *txdesc_ring = NULL;
+			uint32_t txdesc_idx = egc->tx_map[i][j]
+						- egc->txdesc_ring_start;
+
+			txdesc_ring = &egc->txdesc_rings[txdesc_idx];
+			txdesc_ring->fc_grp_id = egc->tx_fc_grp_map[i];
+		}
+	}
 
 	/*
 	 * Allocate TxDesc ring descriptors
@@ -605,11 +661,18 @@ void edma_cfg_tx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev)
 {
 	uint32_t i;
 
+	if ((nss_dp_tx_napi_budget < EDMA_TX_NAPI_WORK_MIN) ||
+		(nss_dp_tx_napi_budget > EDMA_TX_NAPI_WORK_MAX)) {
+		edma_err("Incorrect Tx NAPI budget: %d, setting to default: %d",
+				nss_dp_tx_napi_budget, NSS_DP_HAL_TX_NAPI_BUDGET);
+		nss_dp_tx_napi_budget = NSS_DP_HAL_TX_NAPI_BUDGET;
+	}
+
 	for (i = 0; i < egc->num_txcmpl_rings; i++) {
 		struct edma_txcmpl_ring *txcmpl_ring = &egc->txcmpl_rings[i];
 
 		netif_napi_add(netdev, &txcmpl_ring->napi,
-				edma_tx_napi_poll, EDMA_TX_NAPI_WORK);
+				edma_tx_napi_poll, nss_dp_tx_napi_budget);
 		txcmpl_ring->napi_added = true;
 	}
 }

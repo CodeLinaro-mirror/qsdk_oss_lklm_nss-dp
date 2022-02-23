@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -38,6 +38,51 @@
 #define NSS_DP_RX_BUFFER_SIZE		1856
 #else
 #define NSS_DP_RX_BUFFER_SIZE		1984
+#endif
+
+#if defined(NSS_DP_IPQ95XX)
+/*
+ * Rx rings flow control threshold values
+ *
+ * The Rx flow control has the X-OFF and the X-ON threshold values.
+ * Whenever the free Rx ring descriptor count falls below the X-OFF value, the
+ * ring level flow control will kick in and the mapped PPE queues will be backpressured.
+ * Similarly, whenever the free Rx ring descriptor count crosses the X-ON value,
+ * the ring level flow control will be disabled.
+ */
+#define NSS_DP_RX_FC_XOFF_DEF		16
+#define NSS_DP_RX_FC_XON_DEF		32
+
+/*
+ * Rx ring's mapped AC FC threshold value.
+ *
+ * This value is picked by running four uni-UDPv4 traffic which are mapped
+ * to 4 different rings (and hence processed by 4 different cores) and then
+ * increase one flow's rate to more than what the core can process and observe
+ * whether this congestion in one flow is influencing other flows or not.
+ * Below is the maximum threshold value which is invoking the congestion's queue
+ * tail drop and hence not trigerring the Rx port's back-pressure.
+ */
+#define NSS_DP_RX_AC_FC_THRES_DEF	0x104
+
+/*
+ * Tx/Rx Mitigation values
+ *
+ * Packet count indicates number of packets received or transmitted after which
+ * the interrupt is triggered. Stale timer (in microseconds) indicates time after
+ * which interrupt is triggered in case number of packets have not been accumulated.
+ *
+ * These values are picked by running the single large packet uni-UDPv4 traffic
+ * at moderate speed and observing the CPU utilization for the flow's processing
+ * core.
+ * Below values gave the best combination of the idle CPU percentage left for the
+ * above mentioned scenario and the minimum impact of the single and multi core
+ * small packet's PPS numbers.
+ */
+#define NSS_DP_TX_MITIGATION_TIMER_DEF		250
+#define NSS_DP_TX_MITIGATION_PKT_CNT_DEF	16
+#define NSS_DP_RX_MITIGATION_TIMER_DEF		250
+#define NSS_DP_RX_MITIGATION_PKT_CNT_DEF	16
 #endif
 
 struct nss_dp_global_ctx;
@@ -97,11 +142,26 @@ struct nss_dp_global_ctx {
 	bool common_init_done;		/* Flag to hold common init state */
 	uint8_t slowproto_acl_bm;	/* Port bitmap to allow slow protocol packets */
 	uint32_t rx_buf_size;		/* Buffer size to allocate */
+	uint32_t jumbo_mru;			/* Jumbo mru value for Rx processing */
+	bool overwrite_mode;		/* Overwrite mode for Rx processing */
+	bool page_mode;				/* Page mode for Rx processing */
 };
 
 /* Global data */
 extern struct nss_dp_global_ctx dp_global_ctx;
 extern struct nss_dp_data_plane_ctx dp_global_data_plane_ctx[NSS_DP_HAL_MAX_PORTS];
+extern int nss_dp_rx_napi_budget;
+extern int nss_dp_tx_napi_budget;
+
+#if defined(NSS_DP_IPQ95XX)
+extern int nss_dp_rx_fc_xon;
+extern int nss_dp_rx_fc_xoff;
+extern int nss_dp_rx_ac_fc_threshold;
+extern int nss_dp_tx_mitigation_timer;
+extern int nss_dp_tx_mitigation_pkt_cnt;
+extern int nss_dp_rx_mitigation_timer;
+extern int nss_dp_rx_mitigation_pkt_cnt;
+#endif
 
 /*
  * nss data plane link state
