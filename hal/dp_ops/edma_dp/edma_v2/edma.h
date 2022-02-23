@@ -25,6 +25,9 @@
 #include <nss_dp_hal_if.h>
 #include "edma_rx.h"
 #include "edma_tx.h"
+#ifdef NSS_DP_PPEDS_SUPPORT
+#include "edma_ppeds_priv.h"
+#endif
 
 /*
  * The driver uses kernel DMA constructs that assume an architecture
@@ -285,6 +288,10 @@ struct edma_gbl_ctx {
 #endif
 	bool edma_initialized;
 			/* Flag to check initialization status */
+#ifdef NSS_DP_PPEDS_SUPPORT
+	struct edma_ppeds_drv ppeds_drv;
+			/* PPE-DS nodes information */
+#endif
 };
 
 extern struct edma_gbl_ctx edma_gbl_ctx;
