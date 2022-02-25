@@ -1,6 +1,8 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
@@ -30,6 +32,7 @@
 #include "edma_cfg_rx.h"
 #include "edma_regs.h"
 #include "edma_debug.h"
+#include "edma_debugfs.h"
 
 /*
  * EDMA hardware instance
@@ -147,6 +150,11 @@ void edma_cleanup(bool is_dp_override)
 		return;
 	}
 
+	if (edma_gbl_ctx.ctl_table_hdr) {
+		unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
+		edma_gbl_ctx.ctl_table_hdr = NULL;
+	}
+
 	/*
 	 * TODO: Check with HW team about the state of in-flight
 	 * packets when the descriptor rings are disabled.
@@ -209,6 +217,11 @@ void edma_cleanup(bool is_dp_override)
 	iounmap(edma_gbl_ctx.reg_base);
 	release_mem_region((edma_gbl_ctx.reg_resource)->start,
 			resource_size(edma_gbl_ctx.reg_resource));
+
+	/*
+	 * Clean the debugfs entries for the EDMA
+	 */
+	edma_debugfs_exit();
 
 	/*
 	 * Mark initialize false, so that we do not
@@ -458,6 +471,15 @@ static int edma_of_get_pdata(struct resource *edma_res)
 			edma_gbl_ctx.num_rxfill_rings, edma_gbl_ctx.rxfill_ring_end);
 
 	/*
+	 * Get page_mode of RXFILL rings
+	 * TODO: Move this setting to DP common node
+	 */
+#if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
+	of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rx-page-mode",
+					&edma_gbl_ctx.rx_page_mode);
+#endif
+
+	/*
 	 * Get id of first RXDESC ring
 	 */
 	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxdesc-ring-start",
@@ -557,6 +579,18 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	}
 
 	/*
+	 * Get TXDESC flow control Group ID Map
+	 */
+	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
+			"qcom,txdesc-fc-grp-map",
+			(int32_t *)edma_gbl_ctx.tx_fc_grp_map, EDMA_MAX_GMACS);
+	if (ret) {
+		edma_err("Unable to read TxDesc-Fc-Grp map array. \
+			ret: %d\n", ret);
+		return -EINVAL;
+	}
+
+	/*
 	 * Get RXDESC Map
 	 */
 	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
@@ -627,7 +661,7 @@ static int edma_hw_reset(struct edma_gbl_ctx *egc)
 
 /*
  * edma_init_ring_maps()
- *	API to initialize TX/RX rings in the global context
+ *	API to initialize TX/RX ring maps in the global context
  */
 static void edma_init_ring_maps(void)
 {
@@ -647,6 +681,10 @@ static void edma_init_ring_maps(void)
 		for_each_possible_cpu(j) {
 			edma_gbl_ctx.txcmpl_map[i][j] = -1;
 		}
+	}
+
+	for (i = 0; i < EDMA_MAX_GMACS; i++) {
+		edma_gbl_ctx.tx_fc_grp_map[i] = -1;
 	}
 }
 
@@ -765,6 +803,11 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_err("Error in configuring service code: %d\n", ret);
 		return ret;
 	}
+
+	/*
+	 * Set EDMA global page mode and jumbo MRU
+	 */
+	edma_cfg_rx_page_mode_and_jumbo(egc);
 
 	ret = edma_alloc_rings(egc);
 	if (ret) {
@@ -1016,6 +1059,47 @@ static int32_t edma_configure_clocks(void)
 }
 
 /*
+ * edma_rx_flow_control_table
+ *	EDMA Rx flow control sysctl table
+ */
+static struct ctl_table edma_rx_flow_control_table[] = {
+	{
+		.procname	=	"rx_fc_enable",
+		.data		=	&edma_cfg_rx_fc_enable,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	edma_cfg_rx_fc_enable_handler
+	},
+	{}
+};
+
+/*
+ * edma_main
+ *	EDMA main directory
+ */
+static struct ctl_table edma_main[] = {
+	{
+		.procname	=	"edma",
+		.mode		=	0555,
+		.child		=	edma_rx_flow_control_table,
+	},
+	{}
+};
+
+/*
+ * edma_root
+ *	EDMA root directory
+ */
+static struct ctl_table edma_root[] = {
+	{
+		.procname	=	"net",
+		.mode		=	0555,
+		.child		=	edma_main,
+	},
+	{}
+};
+
+/*
  * edma_init()
  *	EDMA init
  */
@@ -1047,6 +1131,12 @@ int edma_init(void)
 		return -EINVAL;
 	}
 
+	edma_gbl_ctx.ctl_table_hdr = register_sysctl_table(edma_root);
+	if (!edma_gbl_ctx.ctl_table_hdr) {
+		edma_err("sysctl table configuration failed");
+		return -EINVAL;
+	}
+
 	/*
 	 * Request memory region for EDMA registers
 	 */
@@ -1055,6 +1145,8 @@ int edma_init(void)
 				EDMA_DEVICE_NODE_NAME);
 	if (!edma_gbl_ctx.reg_resource) {
 		edma_err("Unable to request EDMA register memory.\n");
+		unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
+		edma_gbl_ctx.ctl_table_hdr = NULL;
 		return -EFAULT;
 	}
 
@@ -1070,13 +1162,23 @@ int edma_init(void)
 	}
 
 	/*
+	 * Initialize EDMA debugfs entry
+	 */
+	ret = edma_debugfs_init();
+	if (ret < 0) {
+		edma_err("Error in EDMA debugfs init API. ret: %d\n", ret);
+		ret = -EINVAL;
+		goto edma_debugfs_init_fail;
+	}
+
+	/*
 	 * Configure the EDMA common clocks
 	 */
 	ret = edma_configure_clocks();
 	if (ret) {
 		edma_err("Error in configuring the common EDMA clocks\n");
 		ret = -EFAULT;
-		goto edma_init_remap_fail;
+		goto edma_hw_init_fail;
 	}
 
 	edma_info("EDMA common clocks are configured\n");
@@ -1084,7 +1186,7 @@ int edma_init(void)
 	if (edma_hw_init(&edma_gbl_ctx) != 0) {
 		edma_err("Error in edma initialization\n");
 		ret = -EFAULT;
-		goto edma_init_hw_init_fail;
+		goto edma_hw_init_fail;
 	}
 
 	/*
@@ -1094,12 +1196,17 @@ int edma_init(void)
 
 	return 0;
 
-edma_init_hw_init_fail:
+edma_hw_init_fail:
+	edma_debugfs_exit();
+
+edma_debugfs_init_fail:
 	iounmap(edma_gbl_ctx.reg_base);
 
 edma_init_remap_fail:
 	release_mem_region((edma_gbl_ctx.reg_resource)->start,
 			resource_size(edma_gbl_ctx.reg_resource));
+	unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
+	edma_gbl_ctx.ctl_table_hdr = NULL;
 	return ret;
 }
 
