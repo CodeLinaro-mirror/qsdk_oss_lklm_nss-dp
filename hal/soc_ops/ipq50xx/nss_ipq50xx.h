@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2020-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -26,6 +26,12 @@
  * Number of TX/RX queue supported
  */
 #define NSS_DP_QUEUE_NUM			1
+
+/*
+ * TX/RX NAPI budget
+ */
+#define NSS_DP_HAL_RX_NAPI_BUDGET		32
+#define NSS_DP_HAL_TX_NAPI_BUDGET		32
 
 /*
  * TCSR_GMAC_AXI_CACHE_OVERRIDE register size
@@ -98,6 +104,9 @@ struct nss_dp_hal_gmac_stats_tx {
 	uint64_t tx_dropped;		/**< Number of TX dropped packets */
 	uint64_t tx_ts_create_errors;	/**< Number of tx timestamp creation errors */
 	uint64_t tx_desc_not_avail;	/**< TX descriptor unavailable */
+	uint64_t tx_nr_frags_pkts;	/**< Number of Tx scatter packets with nr_frags */
+	uint64_t tx_fraglist_pkts;	/**< Number of Tx scatter packets with frag_list */
+	uint64_t tx_packets_requeued;	/**< Number of Tx packets requeued */
 };
 
 /**

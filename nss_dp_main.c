@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -63,6 +63,48 @@ MODULE_PARM_DESC(overwrite_mode, "overwrite default page_mode setting");
 int jumbo_mru;
 module_param(jumbo_mru, int, 0);
 MODULE_PARM_DESC(jumbo_mru, "jumbo mode");
+
+int tx_requeue_stop;
+module_param(tx_requeue_stop, int, 0);
+MODULE_PARM_DESC(tx_requeue_stop, "disable tx requeue function");
+
+int nss_dp_rx_napi_budget = NSS_DP_HAL_RX_NAPI_BUDGET;
+module_param(nss_dp_rx_napi_budget, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_rx_napi_budget, "Rx NAPI budget");
+
+int nss_dp_tx_napi_budget = NSS_DP_HAL_TX_NAPI_BUDGET;
+module_param(nss_dp_tx_napi_budget, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_tx_napi_budget, "Tx NAPI budget");
+
+#if defined(NSS_DP_IPQ95XX)
+int nss_dp_rx_fc_xoff = NSS_DP_RX_FC_XOFF_DEF;
+module_param(nss_dp_rx_fc_xoff, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_rx_fc_xoff, "Rx ring's flow control XOFF threshold value");
+
+int nss_dp_rx_fc_xon = NSS_DP_RX_FC_XON_DEF;
+module_param(nss_dp_rx_fc_xon, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_rx_fc_xon, "Rx ring's flow control XON threshold value");
+
+int nss_dp_rx_ac_fc_threshold = NSS_DP_RX_AC_FC_THRES_DEF;
+module_param(nss_dp_rx_ac_fc_threshold, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_rx_ac_fc_threshold, "Rx ring's mapped PPE queue's FC threshold value");
+
+int nss_dp_tx_mitigation_timer = NSS_DP_TX_MITIGATION_TIMER_DEF;
+module_param(nss_dp_tx_mitigation_timer, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_tx_mitigation_timer, "Tx mitigation timer value in microseconds");
+
+int nss_dp_tx_mitigation_pkt_cnt = NSS_DP_TX_MITIGATION_PKT_CNT_DEF;
+module_param(nss_dp_tx_mitigation_pkt_cnt, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_tx_mitigation_pkt_cnt, "Tx mitigation packet count value");
+
+int nss_dp_rx_mitigation_timer = NSS_DP_RX_MITIGATION_TIMER_DEF;
+module_param(nss_dp_rx_mitigation_timer, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_rx_mitigation_timer, "Rx mitigation timer value in microseconds");
+
+int nss_dp_rx_mitigation_pkt_cnt = NSS_DP_RX_MITIGATION_PKT_CNT_DEF;
+module_param(nss_dp_rx_mitigation_pkt_cnt, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_rx_mitigation_pkt_cnt, "Rx mitigation packet count value");
+#endif
 
 /*
  * nss_dp_do_ioctl()
@@ -308,7 +350,7 @@ static int nss_dp_open(struct net_device *netdev)
 	}
 
 	/*
-	 * Inform the Linux Networking stack about the hardwar capability of
+	 * Inform the Linux Networking stack about the hardware capability of
 	 * checksum offloading and other features. Each data_plane is
 	 * responsible to maintain the feature set it supports
 	 */
@@ -587,6 +629,7 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 		return -EFAULT;
 	}
 #endif
+
 	return 0;
 }
 
@@ -952,6 +995,24 @@ int __init nss_dp_init(void)
 	 * Get the buffer size to allocate
 	 */
 	dp_global_ctx.rx_buf_size = NSS_DP_RX_BUFFER_SIZE;
+
+	/*
+	 * Get the module params.
+	 * We do not support page_mode or jumbo_mru on low memory profiles.
+	 */
+	dp_global_ctx.tx_requeue_stop = false;
+	if (tx_requeue_stop != 0) {
+		dp_global_ctx.tx_requeue_stop = true;
+	}
+#if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
+	dp_global_ctx.overwrite_mode = overwrite_mode;
+	dp_global_ctx.page_mode = page_mode;
+	dp_global_ctx.jumbo_mru = jumbo_mru;
+#else
+	if ((overwrite_mode && page_mode) || jumbo_mru) {
+		pr_err("Low memory profiles does not support page mode/jumbo mru\n");
+	}
+#endif
 
 	/*
 	 * Check platform compatibility and

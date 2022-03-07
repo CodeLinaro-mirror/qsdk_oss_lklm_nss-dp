@@ -1,5 +1,6 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -38,6 +39,11 @@
 #define EDMA_MAX_RXFILL_RINGS		8	/* Max RxFill rings */
 #define EDMA_RX_MAX_PRIORITY_LEVEL	1
 
+#define EDMA_RX_PID_IPV4_MAX		0x3
+#define EDMA_RX_PID_IPV6		0x4
+#define EDMA_RX_PID_IS_IPV4(pid)	(!((pid) & (~EDMA_RX_PID_IPV4_MAX)))
+#define EDMA_RX_PID_IS_IPV6(pid)	(!(!((pid) & EDMA_RX_PID_IPV6)))
+
 #define EDMA_RXDESC_BUFFER_ADDR_GET(desc)	((uint32_t)((desc)->word0))
 #define EDMA_RXDESC_OPAQUE_GET(desc)		((uintptr_t)((uint64_t)((desc)->word2) | \
 						((uint64_t)((desc)->word3) << 0x20)))
@@ -51,12 +57,16 @@
 #define EDMA_RXDESC_PACKET_LEN_MASK		0x3FFFF
 #define EDMA_RXDESC_PACKET_LEN_GET(desc)	(((desc)->word5) & \
 						EDMA_RXDESC_PACKET_LEN_MASK)
+#define EDMA_RXDESC_MORE_BIT_MASK		0x40000000
+#define EDMA_RXDESC_MORE_BIT_GET(desc)		(((desc)->word1) & \
+						EDMA_RXDESC_MORE_BIT_MASK)
 #define EDMA_RXDESC_SRC_INFO_GET(desc)		(((desc)->word4) & 0xFFFF)
 #define EDMA_RXDESC_L3CSUM_STATUS_GET(desc)	(((desc)->word6) & \
 						EDMA_RXDESC_L3CSUM_STATUS_MASK)
 #define EDMA_RXDESC_L4CSUM_STATUS_GET(desc)	(((desc)->word6) & \
 						EDMA_RXDESC_L4CSUM_STATUS_MASK)
 #define EDMA_RXDESC_SERVICE_CODE_GET(desc)	(((desc)->word7) & 0x1FF)
+#define EDMA_RXDESC_PID_GET(desc)		(((desc)->word7) & 0x7000) >> 0x0C
 
 #define EDMA_RXFILL_BUF_SIZE_MASK		0xFFFF
 #define EDMA_RXFILL_BUF_SIZE_SHIFT		16
@@ -77,7 +87,31 @@ struct edma_rx_stats {
 	uint64_t rx_pkts;
 	uint64_t rx_bytes;
 	uint64_t rx_drops;
+	uint64_t rx_nr_frag_pkts;
+	uint64_t rx_fraglist_pkts;
+	uint64_t rx_nr_frag_headroom_err;
 	struct u64_stats_sync syncp;
+};
+
+/*
+ * edma_rx_desc_stats
+ *	RX descriptor ring stats data structure
+ */
+struct edma_rx_desc_stats {
+	uint64_t src_port_inval;		/* Invalid source port number */
+	uint64_t src_port_inval_type;		/* Source type is not PORT ID */
+	uint64_t src_port_inval_netdev;		/* Invalid net device for the source port */
+	struct u64_stats_sync syncp;		/* Synchronization pointer */
+};
+
+/*
+ * edma_rx_fill_stats
+ *	Rx fill descriptor ring stats data structure
+ */
+struct edma_rx_fill_stats {
+	uint64_t alloc_failed;			/* Buffer allocation failure count */
+	uint64_t page_alloc_failed;		/* Page allocation failure count for page mode */
+	struct u64_stats_sync syncp;		/* Synchronization pointer */
 };
 
 /*
@@ -128,6 +162,10 @@ struct edma_rxfill_ring {
 	uint32_t alloc_size;		/* Buffer size to allocate */
 	struct edma_rxfill_desc *desc;	/* descriptor ring virtual address */
 	dma_addr_t dma;			/* descriptor ring physical address */
+	uint32_t buf_len;		/* Buffer length for rxfill descriptor */
+	bool page_mode;			/* Page mode for Rx processing */
+	struct edma_rx_fill_stats rx_fill_stats;
+					/* Rx fill ring statistics */
 };
 
 /*
@@ -143,11 +181,15 @@ struct edma_rxdesc_ring {
 					/* Primary descriptor ring virtual address */
 	struct edma_rxdesc_sec_desc *sdesc;
 					/* Secondary descriptor ring virtual address */
+	struct edma_rx_desc_stats rx_desc_stats;
+					/* Rx descriptor ring statistics */
 	struct edma_rxfill_ring *rxfill;
 					/* RXFILL ring used */
 	bool napi_added;		/* Flag to indicate NAPI add status */
 	dma_addr_t pdma;		/* Primary descriptor ring physical address */
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
+	struct sk_buff *head;		/* Head of the skb list in case of scatter-gather frame */
+	struct sk_buff *last;		/* Last skb of the skb list in case of scatter-gather frame */
 };
 
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);
