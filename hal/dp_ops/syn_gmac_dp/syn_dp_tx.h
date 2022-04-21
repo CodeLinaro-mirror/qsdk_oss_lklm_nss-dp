@@ -19,7 +19,7 @@
 #define __NSS_DP_SYN_DP_TX__
 
 #define SYN_DP_NAPI_BUDGET_TX		64
-#define SYN_DP_TX_DESC_SIZE		1024	/* Tx Descriptors needed in the descriptor pool/queue */
+#define SYN_DP_TX_DESC_SIZE		4096	/* Tx Descriptors needed in the descriptor pool/queue */
 #define SYN_DP_TX_DESC_MAX_INDEX	(SYN_DP_TX_DESC_SIZE - 1)
 #define SYN_DP_TX_INVALID_DESC_INDEX	SYN_DP_TX_DESC_SIZE
 

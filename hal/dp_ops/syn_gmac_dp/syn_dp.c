@@ -335,6 +335,8 @@ static netdev_tx_t syn_dp_if_xmit(struct nss_dp_data_plane_ctx *dpc, struct sk_b
 		return NETDEV_TX_OK;
 	}
 
+	dp_global_ctx.tx_requeue_stop = 1;
+
 	/*
 	 * Handle the scenario when descriptors are not enough.
 	 * Only one DMA channel is supported to assume queue 0.
