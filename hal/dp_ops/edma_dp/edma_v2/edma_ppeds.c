@@ -1056,7 +1056,7 @@ void edma_ppeds_inst_del(edma_ppeds_handle_t *ppeds_handle)
 
 	irq_clear_status_flags(ppeds_node->rxfill_intr, IRQ_DISABLE_UNLAZY);
 	free_irq(ppeds_node->rxfill_intr,
-			(void *)&ppeds_node->rxfill_intr);
+			(void *)&ppeds_node->rxfill_ring);
 	netif_napi_del(&ppeds_node->rxfill_ring.napi);
 
 	edma_ppeds_rx_fill_ring_free(&ppeds_node->rxfill_ring);
