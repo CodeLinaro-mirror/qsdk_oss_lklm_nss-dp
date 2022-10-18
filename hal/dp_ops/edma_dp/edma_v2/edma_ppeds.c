@@ -514,7 +514,7 @@ static void edma_ppeds_set_tx_mapping(uint32_t tx_ring_id, uint32_t txcmpl_ring_
  */
 static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 {
-	uint32_t tx_mod_timer;
+	uint32_t tx_mod_timer, data;
 	struct edma_txdesc_ring *txdesc_ring = &ppeds_node->tx_ring;
 	struct edma_txcmpl_ring *txcmpl_ring = &ppeds_node->txcmpl_ring;
 
@@ -557,6 +557,9 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	edma_reg_write(EDMA_REG_TX_MOD_TIMER(txcmpl_ring->id),
 				tx_mod_timer);
 
+	data = edma_reg_read(EDMA_REG_TXCMPL_CONS_IDX(txcmpl_ring->id));
+	txcmpl_ring->cons_idx = data;
+
 	edma_reg_write(EDMA_REG_TX_INT_CTRL(txcmpl_ring->id), EDMA_TX_NE_INT_EN);
 }
 
@@ -576,6 +579,9 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 
 	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
 	edma_reg_write(EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
+
+	data = edma_reg_read(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id));
+	rxfill_ring->prod_idx = data;
 
 	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
 			(uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK));
