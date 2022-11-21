@@ -289,6 +289,7 @@ struct edma_gbl_ctx {
 	bool edma_initialized;
 			/* Flag to check initialization status */
 #ifdef NSS_DP_PPEDS_SUPPORT
+	uint32_t ppeds_node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
 	struct edma_ppeds_drv ppeds_drv;
 			/* PPE-DS nodes information */
 #endif

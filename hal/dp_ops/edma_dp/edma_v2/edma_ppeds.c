@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -21,7 +22,6 @@
 #include "nss_dp_dev.h"
 #include "edma_ppeds_priv.h"
 
-#ifdef NSS_DP_PPEDS_SUPPORT
 static char edma_ppeds_txcmpl_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
 static char edma_ppeds_rxdesc_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
 static char edma_ppeds_rxfill_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
@@ -134,7 +134,7 @@ static int edma_ppeds_tx_secondary_alloc(struct edma_txdesc_ring *txdesc_ring)
 	 * Allocate sencondary Tx ring descriptors
 	 */
 	txdesc_ring->sdesc = kmalloc((sizeof(struct edma_sec_txdesc) *  txdesc_ring->count) +
-			SMP_CACHE_BYTES,  GFP_KERNEL | __GFP_ZERO);
+			SMP_CACHE_BYTES, GFP_KERNEL | __GFP_ZERO);
 	if (!txdesc_ring->sdesc) {
 		edma_err("Descriptor alloc for secondary TX ring %u failed\n",
 				txdesc_ring->id);
@@ -165,7 +165,7 @@ static int edma_ppeds_tx_secondary_free(struct edma_txdesc_ring *txdesc_ring)
 static uint32_t edma_ppeds_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_ring)
 {
 	struct edma_ppeds *ppeds_node = container_of(txcmpl_ring, struct edma_ppeds, txcmpl_ring);
-	edma_ppeds_handle_t *ppeds_handle = &ppeds_node->ppeds_handle;
+	nss_dp_ppeds_handle_t *ppeds_handle = &ppeds_node->ppeds_handle;
 	struct edma_txcmpl_desc *txcmpl;
 	uint32_t cons_idx, prod_idx, data, avail, end_idx;
 	uint16_t count;
@@ -250,10 +250,10 @@ static int edma_ppeds_txcomp_napi_poll(struct napi_struct *napi, int budget)
 }
 
 /*
- * edma_rx_alloc_buffer()
+ * edma_ppeds_rx_alloc_buffer()
  *	Alloc Rx buffers for RxFill ring
  */
-static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count, struct edma_ppeds_rx_fill_elem *rx_fill_arr,
+static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count, struct nss_dp_ppeds_rx_fill_elem *rx_fill_arr,
 		uint32_t headroom)
 {
 	struct edma_rxfill_desc *rxfill_desc;
@@ -349,7 +349,7 @@ static int edma_ppeds_rxfill_napi_poll(struct napi_struct *napi, int budget)
 		}
 
 		/*
-		 * Read on Clear
+		 * Clear on read
 		 */
 		status = EDMA_RXFILL_RING_INT_STATUS_MASK &
 			edma_reg_read(EDMA_REG_RXFILL_INT_STAT(rxfill_ring->ring_id));
@@ -376,9 +376,8 @@ static int edma_ppeds_rx_napi_poll(struct napi_struct *napi, int budget)
 	/*
 	 * Read EDMA Prod Idx.
 	 */
-	prod_idx =
-		edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) &
-		EDMA_RXDESC_PROD_IDX_MASK;
+	prod_idx = edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) &
+			EDMA_RXDESC_PROD_IDX_MASK;
 
 	/*
 	 * Update Prod idx to DS interface
@@ -387,7 +386,7 @@ static int edma_ppeds_rx_napi_poll(struct napi_struct *napi, int budget)
 
 
 	/*
-	 * Read on Clear
+	 * Clear on read
 	 */
 	status = EDMA_RXDESC_RING_INT_STATUS_MASK &
 		edma_reg_read(EDMA_REG_RXDESC_INT_STAT(rxdesc_ring->ring_id));
@@ -411,8 +410,8 @@ static void edma_ppeds_set_rx_mapping(uint32_t rxfill_ring_id, uint32_t rx_ring_
 		uint32_t num_ppe_queues)
 {
 	uint32_t reg, data;
-        uint8_t start_reg_index = ppe_qid/EDMA_QID2RID_NUM_PER_REG;
-        uint8_t start_qnum = ppe_qid - (start_reg_index * EDMA_QID2RID_NUM_PER_REG);
+	uint8_t start_reg_index = ppe_qid/EDMA_QID2RID_NUM_PER_REG;
+	uint8_t start_qnum = ppe_qid - (start_reg_index * EDMA_QID2RID_NUM_PER_REG);
 
 	/*
 	 * Setup RxFill to Rx mapping.
@@ -436,38 +435,38 @@ static void edma_ppeds_set_rx_mapping(uint32_t rxfill_ring_id, uint32_t rx_ring_
 	 */
 	while (num_ppe_queues > 0) {
 		data = edma_reg_read(EDMA_QID2RID_TABLE_MEM(start_reg_index));
-                switch (start_qnum) {
-                case 0:
-                        data &= (~EDMA_RX_RING_ID_QUEUE0_MASK);
-                        data |= EDMA_RX_RING_ID_QUEUE0_SET(rx_ring_id);
-                        num_ppe_queues--;
+		switch (start_qnum) {
+		case 0:
+			data &= (~EDMA_RX_RING_ID_QUEUE0_MASK);
+			data |= EDMA_RX_RING_ID_QUEUE0_SET(rx_ring_id);
+			num_ppe_queues--;
 			if (num_ppe_queues == 0) {
 				break;
 			}
 			/* fall through */
 		case 1:
 			data &= (~EDMA_RX_RING_ID_QUEUE1_MASK);
-                        data |= EDMA_RX_RING_ID_QUEUE1_SET(rx_ring_id);
-                        num_ppe_queues--;
-                        if (num_ppe_queues == 0) {
-                                break;
-                        }
+			data |= EDMA_RX_RING_ID_QUEUE1_SET(rx_ring_id);
+			num_ppe_queues--;
+			if (num_ppe_queues == 0) {
+				break;
+			}
 			/* fall through */
-                case 2:
-                        data &= (~EDMA_RX_RING_ID_QUEUE2_MASK);
-                        data |= EDMA_RX_RING_ID_QUEUE2_SET(rx_ring_id);
-                        num_ppe_queues--;
-                        if (num_ppe_queues == 0) {
-                                break;
-                        }
+		case 2:
+			data &= (~EDMA_RX_RING_ID_QUEUE2_MASK);
+			data |= EDMA_RX_RING_ID_QUEUE2_SET(rx_ring_id);
+			num_ppe_queues--;
+			if (num_ppe_queues == 0) {
+				break;
+			}
 			/* fall through */
-                case 3:
-                        data &= (~EDMA_RX_RING_ID_QUEUE3_MASK);
-                        data |= EDMA_RX_RING_ID_QUEUE3_SET(rx_ring_id);
-                        num_ppe_queues--;
-                        if (num_ppe_queues == 0) {
-                                break;
-                        }
+		case 3:
+			data &= (~EDMA_RX_RING_ID_QUEUE3_MASK);
+			data |= EDMA_RX_RING_ID_QUEUE3_SET(rx_ring_id);
+			num_ppe_queues--;
+			if (num_ppe_queues == 0) {
+				break;
+			}
 		}
 		start_qnum = 0;
 		edma_reg_write(EDMA_QID2RID_TABLE_MEM(start_reg_index), data);
@@ -503,7 +502,9 @@ static void edma_ppeds_set_tx_mapping(uint32_t tx_ring_id, uint32_t txcmpl_ring_
 	}
 
 	data = edma_reg_read(reg);
-	data |= (txcmpl_ring_id & EDMA_TXDESC2CMPL_MAP_TXDESC_MASK) << ((tx_ring_id % 6) * 5);
+	data |= (txcmpl_ring_id & EDMA_TXDESC2CMPL_MAP_TXDESC_MASK) <<
+		 ((tx_ring_id % EDMA_TXDESC2CMPL_MAP_NUM_IN_SINGLE_REG) *
+		   EDMA_TXDESC2CMPL_MAP_TXDESC_ID_BIT_COUNT);
 	edma_reg_write(reg, data);
 }
 
@@ -540,8 +541,7 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	edma_reg_write(EDMA_REG_TXCMPL_BA(txcmpl_ring->id),
 			(uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK));
 	edma_reg_write(EDMA_REG_TXCMPL_RING_SIZE(txcmpl_ring->id),
-			(uint32_t)(txcmpl_ring->count
-			& EDMA_TXDESC_RING_SIZE_MASK));
+			(uint32_t)(txcmpl_ring->count & EDMA_TXDESC_RING_SIZE_MASK));
 
 	/*
 	 * Set TxCmpl ret mode to opaque
@@ -605,18 +605,29 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
  * edma_ppeds_inst_register()
  *	PPE-DS EDMA instance registration API
  */
-bool edma_ppeds_inst_register(edma_ppeds_handle_t *ppeds_handle)
+static bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 {
 	int ret;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	uint32_t rx_ring_size = ppeds_handle->ppe2tcl_num_desc;
 	uint32_t tx_ring_size = ppeds_handle->reo2ppe_num_desc;
+
+	write_lock_bh(&drv->lock);
+	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_ALLOC) {
+		edma_err("%px: Invalid node state: %d, registration failed\n", ppeds_node,
+				node_cfg->node_state);
+		write_unlock_bh(&drv->lock);
+		return false;
+	}
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_REG_IN_PROG;
+	write_unlock_bh(&drv->lock);
 
 	ppeds_node->rxfill_ring.count = rx_ring_size;
 	ppeds_node->rxfill_ring.alloc_size  = NSS_DP_RX_BUFFER_SIZE;
 	ppeds_node->rx_ring.count = rx_ring_size;
 	ppeds_node->rx_ring.pdma = (dma_addr_t)ppeds_handle->ppe2tcl_ba;
-
 
 	ret = edma_ppeds_rx_fill_ring_alloc(&ppeds_node->rxfill_ring);
 	if (ret != 0) {
@@ -637,14 +648,14 @@ bool edma_ppeds_inst_register(edma_ppeds_handle_t *ppeds_handle)
 	}
 
 	ppeds_handle->rx_fill_arr =
-		(struct edma_ppeds_rx_fill_elem *)kzalloc(sizeof(struct edma_ppeds_rx_fill_elem) * rx_ring_size, GFP_KERNEL);
+		(struct nss_dp_ppeds_rx_fill_elem *)kzalloc(sizeof(struct nss_dp_ppeds_rx_fill_elem) * rx_ring_size, GFP_KERNEL);
 	if (!ppeds_handle->rx_fill_arr) {
 		goto rx_fill_arr_alloc_failed;
 		return false;
 	}
 
-	ppeds_handle->tx_cmpl_arr=
-		(struct edma_ppeds_tx_cmpl_elem*)kzalloc(sizeof(struct edma_ppeds_tx_cmpl_elem) * tx_ring_size, GFP_KERNEL);
+	ppeds_handle->tx_cmpl_arr =
+		(struct nss_dp_ppeds_tx_cmpl_elem *)kzalloc(sizeof(struct nss_dp_ppeds_tx_cmpl_elem) * tx_ring_size, GFP_KERNEL);
 	if (!ppeds_handle->tx_cmpl_arr) {
 		goto tx_cmpl_arr_alloc_failed;
 		return false;
@@ -738,6 +749,10 @@ bool edma_ppeds_inst_register(edma_ppeds_handle_t *ppeds_handle)
 
 	edma_debug("EDMA PPEDS registeration succesful\n");
 
+	write_lock_bh(&drv->lock);
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_REG_DONE;
+	write_unlock_bh(&drv->lock);
+
 	return true;
 
 tx_sec_setup_failed:
@@ -775,18 +790,28 @@ rx_fill_setup_failed:
 	return false;
 
 }
-EXPORT_SYMBOL(edma_ppeds_inst_register);
 
 /*
  * edma_ppeds_inst_refill()
  *	API to fill PPE-DS EDMA RxFill ring
  */
-void edma_ppeds_inst_refill(edma_ppeds_handle_t *ppeds_handle, int count)
+static void edma_ppeds_inst_refill(nss_dp_ppeds_handle_t *ppeds_handle, int count)
 {
 	uint32_t num_avail;
 	uint32_t headroom = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	struct edma_rxfill_ring *rxfill_ring = &ppeds_node->rxfill_ring;
+
+	read_lock_bh(&drv->lock);
+	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_REG_DONE) {
+		edma_err("%px: Invalid node state: %d, PPE-DS rxfill failed\n", ppeds_node,
+				node_cfg->node_state);
+		read_unlock_bh(&drv->lock);
+		return;
+	}
+	read_unlock_bh(&drv->lock);
 
 	num_avail = ppeds_node->ops->rx_fill(&ppeds_node->ppeds_handle, count, rxfill_ring->alloc_size, headroom);
 
@@ -798,115 +823,58 @@ void edma_ppeds_inst_refill(edma_ppeds_handle_t *ppeds_handle, int count)
 		       	ppeds_node->ppeds_handle.rx_fill_arr, headroom);
 
 }
-EXPORT_SYMBOL(edma_ppeds_inst_refill);
-
-/*
- * edma_ppeds_drain_rxfill_ring()
- *	PPE-DS EDMA API to drain the Rxfill ring
- */
-void edma_ppeds_drain_rxfill_ring(edma_ppeds_handle_t *ppeds_handle)
-{
-	uint16_t cons_idx, curr_idx;
-	uint32_t reg_data;
-	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
-	struct edma_rxfill_ring *rxfill_ring = &ppeds_node->rxfill_ring;
-
-	/*
-	 * Get RXFILL ring producer index
-	 */
-	curr_idx = rxfill_ring->prod_idx & EDMA_RXFILL_PROD_IDX_MASK;
-
-	/*
-	 * Get RXFILL ring consumer index
-	 */
-	reg_data = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id));
-	cons_idx = reg_data & EDMA_RXFILL_CONS_IDX_MASK;
-
-	while (curr_idx != cons_idx) {
-		struct edma_rxfill_desc *rxfill_desc;
-		uint64_t rx_opaque;
-
-		/*
-		 * Get RXFILL descriptor
-		 */
-		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, cons_idx);
-
-		cons_idx = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
-
-		/*
-		 * Release opaque to the DS interface
-		 */
-		rx_opaque = (uint64_t)EDMA_RXFILL_OPAQUE_GET(rxfill_desc);
-		if (unlikely(!rx_opaque)) {
-			edma_warn("Empty rx_opaque reference at index:%d\n",
-					cons_idx);
-			continue;
-		}
-
-		ppeds_node->ops->rx_release(&ppeds_node->ppeds_handle, rx_opaque);
-	}
-}
-EXPORT_SYMBOL(edma_ppeds_drain_rxfill_ring);
-
-/*
- * edma_ppeds_drain_tx_cmpl_ring()
- *	PPE-DS EDMA API to drain the Tx complete ring
- */
-void edma_ppeds_drain_tx_cmpl_ring(edma_ppeds_handle_t *ppeds_handle)
-{
-	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
-	struct edma_txcmpl_ring *txcmpl_ring = &ppeds_node->txcmpl_ring;
-
-	edma_ppeds_tx_complete(txcmpl_ring->count - 1, txcmpl_ring);
-}
-EXPORT_SYMBOL(edma_ppeds_drain_tx_cmpl_ring);
 
 /*
  * edma_ppeds_get_ppe_queues()
  *	Get the associated PPE queues with the given instance
  */
-bool edma_ppeds_get_ppe_queues(edma_ppeds_handle_t *ppeds_handle, uint32_t *ppe_queue_start, uint32_t *num)
+static bool edma_ppeds_get_ppe_queues(nss_dp_ppeds_handle_t *ppeds_handle, uint32_t *ppe_queue_start)
 {
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
+
+	read_lock_bh(&drv->lock);
+	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_START_DONE) {
+		edma_err("%px: Invalid node state: %d, PPE-DS get queues failed\n", ppeds_node,
+				node_cfg->node_state);
+		read_unlock_bh(&drv->lock);
+		return false;
+	}
+	read_unlock_bh(&drv->lock);
 
 	*ppe_queue_start = ppeds_node->ppe_qid;
-	*num = ppeds_node->ppe_num_queues;
 
 	return true;
 }
-EXPORT_SYMBOL(edma_ppeds_get_ppe_queues);
 
 /*
  * edma_ppeds_set_tx_prod_idx()
  *	Set EDMA RX producer idx
  */
-void edma_ppeds_set_tx_prod_idx(edma_ppeds_handle_t *ppeds_handle, uint16_t tx_prod_idx)
+static void edma_ppeds_set_tx_prod_idx(nss_dp_ppeds_handle_t *ppeds_handle, uint16_t tx_prod_idx)
 {
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 
 	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(ppeds_node->tx_ring.id), tx_prod_idx);
-
 }
-EXPORT_SYMBOL(edma_ppeds_set_tx_prod_idx);
 
 /*
  * edma_ppeds_set_rx_cons_idx()
  *	Set EDMA RX consumer idx
  */
-void edma_ppeds_set_rx_cons_idx(edma_ppeds_handle_t *ppeds_handle, uint16_t rx_cons_idx)
+static void edma_ppeds_set_rx_cons_idx(nss_dp_ppeds_handle_t *ppeds_handle, uint16_t rx_cons_idx)
 {
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 
 	edma_reg_write(EDMA_REG_RXDESC_CONS_IDX(ppeds_node->rx_ring.ring_id), rx_cons_idx);
-
 }
-EXPORT_SYMBOL(edma_ppeds_set_rx_cons_idx);
 
 /*
  * edma_ppeds_get_rx_prod_idx()
  *	Get EDMA RX producer idx
  */
-uint16_t edma_ppeds_get_rx_prod_idx(edma_ppeds_handle_t *ppeds_handle)
+static uint16_t edma_ppeds_get_rx_prod_idx(nss_dp_ppeds_handle_t *ppeds_handle)
 {
 	uint32_t data;
 	uint16_t prod_idx;
@@ -917,13 +885,12 @@ uint16_t edma_ppeds_get_rx_prod_idx(edma_ppeds_handle_t *ppeds_handle)
 
 	return prod_idx;
 }
-EXPORT_SYMBOL(edma_ppeds_get_rx_prod_idx);
 
 /*
  * edma_ppeds_get_tx_cons_idx()
  *	Get EDMA TX consumer idx
  */
-uint16_t edma_ppeds_get_tx_cons_idx(edma_ppeds_handle_t *ppeds_handle)
+static uint16_t edma_ppeds_get_tx_cons_idx(nss_dp_ppeds_handle_t *ppeds_handle)
 {
 	uint32_t data;
 	uint16_t cons_idx;
@@ -934,16 +901,27 @@ uint16_t edma_ppeds_get_tx_cons_idx(edma_ppeds_handle_t *ppeds_handle)
 
 	return cons_idx;
 }
-EXPORT_SYMBOL(edma_ppeds_get_tx_cons_idx);
 
 /*
  * edma_ppeds_inst_start()
  *	PPE-DS EDMA instance start API
  */
-int edma_ppeds_inst_start(edma_ppeds_handle_t *ppeds_handle, uint8_t intr_enable)
+static int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enable)
 {
 	uint32_t data;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
+
+	write_lock_bh(&drv->lock);
+	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_REG_DONE) {
+		edma_err("%px: Invalid node state: %d, PPE-DS start failed\n", ppeds_node,
+				node_cfg->node_state);
+		write_unlock_bh(&drv->lock);
+		return -1;
+	}
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_START_IN_PROG;
+	write_unlock_bh(&drv->lock);
 
 	/*
 	 * Configure RxFill Low threshold value and
@@ -986,18 +964,33 @@ int edma_ppeds_inst_start(edma_ppeds_handle_t *ppeds_handle, uint8_t intr_enable
 	data |= EDMA_TXDESC_TX_ENABLE;
 	edma_reg_write(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id), data);
 
+	write_lock_bh(&drv->lock);
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_START_DONE;
+	write_unlock_bh(&drv->lock);
+
 	return 0;
 }
-EXPORT_SYMBOL(edma_ppeds_inst_start);
 
 /*
  * edma_ppeds_inst_stop()
  *	PPE-DS EDMA instance stop API
  */
-void edma_ppeds_inst_stop(edma_ppeds_handle_t *ppeds_handle, uint8_t intr_enable)
+static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enable)
 {
 	uint32_t data;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
+
+	write_lock_bh(&drv->lock);
+	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_START_DONE) {
+		edma_err("%px: Invalid node state: %d, PPE-DS stop failed\n", ppeds_node,
+				node_cfg->node_state);
+		write_unlock_bh(&drv->lock);
+		return;
+	}
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_STOP_IN_PROG;
+	write_unlock_bh(&drv->lock);
 
 	/*
 	 * Disable Rx, TxComp and RxFill rings.
@@ -1029,17 +1022,31 @@ void edma_ppeds_inst_stop(edma_ppeds_handle_t *ppeds_handle, uint8_t intr_enable
 			EDMA_MASK_INT_CLEAR);
 	synchronize_irq(ppeds_node->txcmpl_intr);
 	napi_disable(&ppeds_node->txcmpl_ring.napi);
+
+	write_lock_bh(&drv->lock);
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_STOP_DONE;
+	write_unlock_bh(&drv->lock);
 }
-EXPORT_SYMBOL(edma_ppeds_inst_stop);
 
 /*
- * edma_ppeds_inst_del()
+ * edma_ppeds_inst_free()
  *	PPE-DS EDMA instance delete API
  */
-void edma_ppeds_inst_del(edma_ppeds_handle_t *ppeds_handle)
+static void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 {
 	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
+
+	write_lock_bh(&drv->lock);
+	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_STOP_DONE) {
+		edma_err("%px: Invalid node state: %d, PPE-DS free failed\n", ppeds_node,
+				node_cfg->node_state);
+		write_unlock_bh(&drv->lock);
+		return;
+	}
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_FREE_IN_PROG;
+	write_unlock_bh(&drv->lock);
 
 	kfree(ppeds_handle->rx_fill_arr);
 	ppeds_handle->rx_fill_arr = NULL;
@@ -1064,28 +1071,33 @@ void edma_ppeds_inst_del(edma_ppeds_handle_t *ppeds_handle)
 	edma_ppeds_tx_secondary_free(&ppeds_node->tx_ring);
 	edma_ppeds_tx_cmpl_ring_free(&ppeds_node->txcmpl_ring);
 
+	kfree(ppeds_node);
+
 	/*
 	 * Remove from DB
 	 */
 	write_lock_bh(&drv->lock);
-	drv->ppeds_db[ppeds_node->db_idx] = NULL;
-	drv->node_state[ppeds_node->db_idx] = EDMA_PPEDS_NODE_STATE_AVAIL;
+	node_cfg->ppeds_db = NULL;
+	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_AVAIL;
 	write_unlock_bh(&drv->lock);
-
-	kfree(ppeds_node);
 }
-EXPORT_SYMBOL(edma_ppeds_inst_del);
 
 /*
  * edma_ppeds_inst_alloc()
  *	PPE-DS EDMA instance allocation API
  */
-edma_ppeds_handle_t *edma_ppeds_inst_alloc(const struct edma_ppeds_ops *ops, size_t priv_size)
+static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb *ops, size_t priv_size)
 {
 	struct edma_ppeds *ppeds_node;
 	uint32_t i;
 	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	int size = priv_size + sizeof(struct edma_ppeds);
+
+	if (!ops || !ops->rx || !ops->rx_fill || !ops->rx_release
+			|| !ops->tx_cmpl) {
+		edma_err("Invalid PPE-DS operations\n");
+		return NULL;
+	}
 
 	edma_debug("ppeds node size %lu total size %d\n", sizeof(struct edma_ppeds),  size);
 	ppeds_node = (struct edma_ppeds *)kzalloc(size, GFP_KERNEL);
@@ -1101,7 +1113,7 @@ edma_ppeds_handle_t *edma_ppeds_inst_alloc(const struct edma_ppeds_ops *ops, siz
 	 */
 	write_lock_bh(&drv->lock);
 	for (i = 0; i < drv->num_nodes; i++) {
-		if (drv->node_state[i] == EDMA_PPEDS_NODE_STATE_AVAIL) {
+		if (drv->ppeds_node_cfg[i].node_state == EDMA_PPEDS_NODE_STATE_AVAIL) {
 			break;
 		}
 	}
@@ -1113,18 +1125,17 @@ edma_ppeds_handle_t *edma_ppeds_inst_alloc(const struct edma_ppeds_ops *ops, siz
 		return NULL;
 	}
 
-	drv->node_state[i] = EDMA_PPEDS_NODE_STATE_INUSE;
-	drv->ppeds_db[i] = ppeds_node;
-	ppeds_node->rxfill_ring.ring_id = drv->node_map[i][EDMA_PPEDS_ENTRY_RXFILL_IDX];
-	ppeds_node->txcmpl_ring.id = drv->node_map[i][EDMA_PPEDS_ENTRY_TXCMPL_IDX];
-	ppeds_node->rx_ring.ring_id = drv->node_map[i][EDMA_PPEDS_ENTRY_RX_IDX];
-	ppeds_node->tx_ring.id = drv->node_map[i][EDMA_PPEDS_ENTRY_TX_IDX];
-	ppeds_node->ppe_qid  = drv->node_map[i][EDMA_PPEDS_ENTRY_QID_START_IDX];
-	ppeds_node->ppe_num_queues  = drv->node_map[i][EDMA_PPEDS_ENTRY_QID_COUNT_IDX];
-	ppeds_node->txcmpl_intr  = drv->irq_map[i][EDMA_PPEDS_TXCOMP_IRQ_IDX];
-	ppeds_node->rxfill_intr  = drv->irq_map[i][EDMA_PPEDS_RXFILL_IRQ_IDX];
-	ppeds_node->rxdesc_intr  = drv->irq_map[i][EDMA_PPEDS_RXDESC_IRQ_IDX];
-	ppeds_node->db_idx  = i;
+	drv->ppeds_node_cfg[i].ppeds_db = ppeds_node;
+	ppeds_node->rxfill_ring.ring_id = drv->ppeds_node_cfg[i].node_map[EDMA_PPEDS_ENTRY_RXFILL_IDX];
+	ppeds_node->txcmpl_ring.id = drv->ppeds_node_cfg[i].node_map[EDMA_PPEDS_ENTRY_TXCMPL_IDX];
+	ppeds_node->rx_ring.ring_id = drv->ppeds_node_cfg[i].node_map[EDMA_PPEDS_ENTRY_RX_IDX];
+	ppeds_node->tx_ring.id = drv->ppeds_node_cfg[i].node_map[EDMA_PPEDS_ENTRY_TX_IDX];
+	ppeds_node->ppe_qid = drv->ppeds_node_cfg[i].node_map[EDMA_PPEDS_ENTRY_QID_START_IDX];
+	ppeds_node->ppe_num_queues = drv->ppeds_node_cfg[i].node_map[EDMA_PPEDS_ENTRY_QID_COUNT_IDX];
+	ppeds_node->txcmpl_intr = drv->ppeds_node_cfg[i].irq_map[EDMA_PPEDS_TXCOMP_IRQ_IDX];
+	ppeds_node->rxfill_intr = drv->ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXFILL_IRQ_IDX];
+	ppeds_node->rxdesc_intr = drv->ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXDESC_IRQ_IDX];
+	ppeds_node->db_idx = i;
 	edma_debug("PPE-DS node(%d): Rxfill ring: %d, Tx complete ring: %d,"
 			" Rx ring: %d, Tx ring: %d, Queue start id: %d,"
 			" Queue count: %d, Tx complete interrupt: %d,"
@@ -1134,143 +1145,11 @@ edma_ppeds_handle_t *edma_ppeds_inst_alloc(const struct edma_ppeds_ops *ops, siz
 			ppeds_node->ppe_qid, ppeds_node->ppe_num_queues,
 			ppeds_node->txcmpl_intr, ppeds_node->rxfill_intr,
 			ppeds_node->rxdesc_intr);
+	drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_ALLOC;
 	write_unlock_bh(&drv->lock);
 
 	return &ppeds_node->ppeds_handle;
 }
-EXPORT_SYMBOL(edma_ppeds_inst_alloc);
-
-#else
-/*
- * edma_ppeds_inst_register()
- *	PPE-DS EDMA instance registration API
- */
-bool edma_ppeds_inst_register(edma_ppeds_handle_t *ppeds_handle)
-{
-	return true;
-}
-EXPORT_SYMBOL(edma_ppeds_inst_register);
-
-/*
- * edma_ppeds_inst_refill()
- *	API to fill PPE-DS EDMA RxFill ring
- */
-void edma_ppeds_inst_refill(edma_ppeds_handle_t *ppeds_handle, int count)
-{
-	return;
-}
-EXPORT_SYMBOL(edma_ppeds_inst_refill);
-
-/*
- * edma_ppeds_drain_rxfill_ring()
- *	PPE-DS EDMA API to drain the Rxfill ring
- */
-void edma_ppeds_drain_rxfill_ring(edma_ppeds_handle_t *ppeds_handle)
-{
-	return;
-}
-EXPORT_SYMBOL(edma_ppeds_drain_rxfill_ring);
-
-/*
- * edma_ppeds_drain_tx_cmpl_ring()
- *	PPE-DS EDMA API to drain the Tx complete ring
- */
-void edma_ppeds_drain_tx_cmpl_ring(edma_ppeds_handle_t *ppeds_handle)
-{
-	return;
-}
-EXPORT_SYMBOL(edma_ppeds_drain_tx_cmpl_ring);
-
-/*
- * edma_ppeds_get_ppe_queues()
- *	Get the associated PPE queues with the given instance
- */
-bool edma_ppeds_get_ppe_queues(edma_ppeds_handle_t *ppeds_handle, uint32_t *ppe_queue_start, uint32_t *num)
-{
-	return true;
-}
-EXPORT_SYMBOL(edma_ppeds_get_ppe_queues);
-
-/*
- * edma_ppeds_set_tx_prod_idx()
- *	Set EDMA RX producer idx
- */
-void edma_ppeds_set_tx_prod_idx(edma_ppeds_handle_t *ppeds_handle, uint16_t tx_prod_idx)
-{
-	return;
-}
-EXPORT_SYMBOL(edma_ppeds_set_tx_prod_idx);
-
-/*
- * edma_ppeds_set_rx_cons_idx()
- *	Set EDMA RX consumer idx
- */
-void edma_ppeds_set_rx_cons_idx(edma_ppeds_handle_t *ppeds_handle, uint16_t rx_cons_idx)
-{
-	return;
-}
-EXPORT_SYMBOL(edma_ppeds_set_rx_cons_idx);
-
-/*
- * edma_ppeds_get_rx_prod_idx()
- *	Get EDMA RX producer idx
- */
-uint16_t edma_ppeds_get_rx_prod_idx(edma_ppeds_handle_t *ppeds_handle)
-{
-	return 0;
-}
-EXPORT_SYMBOL(edma_ppeds_get_rx_prod_idx);
-
-/*
- * edma_ppeds_get_tx_cons_idx()
- *	Get EDMA TX consumer idx
- */
-uint16_t edma_ppeds_get_tx_cons_idx(edma_ppeds_handle_t *ppeds_handle)
-{
-	return 0;
-}
-EXPORT_SYMBOL(edma_ppeds_get_tx_cons_idx);
-
-/*
- * edma_ppeds_inst_start()
- *	PPE-DS EDMA instance start API
- */
-int edma_ppeds_inst_start(edma_ppeds_handle_t *ppeds_handle, uint8_t intr_enable)
-{
-	return 0;
-}
-EXPORT_SYMBOL(edma_ppeds_inst_start);
-
-/*
- * edma_ppeds_inst_stop()
- *	PPE-DS EDMA instance stop API
- */
-void edma_ppeds_inst_stop(edma_ppeds_handle_t *ppeds_handle, uint8_t intr_enable)
-{
-	return;
-}
-EXPORT_SYMBOL(edma_ppeds_inst_stop);
-
-/*
- * edma_ppeds_inst_del()
- *	PPE-DS EDMA instance delete API
- */
-void edma_ppeds_inst_del(edma_ppeds_handle_t *ppeds_handle)
-{
-	return;
-}
-EXPORT_SYMBOL(edma_ppeds_inst_del);
-
-/*
- * edma_ppeds_inst_alloc()
- *	PPE-DS EDMA instance allocation API
- */
-edma_ppeds_handle_t *edma_ppeds_inst_alloc(const struct edma_ppeds_ops *ops, size_t priv_size)
-{
-	return NULL;
-}
-EXPORT_SYMBOL(edma_ppeds_inst_alloc);
-#endif
 
 /*
  * edma_ppeds_deinit()
@@ -1281,8 +1160,8 @@ void edma_ppeds_deinit(struct edma_ppeds_drv *drv)
 	uint32_t i;
 
 	for (i = 0; i < EDMA_PPEDS_MAX_NODES; i++) {
-		drv->ppeds_db[i] = NULL;
-		drv->node_state[i] = EDMA_PPEDS_NODE_STATE_AVAIL;
+		drv->ppeds_node_cfg[i].ppeds_db = NULL;
+		drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_AVAIL;
 	}
 }
 
@@ -1297,13 +1176,35 @@ int edma_ppeds_init(struct edma_ppeds_drv *drv)
 	rwlock_init(&drv->lock);
 
 	for (i = 0; i < EDMA_PPEDS_MAX_NODES; i++) {
-		drv->ppeds_db[i] = NULL;
+		drv->ppeds_node_cfg[i].ppeds_db = NULL;
 		if (i < drv->num_nodes) {
-			drv->node_state[i] = EDMA_PPEDS_NODE_STATE_AVAIL;
+			int j;
+			for (j = 0; j < EDMA_PPEDS_NUM_ENTRY; j++) {
+				drv->ppeds_node_cfg[i].node_map[j] =
+					 edma_gbl_ctx.ppeds_node_map[i][j];
+			}
+			drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_AVAIL;
 			continue;
 		}
-		drv->node_state[i] = EDMA_PPEDS_NODE_STATE_NOT_AVAIL;
+		drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_NOT_AVAIL;
 	}
-
 	return 0;
 }
+
+/*
+ * edma_ppeds_ops
+ *	PPE-DS operations
+ */
+struct nss_dp_ppeds_ops edma_ppeds_ops = {
+	.alloc			=	edma_ppeds_inst_alloc,
+	.reg			=	edma_ppeds_inst_register,
+	.start 			=	edma_ppeds_inst_start,
+	.refill			=	edma_ppeds_inst_refill,
+	.stop			=	edma_ppeds_inst_stop,
+	.free			=	edma_ppeds_inst_free,
+	.get_queues		=	edma_ppeds_get_ppe_queues,
+	.set_rx_cons_idx	=	edma_ppeds_set_rx_cons_idx,
+	.set_tx_prod_idx	=	edma_ppeds_set_tx_prod_idx,
+	.get_tx_cons_idx	=	edma_ppeds_get_tx_cons_idx,
+	.get_rx_prod_idx	=	edma_ppeds_get_rx_prod_idx,
+};

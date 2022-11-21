@@ -676,7 +676,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	if (edma_gbl_ctx.ppeds_drv.num_nodes > 0) {
 		ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
 				"qcom,ppeds-map",
-				(int32_t *)edma_gbl_ctx.ppeds_drv.node_map,
+				(int32_t *)edma_gbl_ctx.ppeds_node_map,
 				(edma_gbl_ctx.ppeds_drv.num_nodes * EDMA_PPEDS_NUM_ENTRY));
 		if (ret) {
 			edma_err("Unable to read PPE-DS map array. ret: %d\n", ret);
@@ -1366,7 +1366,7 @@ int edma_irq_init(void)
 					(edma_gbl_ctx.device_node)->name, i, val);
 			return -1;
 		}
-		edma_gbl_ctx.ppeds_drv.irq_map[i][EDMA_PPEDS_TXCOMP_IRQ_IDX] = val;
+		edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_TXCOMP_IRQ_IDX] = val;
 
 		entry_num++;
 		val = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
@@ -1375,7 +1375,7 @@ int edma_irq_init(void)
 					(edma_gbl_ctx.device_node)->name, i, val);
 			return -1;
 		}
-		edma_gbl_ctx.ppeds_drv.irq_map[i][EDMA_PPEDS_RXDESC_IRQ_IDX] = val;
+		edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXDESC_IRQ_IDX] = val;
 
 		entry_num++;
 		val = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
@@ -1384,12 +1384,12 @@ int edma_irq_init(void)
 					(edma_gbl_ctx.device_node)->name, i, val);
 			return -1;
 		}
-		edma_gbl_ctx.ppeds_drv.irq_map[i][EDMA_PPEDS_RXFILL_IRQ_IDX] = val;
+		edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXFILL_IRQ_IDX] = val;
 
 		edma_debug("PPE-DS IRQ: TxComplete: %d, Rx: %d, Rxfill: %d\n",
-				edma_gbl_ctx.ppeds_drv.irq_map[i][EDMA_PPEDS_TXCOMP_IRQ_IDX],
-				edma_gbl_ctx.ppeds_drv.irq_map[i][EDMA_PPEDS_RXDESC_IRQ_IDX],
-				edma_gbl_ctx.ppeds_drv.irq_map[i][EDMA_PPEDS_RXFILL_IRQ_IDX]);
+			edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_TXCOMP_IRQ_IDX],
+			edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXDESC_IRQ_IDX],
+			edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXFILL_IRQ_IDX]);
 	}
 #endif
 

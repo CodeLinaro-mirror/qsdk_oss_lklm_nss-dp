@@ -1,9 +1,10 @@
 /*
- * Copyright (c) 2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
  * copyright notice and this permission notice appear in all copies.
+ *
  * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
  * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
  * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
@@ -16,7 +17,7 @@
 #ifndef __EDMA_PPEDS_PRIV__
 #define __EDMA_PPEDS_PRIV__
 
-#include "edma_ppeds.h"
+#include "nss_dp_ppeds.h"
 
 #define EDMA_PPEDS_MAX_NODES	3	/* Maximum number of supported PPE-DS nodes */
 #define EDMA_PPEDS_RX_WEIGHT	1	/* PPE-DS Rx processing budget */
@@ -42,7 +43,14 @@ enum {
 typedef enum {
 	EDMA_PPEDS_NODE_STATE_NOT_AVAIL,
 	EDMA_PPEDS_NODE_STATE_AVAIL,
-	EDMA_PPEDS_NODE_STATE_INUSE,
+	EDMA_PPEDS_NODE_STATE_ALLOC,
+	EDMA_PPEDS_NODE_STATE_REG_IN_PROG,
+	EDMA_PPEDS_NODE_STATE_REG_DONE,
+	EDMA_PPEDS_NODE_STATE_START_IN_PROG,
+	EDMA_PPEDS_NODE_STATE_START_DONE,
+	EDMA_PPEDS_NODE_STATE_STOP_IN_PROG,
+	EDMA_PPEDS_NODE_STATE_STOP_DONE,
+	EDMA_PPEDS_NODE_STATE_FREE_IN_PROG,
 } edma_ppeds_node_state_t;
 
 /*
@@ -52,13 +60,14 @@ enum {
 	EDMA_PPEDS_TXCOMP_IRQ_IDX,
 	EDMA_PPEDS_RXDESC_IRQ_IDX,
 	EDMA_PPEDS_RXFILL_IRQ_IDX,
+	EDMA_PPEDS_IRQ_NUM
 };
 
 /*
  * PPE-DS EDMA node descriptor
  */
 struct edma_ppeds {
-	const struct edma_ppeds_ops *ops;	/* PPE-DS EDMA callback pointer */
+	const struct nss_dp_ppeds_cb *ops;	/* PPE-DS EDMA callback pointer */
 	struct edma_rxfill_ring rxfill_ring;	/* PPE-DS EDMA Rxfill ring */
 	struct edma_txcmpl_ring txcmpl_ring;	/* PPE-DS EDMA Tx complete ring */
 	struct edma_rxdesc_ring rx_ring;	/* PPE-DS EDMA Rx ring */
@@ -70,7 +79,21 @@ struct edma_ppeds {
 	uint32_t rxfill_intr;			/* PPE-DS EDMA Rxfill IRQ */
 	uint32_t rxdesc_intr;			/* PPE-DS EDMA Rx IRQ */
 	uint8_t db_idx;				/* PPE-DS node index */
-	edma_ppeds_handle_t ppeds_handle;	/* PPE-DS handle */
+	nss_dp_ppeds_handle_t ppeds_handle;	/* PPE-DS handle */
+};
+
+/*
+ * edma_ppeds_node_cfg
+ *	EDMA PPE-DS node configuration structure
+ */
+struct edma_ppeds_node_cfg {
+	uint32_t node_map[EDMA_PPEDS_NUM_ENTRY];
+					/* PPE-DS node configuration mapping */
+	uint32_t irq_map[EDMA_PPEDS_IRQ_NUM];
+					/* PPE-DS node IRQ mapping */
+	edma_ppeds_node_state_t node_state;
+					/* PPE-DS node state information */
+	struct edma_ppeds *ppeds_db;	/* PPE-DS EDMA node pointer */
 };
 
 /*
@@ -79,13 +102,8 @@ struct edma_ppeds {
  */
 struct edma_ppeds_drv {
 	uint32_t num_nodes;			/* Number of PPE-DS nodes */
-	uint32_t node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
-					/* PPE-DS node configuration mapping */
-	uint32_t irq_map[EDMA_PPEDS_MAX_NODES][3];
-					/* PPE-DS node IRQ mapping */
-	edma_ppeds_node_state_t node_state[EDMA_PPEDS_MAX_NODES];
-					/* PPE-DS node state information */
-	struct edma_ppeds *ppeds_db[EDMA_PPEDS_MAX_NODES];	/* PPE-DS EDMA node pointer */
+	struct edma_ppeds_node_cfg ppeds_node_cfg[EDMA_PPEDS_MAX_NODES];
+						/* PPE-DS node configuration information */
 	rwlock_t lock;			/* Lock for accessing the PPE-DS node information */
 };
 
