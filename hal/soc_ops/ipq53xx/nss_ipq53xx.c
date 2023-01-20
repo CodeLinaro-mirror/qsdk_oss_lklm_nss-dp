@@ -21,6 +21,18 @@
 #include "nss_dp_hal.h"
 
 /*
+ * nss_dp_hal_nsm_sc_stats_read()
+ *	Send nsm stats for the given service-class.
+ */
+bool nss_dp_hal_nsm_sc_stats_read(struct nss_dp_hal_nsm_sc_stats *nsm_stats, uint8_t service_class)
+{
+	/*
+	 * TODO: Update the API whenever NSM support is enabled for IPQ53xx.
+	 */
+	return false;
+}
+
+/*
  * nss_dp_hal_get_data_plane_ops()
  *	Return the data plane ops for registered data plane.
  */
@@ -92,8 +104,8 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
 		return -1;
 	}
 
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSCNOC_ATB_CLK,
-					NSS_DP_EDMA_NSSCNOC_ATB_CLK_FREQ);
+	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_ATB_CLK,
+					NSS_DP_EDMA_NSSNOC_ATB_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
@@ -261,5 +273,9 @@ void nss_dp_hal_cleanup(void)
  */
 struct nss_dp_ppeds_ops *nss_dp_ppeds_ops_get(void)
 {
+#ifdef NSS_DP_PPEDS_SUPPORT
+	return &edma_ppeds_ops;
+#else
 	return NULL;
+#endif
 }

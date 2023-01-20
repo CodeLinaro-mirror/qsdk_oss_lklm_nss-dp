@@ -24,6 +24,11 @@
 #define NSS_DP_HAL_START_IFNUM		1
 
 /*
+ * Maximum supported GSO segments
+ */
+#define NSS_DP_HAL_GSO_MAX_SEGS		32
+
+/*
  * Number of TX/RX queue supported
  */
 #define NSS_DP_QUEUE_NUM		4
@@ -50,7 +55,7 @@
 #define NSS_DP_EDMA_TS_CLK			"nss-ts-clk"
 #define NSS_DP_EDMA_NSSCC_CLK			"nss-nsscc-clk"
 #define NSS_DP_EDMA_NSSCFG_CLK			"nss-nsscfg-clk"
-#define NSS_DP_EDMA_NSSCNOC_ATB_CLK		"nss-nsscnoc-atb-clk"
+#define NSS_DP_EDMA_NSSNOC_ATB_CLK		"nss-nssnoc-atb-clk"
 #define NSS_DP_EDMA_NSSNOC_NSSCC_CLK		"nss-nssnoc-nsscc-clk"
 #define NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK		"nss-nssnoc-pcnoc-1-clk"
 #define NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK	"nss-nssnoc-qosgen-ref-clk"
@@ -78,12 +83,12 @@
 #define NSS_DP_EDMA_TS_CLK_FREQ				24000000
 #define NSS_DP_EDMA_NSSCC_CLK_FREQ			100000000
 #define NSS_DP_EDMA_NSSCFG_CLK_FREQ			100000000
-#define NSS_DP_EDMA_NSSCNOC_ATB_CLK_FREQ		240000000
+#define NSS_DP_EDMA_NSSNOC_ATB_CLK_FREQ			240000000
 #define NSS_DP_EDMA_NSSNOC_NSSCC_CLK_FREQ		100000000
 #define NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK_FREQ		100000000
 #define NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK_FREQ		6000000
-#define NSS_DP_EDMA_NSSNOC_SNOC_1_CLK_FREQ		342857143
-#define NSS_DP_EDMA_NSSNOC_SNOC_CLK_FREQ		342857143
+#define NSS_DP_EDMA_NSSNOC_SNOC_1_CLK_FREQ		266666666
+#define NSS_DP_EDMA_NSSNOC_SNOC_CLK_FREQ		266666666
 #define NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK_FREQ		6000000
 #define NSS_DP_EDMA_NSSNOC_XO_DCD_CLK_FREQ		24000000
 #define NSS_DP_EDMA_CC_CE_APB_CLK_FREQ			200000000
@@ -117,13 +122,28 @@ struct nss_dp_hal_gmac_stats {
 	uint64_t tx_fraglist_packets;	/**< Number of TX fraglist packets */
 	uint64_t tx_fraglist_with_nr_frags_packets;	/**< Number of TX fraglist packets with nr fragments */
 	uint64_t tx_tso_packets;	/**< Number of TX TCP segmentation offload packets */
+	uint64_t tx_tso_drop_packets;	/**< Number of TX TCP segmentation dropped packets */
+};
+
+/**
+ * nss_dp_hal_nsm_sc_stats
+ *	Per-service code stats to be send to NSM.
+ */
+struct nss_dp_hal_nsm_sc_stats {
+	uint64_t rx_packets;	/**< Packets received for a service code on the PPE queues. */
+	uint64_t rx_bytes;	/**< Bytes received for a service code on the PPE queues. */
 };
 
 extern int edma_init(void);
 extern void edma_cleanup(bool is_dp_override);
+extern bool edma_nsm_sc_stats_read(struct nss_dp_hal_nsm_sc_stats *nsm_stats, uint8_t service_class);
+extern bool nss_dp_hal_nsm_sc_stats_read(struct nss_dp_hal_nsm_sc_stats *nsm_stats, uint8_t service_class);
 extern int32_t nss_dp_hal_clock_set_and_enable(struct device *dev, const char *id, unsigned long rate);
 extern struct nss_dp_data_plane_ops nss_dp_edma_ops;
 extern int32_t nss_dp_hal_configure_clocks(void *ctx);
 extern int32_t nss_dp_hal_hw_reset(void *ctx);
+#ifdef NSS_DP_PPEDS_SUPPORT
+extern struct nss_dp_ppeds_ops edma_ppeds_ops;
+#endif
 
 #endif /* __NSS_DP_ARCH_H__ */

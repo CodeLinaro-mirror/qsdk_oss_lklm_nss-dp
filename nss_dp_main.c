@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021-2022, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2023, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -58,7 +58,7 @@ module_param(overwrite_mode, int, 0);
 MODULE_PARM_DESC(overwrite_mode, "overwrite default page_mode setting");
 
 int jumbo_mru;
-module_param(jumbo_mru, int, 0);
+module_param(jumbo_mru, int, 0640);
 MODULE_PARM_DESC(jumbo_mru, "jumbo mode");
 
 int tx_requeue_stop;
@@ -199,19 +199,19 @@ static int32_t nss_dp_set_mac_address(struct net_device *netdev, void *macaddr)
 			addr->sa_data[2], addr->sa_data[3], addr->sa_data[4],
 			addr->sa_data[5]);
 
-	ret = eth_prepare_mac_addr_change(netdev, macaddr);
+	ret = eth_prepare_mac_addr_change(netdev, addr);
 	if (ret)
 		return ret;
 
-	if (dp_priv->data_plane_ops->mac_addr(dp_priv->dpc, macaddr)) {
+	if (dp_priv->data_plane_ops->mac_addr(dp_priv->dpc, (uint8_t *)addr->sa_data)) {
 		netdev_dbg(netdev, "Data plane set MAC address failed\n");
 		return -EAGAIN;
 	}
 
-	eth_commit_mac_addr_change(netdev, macaddr);
-
 	dp_priv->gmac_hal_ops->setmacaddr(dp_priv->gmac_hal_ctx,
 			(uint8_t *)addr->sa_data);
+
+	eth_commit_mac_addr_change(netdev, addr);
 
 	return 0;
 }
@@ -539,6 +539,21 @@ static u16 __attribute__((unused)) nss_dp_select_queue(struct net_device *netdev
 	return cpu;
 }
 
+static netdev_features_t __attribute__((unused)) nss_dp_feature_check(struct sk_buff *skb,
+									struct net_device *dev,
+									netdev_features_t features)
+{
+	/*
+	 * IPQ50XX does not support HW checksum of double vlan tagged packets.
+	 * Disable the feature at runtime during feature check.
+	 */
+	if (skb_vlan_tagged_multi(skb)) {
+		features &= ~(NETIF_F_HW_CSUM | NETIF_F_TSO | NETIF_F_TSO6);
+	}
+
+	return features;
+}
+
 /*
  * Netdevice operations
  */
@@ -557,7 +572,10 @@ struct net_device_ops nss_dp_netdev_ops = {
 	.ndo_bridge_getlink = switchdev_port_bridge_getlink,
 	.ndo_bridge_dellink = switchdev_port_bridge_dellink,
 #endif
-#ifndef NSS_DP_IPQ50XX
+
+#ifdef NSS_DP_IPQ50XX
+	.ndo_features_check = nss_dp_feature_check,
+#else
 	.ndo_select_queue = nss_dp_select_queue,
 #endif
 
@@ -779,7 +797,9 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	dp_priv->pdev = pdev;
 	dp_priv->netdev = netdev;
 	netdev->watchdog_timeo = 5 * HZ;
+	netdev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
 	netdev->netdev_ops = &nss_dp_netdev_ops;
+	netdev->gso_max_segs = NSS_DP_GSO_MAX_SEGS;
 	nss_dp_set_ethtool_ops(netdev);
 #ifdef CONFIG_NET_SWITCHDEV
 	nss_dp_switchdev_setup(netdev);
@@ -1000,6 +1020,16 @@ struct nss_dp_ppeds_ops *nss_dp_ppeds_get_ops(void)
 	return nss_dp_ppeds_ops_get();
 }
 EXPORT_SYMBOL(nss_dp_ppeds_get_ops);
+
+/*
+ * nss_dp_nsm_sc_stats_read()
+ *	Send nsm stats for given service class.
+ */
+bool nss_dp_nsm_sc_stats_read(struct nss_dp_hal_nsm_sc_stats *nsm_stats, uint8_t service_class)
+{
+	return nss_dp_hal_nsm_sc_stats_read(nsm_stats, service_class);
+}
+EXPORT_SYMBOL(nss_dp_nsm_sc_stats_read);
 
 /*
  * nss_dp_init()

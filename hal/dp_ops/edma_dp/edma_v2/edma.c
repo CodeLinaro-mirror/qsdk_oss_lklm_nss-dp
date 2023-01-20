@@ -63,6 +63,30 @@ EXPORT_SYMBOL(nss_dp_point_offload_info_get);
 #endif
 
 /*
+ * edma_nsm_sc_stats_read()
+ *	Read stats for NSM for a given service code.
+ */
+bool edma_nsm_sc_stats_read(struct nss_dp_hal_nsm_sc_stats *nsm_stats, uint8_t service_class)
+{
+	uint8_t service_code = service_class + PPE_DRV_SC_SAWF_START;
+	struct edma_sc_stats *sc_stats = &edma_gbl_ctx.sc_stats[service_code];
+	unsigned int start;
+
+	if ((service_code < PPE_DRV_SC_SAWF_START) || (service_code > PPE_DRV_SC_SAWF_END)) {
+		edma_warn("%u Invalid SAWF service code.", service_code);
+		return false;
+	}
+
+	do {
+		start = u64_stats_fetch_begin_irq(&sc_stats->syncp);
+		nsm_stats->rx_packets = sc_stats->rx_packets;
+		nsm_stats->rx_bytes = sc_stats->rx_bytes;
+	} while (u64_stats_fetch_retry_irq(&sc_stats->syncp, start));
+
+	return true;
+}
+
+/*
  * edma_disable_interrupts()
  *	Disable EDMA RX/TX interrupt masks.
  */
@@ -604,6 +628,19 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	}
 
 	/*
+	 * Get Rx queue start
+	 */
+	ret = of_property_read_u8(edma_gbl_ctx.device_node,
+			"qcom,rx-queue-start",
+			&edma_gbl_ctx.rx_queue_start);
+	if (ret) {
+		edma_err("Unable to read Rx queue start.\n");
+		return -EINVAL;
+	}
+	edma_debug("rx queue start: %d\n",
+			edma_gbl_ctx.rx_queue_start);
+
+	/*
 	 * Get rx_ring to queue mapping
 	 */
 	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
@@ -778,7 +815,7 @@ static void edma_init_ring_maps(void)
 }
 
 /*
- * edma_cfg_ucast_priority_map_tbl()
+ * edma_configure_ucast_prio_map_tbl()
  *	Configure unicast priority map table
  *
  * Map int_priority values to priority class and initialize
@@ -829,7 +866,7 @@ static sw_error_t edma_configure_ucast_prio_map_tbl(void)
 void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc)
 {
 	uint32_t hash = 0;
-	uint32_t q_off = EDMA_CPU_PORT_QUEUE_START;
+	uint32_t q_off = egc->rx_queue_start;
 
 	/*
 	 * Initialize the store
@@ -1172,7 +1209,7 @@ int edma_init(void)
 	 * redirect packets/flows to specific host cores.
 	 */
 	for (i = 0; i < NR_CPUS; i++) {
-		queue_start = edma_gbl_ctx.rx_ring_queue_map[EDMA_CPU_PORT_QUEUE_START][i];
+		queue_start = edma_gbl_ctx.rx_ring_queue_map[edma_gbl_ctx.rx_queue_start][i];
 		ppe_drv_core2queue_mapping(i, queue_start);
 	}
 

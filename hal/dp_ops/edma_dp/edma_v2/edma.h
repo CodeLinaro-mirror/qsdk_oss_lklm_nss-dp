@@ -51,7 +51,9 @@
 #define EDMA_NETDEV_FEATURES		NETIF_F_FRAGLIST \
 					| NETIF_F_SG \
 					| NETIF_F_RXCSUM \
-					| NETIF_F_HW_CSUM
+					| NETIF_F_HW_CSUM \
+					| NETIF_F_TSO \
+					| NETIF_F_TSO6
 
 #define EDMA_SWITCH_DEV_ID	0
 #define EDMA_PPE_QUEUE_LEVEL	0
@@ -80,6 +82,11 @@
 #define EDMA_QID2RID_TABLE_MEM(q)	(0xb9000 + (0x4 * (q)))
 
 /*
+ * Total number of service codes
+ */
+#define EDMA_SAWF_SC_MAX	256
+
+/*
  * edma_port_ucast_queues
  * 	EDMA unicast queue number
  * To-do: read queue start from dtsi
@@ -91,7 +98,7 @@ enum edma_port_ucast_queues {
 
 /*
  * edma_cpu_port_mcast_queues
- * 	EDMA multicast queue number
+ *	EDMA multicast queue number
  */
 enum edma_cpu_port_mcast_queues {
 	EDMA_CPU_PORT_MCAST_QUEUE_START = 256,
@@ -160,6 +167,16 @@ struct edma_misc_stats {
 };
 
 /*
+ * edma_sc_stats
+ *	EDMA per-service code stats
+ */
+struct edma_sc_stats {
+	uint64_t rx_packets;		/* Per service code counter for packets recieved on queues from PPE */
+	uint64_t rx_bytes;		/* Per service code counter for bytes recieved on queues from PPE */
+	struct u64_stats_sync syncp;	/* Synchronization pointer */
+};
+
+/*
  * edma_pcpu_stats
  *	EDMA per cpu stats data structure
  */
@@ -221,6 +238,8 @@ struct edma_gbl_ctx {
 
 	struct edma_misc_stats __percpu *misc_stats;
 			/* Per CPU miscellaneous statistics */
+	struct edma_sc_stats sc_stats[EDMA_SAWF_SC_MAX];
+			/* Per Service Code Stats */
 
 	uint32_t tx_priority_level;
 			/* Tx priority level per port */
@@ -296,6 +315,8 @@ struct edma_gbl_ctx {
 	struct edma_ppeds_drv ppeds_drv;
 			/* PPE-DS nodes information */
 #endif
+	uint8_t rx_queue_start;
+			/* Rx queue start */
 };
 
 extern struct edma_gbl_ctx edma_gbl_ctx;

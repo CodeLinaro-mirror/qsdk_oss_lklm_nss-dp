@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -34,15 +34,14 @@ static int edma_ppeds_rx_fill_ring_alloc(struct edma_rxfill_ring *rxfill_ring)
 	/*
 	 * Allocate RxFill ring descriptors
 	 */
-	rxfill_ring->desc = kmalloc((sizeof(struct edma_rxfill_desc) * rxfill_ring->count) +
-				SMP_CACHE_BYTES,  GFP_KERNEL | __GFP_ZERO);
+	rxfill_ring->desc = dma_alloc_coherent(&edma_gbl_ctx.pdev->dev,
+				(sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+				&rxfill_ring->dma, GFP_KERNEL | __GFP_ZERO);
 	if (!rxfill_ring->desc) {
 		edma_err("Descriptor alloc for RXFILL ring %u failed\n",
 							rxfill_ring->ring_id);
 		return -ENOMEM;
 	}
-
-	rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
 
 	return 0;
 }
@@ -56,7 +55,9 @@ static void edma_ppeds_rx_fill_ring_free(struct edma_rxfill_ring *rxfill_ring)
 	/*
 	 * Free RXFILL ring descriptors
 	 */
-	kfree(rxfill_ring->desc);
+	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
+			(sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+			rxfill_ring->desc, rxfill_ring->dma);
 	rxfill_ring->desc = NULL;
 	rxfill_ring->dma = (dma_addr_t)0;
 }
@@ -99,15 +100,14 @@ static void edma_ppeds_rx_secondary_free(struct edma_rxdesc_ring *rxdesc_ring)
  */
 static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
 {
-	txcmpl_ring->desc = kmalloc((sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count) +
-				SMP_CACHE_BYTES,  GFP_KERNEL | __GFP_ZERO);
+	txcmpl_ring->desc = dma_alloc_coherent(&edma_gbl_ctx.pdev->dev,
+				(sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
+				&txcmpl_ring->dma, GFP_KERNEL | __GFP_ZERO);
 	if (!txcmpl_ring->desc) {
 		edma_err("Descriptor alloc for TXCMPL ring %u failed\n",
 				txcmpl_ring->id);
 		return -ENOMEM;
 	}
-
-	txcmpl_ring->dma = (dma_addr_t)virt_to_phys(txcmpl_ring->desc);
 
 	return 0;
 }
@@ -118,7 +118,9 @@ static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
  */
 static void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring)
 {
-	kfree(txcmpl_ring->desc);
+	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
+			(sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
+			txcmpl_ring->desc, txcmpl_ring->dma);
 	txcmpl_ring->desc = NULL;
 	txcmpl_ring->dma = (dma_addr_t)0;
 }
@@ -166,7 +168,7 @@ static uint32_t edma_ppeds_tx_complete(uint32_t work_to_do, struct edma_txcmpl_r
 	struct edma_ppeds *ppeds_node = container_of(txcmpl_ring, struct edma_ppeds, txcmpl_ring);
 	nss_dp_ppeds_handle_t *ppeds_handle = &ppeds_node->ppeds_handle;
 	struct edma_txcmpl_desc *txcmpl;
-	uint32_t cons_idx, prod_idx, data, avail, end_idx;
+	uint32_t cons_idx, prod_idx, data, avail;
 	uint16_t count;
 
 	cons_idx = txcmpl_ring->cons_idx;
@@ -183,20 +185,9 @@ static uint32_t edma_ppeds_tx_complete(uint32_t work_to_do, struct edma_txcmpl_r
 	}
 
 	avail = min(avail, work_to_do);
-
 	count = avail;
 
-	end_idx = (cons_idx + avail) & (txcmpl_ring->count - 1);
 	txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
-
-	if (end_idx > cons_idx) {
-		dmac_inv_range_no_dsb((void *)txcmpl, txcmpl + avail);
-	} else {
-		dmac_inv_range_no_dsb(txcmpl_ring->desc, txcmpl_ring->desc + end_idx);
-		dmac_inv_range_no_dsb((void *)txcmpl, txcmpl_ring->desc + txcmpl_ring->count);
-	}
-
-	dsb(st);
 
 	while (likely(avail--)) {
 		ppeds_handle->tx_cmpl_arr[count - avail - 1].cookie = EDMA_TXCMPL_OPAQUE_GET(txcmpl);
@@ -286,26 +277,6 @@ static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int
 	}
 
 	if (likely(num_alloc)) {
-		uint16_t end_idx =
-			(start_idx + num_alloc) & ring_size_mask;
-
-		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, start_idx);
-
-		/*
-		 * Write-back all the cached descriptors
-		 * that are processed.
-		 */
-		if (end_idx > start_idx) {
-			dmac_clean_range((void *)rxfill_desc,
-					(void *)(rxfill_desc + num_alloc));
-		} else {
-			dmac_clean_range((void *)rxfill_ring->desc,
-					(void *)(rxfill_ring->desc + end_idx));
-			dmac_clean_range((void *)rxfill_desc,
-					(void *)(rxfill_ring->desc +
-							rxfill_ring->count));
-		}
-
 		edma_reg_write(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id),
 								prod_idx);
 		rxfill_ring->prod_idx = prod_idx;
@@ -318,46 +289,36 @@ static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int
  */
 static int edma_ppeds_rxfill_napi_poll(struct napi_struct *napi, int budget)
 {
-	uint32_t cons_idx, work_to_do, status;
+	uint32_t cons_idx, work_to_do;
 	uint32_t num_avail = 0;
 	struct edma_rxfill_ring *rxfill_ring = (struct edma_rxfill_ring *)napi;
 	struct edma_ppeds *ppeds_node = container_of(rxfill_ring, struct edma_ppeds, rxfill_ring);
 	uint32_t alloc_size = rxfill_ring->alloc_size;
 	uint32_t headroom = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
 
-	do {
-		cons_idx =
-			edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) &
-			EDMA_RXFILL_CONS_IDX_MASK;
-		work_to_do = (cons_idx - rxfill_ring->prod_idx + rxfill_ring->count - 1) & (rxfill_ring->count - 1);
+	cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) &
+				EDMA_RXFILL_CONS_IDX_MASK;
+	work_to_do = (cons_idx - rxfill_ring->prod_idx + rxfill_ring->count - 1) & (rxfill_ring->count - 1);
 
-		if (work_to_do > budget) {
-			work_to_do = budget;
-		}
+	if (work_to_do > budget) {
+		work_to_do = budget;
+	}
 
-		if (likely(work_to_do > 0)) {
-			num_avail = ppeds_node->ops->rx_fill(&ppeds_node->ppeds_handle, work_to_do, alloc_size, headroom);
-			edma_ppeds_rx_alloc_buffer(rxfill_ring, num_avail, ppeds_node->ppeds_handle.rx_fill_arr, headroom);
-		}
+	if (unlikely(!work_to_do)) {
+		goto napi_complete;
+	}
 
-		/*
-		 * Return if budget has exhausted
-		 */
-		if (likely(num_avail >= budget)) {
-			return num_avail;
-		}
+	num_avail = ppeds_node->ops->rx_fill(&ppeds_node->ppeds_handle, work_to_do,
+						alloc_size, headroom);
+	if (likely(num_avail))
+		edma_ppeds_rx_alloc_buffer(rxfill_ring, num_avail,
+						ppeds_node->ppeds_handle.rx_fill_arr, headroom);
 
-		/*
-		 * Clear on read
-		 */
-		status = EDMA_RXFILL_RING_INT_STATUS_MASK &
-			edma_reg_read(EDMA_REG_RXFILL_INT_STAT(rxfill_ring->ring_id));
-	} while (likely(status));
-
+	edma_reg_read(EDMA_REG_RXFILL_INT_STAT(rxfill_ring->ring_id));
+napi_complete:
 	napi_complete(napi);
 	edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
-			EDMA_RXFILL_INT_MASK);
-
+				EDMA_RXFILL_INT_MASK);
 	return 0;
 }
 
@@ -556,6 +517,8 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	edma_reg_write(EDMA_REG_TX_MOD_TIMER(txcmpl_ring->id),
 				tx_mod_timer);
 
+	txcmpl_ring->cons_idx = edma_reg_read(EDMA_REG_TXCMPL_CONS_IDX(txcmpl_ring->id));
+
 	edma_reg_write(EDMA_REG_TX_INT_CTRL(txcmpl_ring->id), EDMA_TX_NE_INT_EN);
 }
 
@@ -575,6 +538,8 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 
 	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
 	edma_reg_write(EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
+
+	rxfill_ring->prod_idx = edma_reg_read(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id));
 
 	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
 			(uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK));
@@ -601,12 +566,62 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 }
 
 /*
+ * edma_ppeds_rx_handle_irq
+ *	Disable edma interrupt and enable wlan interrupt
+ */
+irqreturn_t edma_ppeds_rx_handle_irq(int irq, void *ctx)
+{
+	struct edma_rxdesc_ring *rxdesc_ring = (struct edma_rxdesc_ring *)ctx;
+	struct edma_ppeds *ppeds_node =
+			container_of(rxdesc_ring, struct edma_ppeds, rx_ring);
+
+	/*
+	 * Clear RxDesc ring interrupt mask
+	 */
+	edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id),
+			EDMA_MASK_INT_CLEAR);
+
+	/*
+	 * Enable wlan interrupt
+	 */
+	ppeds_node->ops->enable_wlan_intr(&ppeds_node->ppeds_handle, true);
+
+	return IRQ_HANDLED;
+}
+
+/*
+ * edma_ppeds_enable_rx_reap_intr()
+ *	PPEDS enable edma interrupt
+ */
+static void edma_ppeds_enable_rx_reap_intr(nss_dp_ppeds_handle_t *ppeds_handle)
+{
+	struct edma_ppeds *ppeds_node =
+		container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_rxdesc_ring *rx_ring = &ppeds_node->rx_ring;
+	uint32_t status;
+
+	/*
+	 * Clear on Read
+	 */
+	status = edma_reg_read(EDMA_REG_RXDESC_INT_STAT(rx_ring->ring_id)) &
+			EDMA_RXDESC_RING_INT_STATUS_MASK;
+
+	/*
+	 * Set RXDESC ring interrupt mask
+	 */
+	edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rx_ring->ring_id),
+			EDMA_RXDESC_INT_MASK_PKT_INT);
+}
+
+/*
  * edma_ppeds_inst_register()
  *	PPE-DS EDMA instance registration API
  */
 bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 {
 	int ret;
+	uint32_t alloc_size;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
@@ -623,8 +638,13 @@ bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_REG_IN_PROG;
 	write_unlock_bh(&drv->lock);
 
+	if (egc->rx_jumbo_mru)
+		alloc_size = egc->rx_jumbo_mru;
+	else
+		alloc_size = NSS_DP_RX_BUFFER_SIZE;
+
 	ppeds_node->rxfill_ring.count = rx_ring_size;
-	ppeds_node->rxfill_ring.alloc_size  = NSS_DP_RX_BUFFER_SIZE;
+	ppeds_node->rxfill_ring.alloc_size  = alloc_size;
 	ppeds_node->rx_ring.count = rx_ring_size;
 	ppeds_node->rx_ring.pdma = (dma_addr_t)ppeds_handle->ppe2tcl_ba;
 
@@ -690,10 +710,23 @@ bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	irq_set_status_flags(ppeds_node->rxdesc_intr, IRQ_DISABLE_UNLAZY);
 	snprintf(edma_ppeds_rxdesc_irq_name[ppeds_node->db_idx], 32,
 			 "edma_ppeds_rxdesc_%d", ppeds_node->db_idx);
-	ret = request_irq(ppeds_node->rxdesc_intr,
-			edma_rx_handle_irq, IRQF_SHARED,
-			edma_ppeds_rxdesc_irq_name[ppeds_node->db_idx],
-			(void *)&ppeds_node->rx_ring);
+
+	/*
+	 * If poll mode is disabled, handle the rx_ring interrupts in irq mode,
+	 * Otherwise handle them in polling mode using Napi.
+	 */
+	if (ppeds_handle->polling_for_idx_update) {
+		ret = request_irq(ppeds_node->rxdesc_intr,
+				edma_rx_handle_irq, IRQF_SHARED,
+				edma_ppeds_rxdesc_irq_name[ppeds_node->db_idx],
+				(void *)&ppeds_node->rx_ring);
+	} else {
+		ret = request_irq(ppeds_node->rxdesc_intr,
+				edma_ppeds_rx_handle_irq, IRQF_SHARED,
+				edma_ppeds_rxdesc_irq_name[ppeds_node->db_idx],
+				(void *)&ppeds_node->rx_ring);
+	}
+
 	if (ret) {
 		edma_err("PPEDS RXDESC ring IRQ:%d request failed for node %d\n",
 				ppeds_node->rxdesc_intr, ppeds_node->db_idx);
@@ -803,7 +836,8 @@ void edma_ppeds_inst_refill(nss_dp_ppeds_handle_t *ppeds_handle, int count)
 	struct edma_rxfill_ring *rxfill_ring = &ppeds_node->rxfill_ring;
 
 	read_lock_bh(&drv->lock);
-	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_REG_DONE) {
+	if ((node_cfg->node_state != EDMA_PPEDS_NODE_STATE_REG_DONE) &&
+		(node_cfg->node_state != EDMA_PPEDS_NODE_STATE_STOP_DONE)) {
 		edma_err("%px: Invalid node state: %d, PPE-DS rxfill failed\n", ppeds_node,
 				node_cfg->node_state);
 		read_unlock_bh(&drv->lock);
@@ -910,7 +944,8 @@ int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 
 	write_lock_bh(&drv->lock);
-	if (node_cfg->node_state != EDMA_PPEDS_NODE_STATE_REG_DONE) {
+	if ((node_cfg->node_state != EDMA_PPEDS_NODE_STATE_REG_DONE) &&
+		(node_cfg->node_state != EDMA_PPEDS_NODE_STATE_STOP_DONE)) {
 		edma_err("%px: Invalid node state: %d, PPE-DS start failed\n", ppeds_node,
 				node_cfg->node_state);
 		write_unlock_bh(&drv->lock);
@@ -1241,4 +1276,5 @@ struct nss_dp_ppeds_ops edma_ppeds_ops = {
 	.set_tx_prod_idx	=	edma_ppeds_set_tx_prod_idx,
 	.get_tx_cons_idx	=	edma_ppeds_get_tx_cons_idx,
 	.get_rx_prod_idx	=	edma_ppeds_get_rx_prod_idx,
+	.enable_rx_reap_intr	=	edma_ppeds_enable_rx_reap_intr,
 };
