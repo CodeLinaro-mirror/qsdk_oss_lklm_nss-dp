@@ -652,7 +652,7 @@ static bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	else
 		alloc_size = NSS_DP_RX_BUFFER_SIZE;
 
-	ppeds_node->rxfill_ring.count = rx_ring_size;
+	ppeds_node->rxfill_ring.count = ppeds_handle->ppe2tcl_rxfill_num_desc;
 	ppeds_node->rxfill_ring.alloc_size  = alloc_size;
 	ppeds_node->rx_ring.count = rx_ring_size;
 	ppeds_node->rx_ring.pdma = (dma_addr_t)ppeds_handle->ppe2tcl_ba;
@@ -662,7 +662,7 @@ static bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 		return false;
 	}
 
-	ppeds_node->txcmpl_ring.count = tx_ring_size;
+	ppeds_node->txcmpl_ring.count = ppeds_handle->reo2ppe_txcmpl_num_desc;
 	ppeds_node->tx_ring.count = tx_ring_size;
 	ppeds_node->tx_ring.pdma = (dma_addr_t)ppeds_handle->reo2ppe_ba;
 	ppeds_node->tx_ring.pdesc = phys_to_virt(ppeds_node->tx_ring.pdma);
@@ -788,7 +788,13 @@ static bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	edma_ppeds_cfg_tx(ppeds_node);
 	edma_ppeds_cfg_rx(ppeds_node);
 
-	edma_debug("EDMA PPEDS registeration succesful\n");
+	edma_debug("EDMA PPE-DS registration successfull."
+			" PPE2TCL ring size: %d, REO2PPE ring size: %d,"
+			" Rxfill ring size: %d, Txcmpl ring size: %d\n",
+			ppeds_handle->ppe2tcl_num_desc,
+			ppeds_handle->reo2ppe_num_desc,
+			ppeds_handle->ppe2tcl_rxfill_num_desc,
+			ppeds_handle->reo2ppe_txcmpl_num_desc);
 
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_REG_DONE;
