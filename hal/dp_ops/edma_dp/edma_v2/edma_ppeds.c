@@ -1076,6 +1076,17 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	write_unlock_bh(&drv->lock);
 
 	/*
+	 * Disable TxDesc rings.
+	 */
+	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id));
+	data &= ~EDMA_TXDESC_TX_ENABLE;
+	edma_reg_write(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id), data);
+	do {
+		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id));
+		data &= EDMA_TXDESC_TX_ENABLE;
+	} while (data);
+
+	/*
 	 * Clear enable bit, set disable bit and wait untill Rx Desc ring is disabled.
 	 */
 	data = edma_reg_read(EDMA_REG_RXDESC_CTRL(ppeds_node->rx_ring.ring_id));
@@ -1089,6 +1100,14 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	do {
 		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(ppeds_node->rx_ring.ring_id));
 	} while (!data);
+
+	/*
+	 * Disable Tx complete interrupt and NAPI
+	 */
+	edma_reg_write(EDMA_REG_TX_INT_MASK(ppeds_node->txcmpl_ring.id),
+			EDMA_MASK_INT_CLEAR);
+	synchronize_irq(ppeds_node->txcmpl_intr);
+	napi_disable(&ppeds_node->txcmpl_ring.napi);
 
 	/*
 	 * Clear enable bit, set the disable bit and wait until the RxFill ring is disabled.
@@ -1106,13 +1125,6 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	} while (!data);
 
 	/*
-	 * Disable TxDesc rings.
-	 */
-	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id));
-	data &= ~EDMA_TXDESC_TX_ENABLE;
-	edma_reg_write(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id), data);
-
-	/*
 	 * Disable Rxfill interrupt and NAPI
 	 */
 	edma_reg_write(EDMA_REG_RXFILL_INT_MASK(ppeds_node->rxfill_ring.ring_id),
@@ -1121,12 +1133,10 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	napi_disable(&ppeds_node->rxfill_ring.napi);
 
 	/*
-	 * Disable Tx complete interrupt and NAPI
+	 * Wait for 5ms and then clean the tx complete ring
 	 */
-	edma_reg_write(EDMA_REG_TX_INT_MASK(ppeds_node->tx_ring.id),
-			EDMA_MASK_INT_CLEAR);
-	synchronize_irq(ppeds_node->txcmpl_intr);
-	napi_disable(&ppeds_node->txcmpl_ring.napi);
+	mdelay(5);
+	edma_ppeds_tx_complete(ppeds_node->txcmpl_ring.count, &ppeds_node->txcmpl_ring);
 
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_STOP_DONE;
@@ -1155,6 +1165,9 @@ static void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 
 	kfree(ppeds_handle->rx_fill_arr);
 	ppeds_handle->rx_fill_arr = NULL;
+
+	kfree(ppeds_handle->tx_cmpl_arr);
+	ppeds_handle->tx_cmpl_arr= NULL;
 
 	irq_clear_status_flags(ppeds_node->rxdesc_intr, IRQ_DISABLE_UNLAZY);
 	free_irq(ppeds_node->rxdesc_intr,
