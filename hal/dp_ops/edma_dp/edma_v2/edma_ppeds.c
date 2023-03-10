@@ -24,6 +24,10 @@
 static char edma_ppeds_txcmpl_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
 static char edma_ppeds_rxdesc_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
 static char edma_ppeds_rxfill_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
+static void *edma_ppeds_tx_ring_sec_mem;
+static void *edma_ppeds_rx_ring_sec_mem;
+static int edma_ppeds_rx_ring_entries;
+static int edma_ppeds_tx_ring_entries;
 
 /*
  * edma_ppeds_rx_fill_ring_alloc()
@@ -68,11 +72,24 @@ static void edma_ppeds_rx_fill_ring_free(struct edma_rxfill_ring *rxfill_ring)
  */
 static int edma_ppeds_rx_secondary_alloc(struct edma_rxdesc_ring *rxdesc_ring)
 {
-	/*
-	 * Allocate secondary RxDesc ring descriptors
-	 */
-	rxdesc_ring->sdesc = kmalloc((sizeof(struct edma_rxdesc_sec_desc) *  rxdesc_ring->count) +
-			SMP_CACHE_BYTES,  GFP_KERNEL | __GFP_ZERO);
+	if (edma_ppeds_rx_ring_sec_mem) {
+		rxdesc_ring->sdesc = edma_ppeds_rx_ring_sec_mem;
+		if (edma_ppeds_rx_ring_entries < rxdesc_ring->count) {
+			edma_err("Num of descs needed (%d) for Rx secondary ring are more than available (%d)",
+					rxdesc_ring->count, edma_ppeds_rx_ring_entries);
+			BUG();
+		}
+	} else {
+		/*
+		 * Allocate secondary RxDesc ring descriptors
+		 */
+		rxdesc_ring->sdesc = kmalloc(roundup((sizeof(struct edma_rxdesc_sec_desc) *  rxdesc_ring->count),
+					SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
+
+		edma_ppeds_rx_ring_sec_mem = rxdesc_ring->sdesc;
+		edma_ppeds_rx_ring_entries = rxdesc_ring->count;
+	}
+
 	if (!rxdesc_ring->sdesc) {
 		edma_err("Descriptor alloc for secondary RX ring %u failed\n",
 				rxdesc_ring->ring_id);
@@ -81,17 +98,6 @@ static int edma_ppeds_rx_secondary_alloc(struct edma_rxdesc_ring *rxdesc_ring)
 
 	rxdesc_ring->sdma = (dma_addr_t)virt_to_phys(rxdesc_ring->sdesc);
 	return 0;
-}
-
-/*
- * edma_ppeds_rx_secondary_free()
- *	API to free secondary Rx ring for PPE-DS node
- */
-static void edma_ppeds_rx_secondary_free(struct edma_rxdesc_ring *rxdesc_ring)
-{
-	kfree(rxdesc_ring->sdesc);
-	rxdesc_ring->sdesc = NULL;
-	rxdesc_ring->sdma = (dma_addr_t)0;
 }
 
 /*
@@ -131,11 +137,23 @@ static void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring)
  */
 static int edma_ppeds_tx_secondary_alloc(struct edma_txdesc_ring *txdesc_ring)
 {
-	/*
-	 * Allocate sencondary Tx ring descriptors
-	 */
-	txdesc_ring->sdesc = kmalloc((sizeof(struct edma_sec_txdesc) *  txdesc_ring->count) +
-			SMP_CACHE_BYTES, GFP_KERNEL | __GFP_ZERO);
+	if (edma_ppeds_tx_ring_sec_mem) {
+		txdesc_ring->sdesc = edma_ppeds_tx_ring_sec_mem;
+		if (edma_ppeds_tx_ring_entries < txdesc_ring->count) {
+			edma_err("Num of descs needed (%d) for Tx secondary ring are more than available (%d)",
+					txdesc_ring->count, edma_ppeds_tx_ring_entries);
+			BUG();
+		}
+	} else {
+		/*
+		 * Allocate sencondary Tx ring descriptors
+		 */
+		txdesc_ring->sdesc = kmalloc(roundup((sizeof(struct edma_sec_txdesc) * txdesc_ring->count),
+					SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
+
+		edma_ppeds_tx_ring_sec_mem = txdesc_ring->sdesc;
+		edma_ppeds_tx_ring_entries = txdesc_ring->count;
+	}
 	if (!txdesc_ring->sdesc) {
 		edma_err("Descriptor alloc for secondary TX ring %u failed\n",
 				txdesc_ring->id);
@@ -144,18 +162,6 @@ static int edma_ppeds_tx_secondary_alloc(struct edma_txdesc_ring *txdesc_ring)
 
 	txdesc_ring->sdma = (dma_addr_t)virt_to_phys(txdesc_ring->sdesc);
 	edma_debug("tx sec desc got allocated for Tx ring %d\n", txdesc_ring->id);
-	return 0;
-}
-
-/*
- * edma_ppeds_tx_secondary_free()
- *	API to free secondary Tx ring for PPE-DS node
- */
-static int edma_ppeds_tx_secondary_free(struct edma_txdesc_ring *txdesc_ring)
-{
-	kfree(txdesc_ring->sdesc);
-	txdesc_ring->sdesc = NULL;
-	txdesc_ring->sdma = (dma_addr_t)0;
 	return 0;
 }
 
@@ -240,7 +246,7 @@ static int edma_ppeds_txcomp_napi_poll(struct napi_struct *napi, int budget)
 }
 
 /*
- * edma_rx_alloc_buffer()
+ * edma_ppeds_rx_alloc_buffer()
  *	Alloc Rx buffers for RxFill ring
  */
 static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count, struct nss_dp_ppeds_rx_fill_elem *rx_fill_arr,
@@ -523,6 +529,86 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 }
 
 /*
+ * edma_ppeds_rx_desc_ring_to_queue_mapping()
+ *	PPE-DS rx descriptor ring to queue mapping API
+ */
+static void edma_ppeds_rx_desc_ring_to_queue_mapping(struct edma_ppeds *ppeds_node)
+{
+	struct edma_rxdesc_ring *rxdesc_ring = &ppeds_node->rx_ring;
+	uint32_t num_queues = ppeds_node->ppe_num_queues;
+	uint32_t queue_id = ppeds_node->ppe_qid;
+	fal_queue_bmp_t queue_bmp = {0};
+	uint32_t word_idx, bit_idx, i;
+	sw_error_t ret;
+
+	while (num_queues) {
+		word_idx = (queue_id / (EDMA_BITS_IN_WORD - 1));
+		if (word_idx >= EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT) {
+			edma_err("Invalid word index (%d) for %d queue\n", word_idx, queue_id);
+			return;
+		}
+
+		bit_idx = (queue_id % EDMA_BITS_IN_WORD);
+		queue_bmp.bmp[word_idx] |= (1 << bit_idx);
+		num_queues--;
+		queue_id++;
+	}
+
+	ret = fal_edma_ring_queue_map_set(EDMA_SWITCH_DEV_ID, rxdesc_ring->ring_id, &queue_bmp);
+	if (ret != SW_OK) {
+		edma_err("Error in configuring Rx ring to PPE queue mapping."
+				" ret: %d, ring id: %d\n",
+				ret, rxdesc_ring->ring_id);
+		for (i = 0; i < EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT; i++) {
+			edma_err("\tPPE queue bitmap[%d]: %0x\n", i, queue_bmp.bmp[i]);
+		}
+		return;
+	}
+
+	edma_debug("Rx desc ring %d to PPE queue mapping for backpressure:\n",
+			rxdesc_ring->ring_id);
+	for (i = 0; i < EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT; i++) {
+		edma_debug("\tPPE queue bitmap[%d]: %0x\n", i, queue_bmp.bmp[i]);
+	}
+}
+
+/*
+ * edma_ppeds_rx_desc_ring_flow_control()
+ *	PPE-DS Rx descriptor ring flow control configuration API
+ */
+static void edma_ppeds_rx_desc_ring_flow_control(struct edma_rxdesc_ring *rxdesc_ring)
+{
+	uint32_t data;
+
+	data = (EDMA_PPEDS_RX_FC_XOFF_DEF & EDMA_RXDESC_FC_XOFF_THRE_MASK) <<
+			 EDMA_RXDESC_FC_XOFF_THRE_SHIFT;
+	data |= ((EDMA_PPEDS_RX_FC_XON_DEF & EDMA_RXDESC_FC_XON_THRE_MASK) <<
+			 EDMA_RXDESC_FC_XON_THRE_SHIFT);
+
+	edma_debug("Rxdesc flow control threshold value is %d for ring: %d\n",
+			data, rxdesc_ring->ring_id);
+	edma_reg_write(EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id), data);
+}
+
+/*
+ * edma_ppeds_rx_fill_ring_flow_control()
+ *	PPE-DS Rx fill ring flow control configuration API
+ */
+static void edma_ppeds_rx_fill_ring_flow_control(struct edma_rxfill_ring *rxfill_ring)
+{
+	uint32_t data;
+
+	data = (EDMA_PPEDS_RX_FC_XOFF_DEF & EDMA_RXFILL_FC_XOFF_THRE_MASK) <<
+			 EDMA_RXFILL_FC_XOFF_THRE_SHIFT;
+	data |= ((EDMA_PPEDS_RX_FC_XON_DEF & EDMA_RXFILL_FC_XON_THRE_MASK) <<
+			 EDMA_RXFILL_FC_XON_THRE_SHIFT);
+
+	edma_debug("Rxfill flow control threshold value is %d for ring: %d\n",
+			data, rxfill_ring->ring_id);
+	edma_reg_write(EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id), data);
+}
+
+/*
  * edma_ppeds_cfg_rx()
  *	API to configure PPE-DS EDMA Rx ring
  */
@@ -563,6 +649,13 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 	 * Enable ring. Set ret mode to 'opaque'.
 	 */
 	edma_reg_write(EDMA_REG_RX_INT_CTRL(rxdesc_ring->ring_id), EDMA_RX_NE_INT_EN);
+
+	/*
+	 * Configure flow control and Rx ring to queue mapping
+	 */
+	edma_ppeds_rx_desc_ring_to_queue_mapping(ppeds_node);
+	edma_ppeds_rx_desc_ring_flow_control(rxdesc_ring);
+	edma_ppeds_rx_fill_ring_flow_control(rxfill_ring);
 }
 
 /*
@@ -794,7 +887,6 @@ bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	return true;
 
 tx_sec_setup_failed:
-	edma_ppeds_rx_secondary_free(&ppeds_node->rx_ring);
 rx_sec_setup_failed:
 	irq_clear_status_flags(ppeds_node->rxfill_intr, IRQ_DISABLE_UNLAZY);
 	synchronize_irq(ppeds_node->rxfill_intr);
@@ -939,6 +1031,32 @@ uint16_t edma_ppeds_get_tx_cons_idx(nss_dp_ppeds_handle_t *ppeds_handle)
 }
 
 /*
+ * edma_ppeds_get_rxfill_cons_idx()
+ *	Get rxfill ring consumer index
+ */
+static uint16_t edma_ppeds_get_rxfill_cons_idx(nss_dp_ppeds_handle_t *ppeds_handle)
+{
+	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_rxfill_ring *rxfill_ring = &ppeds_node->rxfill_ring;
+
+	return edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) &
+				EDMA_RXFILL_CONS_IDX_MASK;
+}
+
+/*
+ * edma_ppeds_set_rxfill_prod_idx()
+ *	Set rxfill ring producer index
+ */
+static void edma_ppeds_set_rxfill_prod_idx(nss_dp_ppeds_handle_t *ppeds_handle,
+					   uint16_t prod_idx)
+{
+	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_rxfill_ring *rxfill_ring = &ppeds_node->rxfill_ring;
+
+	edma_reg_write(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id), prod_idx);
+}
+
+/*
  * edma_ppeds_inst_start()
  *	PPE-DS EDMA instance start API
  */
@@ -1045,6 +1163,17 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	write_unlock_bh(&drv->lock);
 
 	/*
+	 * Disable TxDesc rings.
+	 */
+	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id));
+	data &= ~EDMA_TXDESC_TX_ENABLE;
+	edma_reg_write(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id), data);
+	do {
+		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id));
+		data &= EDMA_TXDESC_TX_ENABLE;
+	} while (data);
+
+	/*
 	 * Clear enable bit, set disable bit and wait untill Rx Desc ring is disabled.
 	 */
 	data = edma_reg_read(EDMA_REG_RXDESC_CTRL(ppeds_node->rx_ring.ring_id));
@@ -1058,6 +1187,14 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	do {
 		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(ppeds_node->rx_ring.ring_id));
 	} while (!data);
+
+	/*
+	 * Disable Tx complete interrupt and NAPI
+	 */
+	edma_reg_write(EDMA_REG_TX_INT_MASK(ppeds_node->txcmpl_ring.id),
+			EDMA_MASK_INT_CLEAR);
+	synchronize_irq(ppeds_node->txcmpl_intr);
+	napi_disable(&ppeds_node->txcmpl_ring.napi);
 
 	/*
 	 * Clear enable bit, set the disable bit and wait until the RxFill ring is disabled.
@@ -1075,13 +1212,6 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	} while (!data);
 
 	/*
-	 * Disable TxDesc rings.
-	 */
-	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id));
-	data &= ~EDMA_TXDESC_TX_ENABLE;
-	edma_reg_write(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id), data);
-
-	/*
 	 * Disable Rxfill interrupt and NAPI
 	 */
 	edma_reg_write(EDMA_REG_RXFILL_INT_MASK(ppeds_node->rxfill_ring.ring_id),
@@ -1090,12 +1220,10 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	napi_disable(&ppeds_node->rxfill_ring.napi);
 
 	/*
-	 * Disable Tx complete interrupt and NAPI
+	 * Wait for 5ms and then clean the tx complete ring
 	 */
-	edma_reg_write(EDMA_REG_TX_INT_MASK(ppeds_node->tx_ring.id),
-			EDMA_MASK_INT_CLEAR);
-	synchronize_irq(ppeds_node->txcmpl_intr);
-	napi_disable(&ppeds_node->txcmpl_ring.napi);
+	mdelay(5);
+	edma_ppeds_tx_complete(ppeds_node->txcmpl_ring.count, &ppeds_node->txcmpl_ring);
 
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_STOP_DONE;
@@ -1125,6 +1253,9 @@ void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 	kfree(ppeds_handle->rx_fill_arr);
 	ppeds_handle->rx_fill_arr = NULL;
 
+	kfree(ppeds_handle->tx_cmpl_arr);
+	ppeds_handle->tx_cmpl_arr= NULL;
+
 	irq_clear_status_flags(ppeds_node->rxdesc_intr, IRQ_DISABLE_UNLAZY);
 	free_irq(ppeds_node->rxdesc_intr,
 			(void *)&ppeds_node->rx_ring);
@@ -1141,8 +1272,6 @@ void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 	netif_napi_del(&ppeds_node->rxfill_ring.napi);
 
 	edma_ppeds_rx_fill_ring_free(&ppeds_node->rxfill_ring);
-	edma_ppeds_rx_secondary_free(&ppeds_node->rx_ring);
-	edma_ppeds_tx_secondary_free(&ppeds_node->tx_ring);
 	edma_ppeds_tx_cmpl_ring_free(&ppeds_node->txcmpl_ring);
 
 	kfree(ppeds_node);
@@ -1233,6 +1362,16 @@ void edma_ppeds_deinit(struct edma_ppeds_drv *drv)
 {
 	uint32_t i;
 
+	if (edma_ppeds_tx_ring_sec_mem) {
+		kfree(edma_ppeds_tx_ring_sec_mem);
+		edma_ppeds_tx_ring_sec_mem = NULL;
+	}
+
+	if (edma_ppeds_rx_ring_sec_mem) {
+		kfree(edma_ppeds_rx_ring_sec_mem);
+		edma_ppeds_rx_ring_sec_mem = NULL;
+	}
+
 	for (i = 0; i < EDMA_PPEDS_MAX_NODES; i++) {
 		drv->ppeds_node_cfg[i].ppeds_db = NULL;
 		drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_AVAIL;
@@ -1282,5 +1421,7 @@ struct nss_dp_ppeds_ops edma_ppeds_ops = {
 	.set_tx_prod_idx	=	edma_ppeds_set_tx_prod_idx,
 	.get_tx_cons_idx	=	edma_ppeds_get_tx_cons_idx,
 	.get_rx_prod_idx	=	edma_ppeds_get_rx_prod_idx,
+	.get_rxfill_cons_idx	=	edma_ppeds_get_rxfill_cons_idx,
+	.set_rxfill_prod_idx	=	edma_ppeds_set_rxfill_prod_idx,
 	.enable_rx_reap_intr	=	edma_ppeds_enable_rx_reap_intr,
 };
