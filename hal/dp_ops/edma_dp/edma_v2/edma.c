@@ -28,6 +28,8 @@
 #include <fal/fal_rss_hash.h>
 #include <fal/fal_servcode.h>
 #include <ppe_drv_sc.h>
+#include <ppe_drv_acl.h>
+#include <ppe_drv.h>
 #include <linux/clk.h>
 #include "edma.h"
 #include "edma_cfg_tx.h"
@@ -270,6 +272,11 @@ void edma_cleanup(bool is_dp_override)
 	 * Unregister PTP service code callback function
 	 */
 	ppe_drv_sc_unregister_cb(PPE_DRV_SC_PTP);
+
+	/*
+	 * Unregister mirror core selection API callback with PPE driver
+	 */
+	ppe_drv_acl_mirror_core_select_unregister_cb();
 
 	/*
 	 * Mark initialize false, so that we do not
@@ -894,6 +901,15 @@ void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc)
 }
 
 /*
+ * edma_configure_mirror_pkt_capture_core()
+ *	Configure capture core for mirrored packets.
+ */
+void edma_configure_mirror_pkt_capture_core(uint8_t core_id, void *app_data)
+{
+	edma_cfg_rx_mcast_qid_to_core_mapping(&edma_gbl_ctx, core_id);
+}
+
+/*
  * edma_hw_init()
  *	EDMA hardware initialization
  */
@@ -1083,7 +1099,14 @@ static struct ctl_table edma_sub[] = {
 		.data		=	&edma_cfg_rx_rps_num_cores,
 		.maxlen		=	sizeof(int),
 		.mode		=	0644,
-		.proc_handler	=	edma_cfg_rx_rps
+		.proc_handler	=	edma_cfg_rx_rps,
+	},
+	{
+		.procname	=	"edma_sec_desc_feature_enable",
+		.data		=	&edma_cfg_rx_sec_desc_inval,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	edma_cfg_rx_inval,
 	},
 	{}
 };
@@ -1217,6 +1240,11 @@ int edma_init(void)
 	 * Register PTP service code callback function
 	 */
 	ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_phy_tstamp_buf, NULL);
+
+	/*
+	 * Register mirror core selection API callback with PPE driver
+	 */
+	ppe_drv_acl_mirror_core_select_register_cb(edma_configure_mirror_pkt_capture_core, NULL);
 
 	/*
 	 * We add NAPIs and register IRQs at the time of the first netdev open

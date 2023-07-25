@@ -23,6 +23,7 @@
 #include <nss_dp_vp.h>
 #include <linux/phy.h>
 #include "edma.h"
+#include "edma_cfg_rx.h"
 #include "edma_debug.h"
 #include "edma_regs.h"
 #include "nss_dp_dev.h"
@@ -47,8 +48,11 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 		struct nss_dp_dev *vp_dev;
 
 		rcu_read_unlock();
-		edma_warn("Vp packet recieved but edma vp callback \
-				not registered yet, skb:%px\n", skb);
+		if (net_ratelimit()) {
+			edma_warn("VP packet recieved but edma vp callback \
+					not registered yet, skb:%px\n", skb);
+		}
+
 		vp_dev = netdev_priv(skb->dev);
 		dev_kfree_skb_any(skb);
 
@@ -184,8 +188,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		 * Save buffer size in RXFILL descriptor
 		 */
 		EDMA_RXFILL_PACKET_LEN_SET(rxfill_desc,
-				cpu_to_le32((uint32_t)(buf_len) &
-				EDMA_RXFILL_BUF_SIZE_MASK));
+				((uint32_t)(buf_len) & EDMA_RXFILL_BUF_SIZE_MASK));
 
 		/*
 		 * Invalidate skb->data
@@ -211,6 +214,11 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		skb->fast_recycled = 0;
 #endif
 		prod_idx = (prod_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+
+		/*
+		 * Perform endianness conversion before writing to HW
+		 */
+		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
 	}
 
 	if (likely(num_alloc)) {
@@ -344,6 +352,7 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 	uint8_t cpu_code, service_code;
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
 	struct ppe_drv_sc_metadata sc_info = {0};
+	struct ppe_drv_acl_metadata acl_info = {0};
 
 	/*
 	 * The primary descriptor has CPU code valid indication bit while
@@ -354,8 +363,15 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
 
 		/*
-		 * TODO: Invalidate the secondary descriptor before use.
+		 * Invalidate the secondary descriptor before using its fields.
+		 * TODO:
+		 * 1. Optimize the invalidation of secondary descriptor.
+		 * 2. Remove the sysctl protecting invalidation.
 		 */
+		if (unlikely(edma_cfg_rx_sec_desc_inval)) {
+			dmac_inv_range((void *)rxdesc_sec, (void *)(rxdesc_sec + 1));
+		}
+
 		cpu_code = EDMA_RXDESC_CPU_CODE_GET(rxdesc_sec);
 
 		/*
@@ -367,6 +383,23 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 		next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
 		prefetch(next_rxdesc_sec);
 
+		/*
+		 * check if the ACL ID is valid or not, if yes,
+		 * first process the packet based on ACL ID and then look
+		 * for CPU code processing.
+		 */
+		if (unlikely(EDMA_RXDESC_ACL_IDX_VALID_GET(rxdesc_sec))) {
+			acl_info.acl_hw_index = EDMA_RXDESC_ACL_IDX_GET(rxdesc_sec);
+			acl_info.cpu_code = cpu_code;
+			if (ppe_drv_acl_process_skbuff(&acl_info, skb)) {
+				return true;
+			}
+		}
+
+		/*
+		 * In case if ACL based processing returns false, continue with the
+		 * CPU code process.
+		 */
 		if (cpu_code && ppe_drv_cc_process_skbuff(cpu_code, skb)) {
 			return true;
 		}
@@ -785,10 +818,11 @@ static inline struct net_device *edma_rx_get_src_dev(
 				== EDMA_RXDESC_SRCINFO_TYPE_PORTID)) {
 		src_port_num = src_info & EDMA_RXDESC_PORTNUM_BITS;
 	} else {
-		edma_warn("Src_info_type:0x%x. Drop skb:%px\n",
-				(src_info &
-				 EDMA_RXDESC_SRCINFO_TYPE_MASK),
-				skb);
+		if (net_ratelimit()) {
+			edma_warn("Src_info_type:0x%x. Drop skb:%px\n",
+					(src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK), skb);
+		}
+
 		u64_stats_update_begin(&rxdesc_stats->syncp);
 		++rxdesc_stats->src_port_inval_type;
 		u64_stats_update_end(&rxdesc_stats->syncp);
@@ -800,9 +834,12 @@ static inline struct net_device *edma_rx_get_src_dev(
 	 */
 	if (unlikely(src_port_num <= NSS_DP_HAL_MAX_PORTS)) {
 		if (unlikely(src_port_num < NSS_DP_START_IFNUM)) {
-			edma_warn("Port number error :%d. \
-					Drop skb:%px\n",
-					src_port_num, skb);
+			if (net_ratelimit()) {
+				edma_warn("Port number error :%d. \
+						Drop skb:%px\n",
+						src_port_num, skb);
+			}
+
 			u64_stats_update_begin(&rxdesc_stats->syncp);
 			++rxdesc_stats->src_port_inval;
 			u64_stats_update_end(&rxdesc_stats->syncp);
@@ -820,9 +857,12 @@ static inline struct net_device *edma_rx_get_src_dev(
 	}
 
 	if (unlikely(src_port_num < PPE_DRV_VIRTUAL_START)) {
-		edma_warn("Port number error :%d. \
+		if (net_ratelimit()) {
+			edma_warn("Port number error :%d. \
 				Drop skb:%px\n",
 				src_port_num, skb);
+		}
+
 		u64_stats_update_begin(&rxdesc_stats->syncp);
 		++rxdesc_stats->src_port_inval;
 		u64_stats_update_end(&rxdesc_stats->syncp);
@@ -838,8 +878,11 @@ done:
 	if (likely(ndev))
 		return ndev;
 
-	edma_warn("Netdev Null src_info_type:0x%x. Drop skb:%px\n",
-			src_port_num, skb);
+	if (net_ratelimit()) {
+		edma_warn("Netdev Null src_info_type:0x%x. Drop skb:%px\n",
+				src_port_num, skb);
+	}
+
 	u64_stats_update_begin(&rxdesc_stats->syncp);
 	++rxdesc_stats->src_port_inval_netdev;
 	u64_stats_update_end(&rxdesc_stats->syncp);

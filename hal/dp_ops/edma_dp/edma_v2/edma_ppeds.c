@@ -284,11 +284,11 @@ static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int
 		rxfill_desc->word2 = rx_fill_arr[num_alloc].opaque_lo;
 		rxfill_desc->word3 = rx_fill_arr[num_alloc].opaque_hi;
 		EDMA_RXFILL_PACKET_LEN_SET(rxfill_desc,
-			cpu_to_le32((uint32_t)
-			(rx_alloc_size - headroom)
+			((uint32_t)(rx_alloc_size - headroom)
 			& EDMA_RXFILL_BUF_SIZE_MASK));
 
 		prod_idx = (prod_idx + 1) & ring_size_mask;
+		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
 		num_alloc++;
 	}
 
@@ -774,14 +774,14 @@ bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	}
 
 	ppeds_handle->rx_fill_arr =
-		(struct nss_dp_ppeds_rx_fill_elem *)kzalloc(sizeof(struct nss_dp_ppeds_rx_fill_elem) * rx_ring_size, GFP_KERNEL);
+		(struct nss_dp_ppeds_rx_fill_elem *)kzalloc(sizeof(struct nss_dp_ppeds_rx_fill_elem) * ppeds_node->rxfill_ring.count, GFP_KERNEL);
 	if (!ppeds_handle->rx_fill_arr) {
 		goto rx_fill_arr_alloc_failed;
 		return false;
 	}
 
 	ppeds_handle->tx_cmpl_arr =
-		(struct nss_dp_ppeds_tx_cmpl_elem *)kzalloc(sizeof(struct nss_dp_ppeds_tx_cmpl_elem) * tx_ring_size, GFP_KERNEL);
+		(struct nss_dp_ppeds_tx_cmpl_elem *)kzalloc(sizeof(struct nss_dp_ppeds_tx_cmpl_elem) * ppeds_node->txcmpl_ring.count, GFP_KERNEL);
 	if (!ppeds_handle->tx_cmpl_arr) {
 		goto tx_cmpl_arr_alloc_failed;
 		return false;

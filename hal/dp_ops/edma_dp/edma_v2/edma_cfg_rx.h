@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -46,6 +46,7 @@
 extern uint32_t edma_cfg_rx_fc_enable;
 extern uint32_t edma_cfg_rx_queue_tail_drop_enable;
 extern uint32_t edma_cfg_rx_rps_num_cores;
+extern uint32_t edma_cfg_rx_sec_desc_inval;
 
 void edma_cfg_rx_rings(struct edma_gbl_ctx *egc);
 #if defined(NSS_DP_POINT_OFFLOAD)
@@ -59,12 +60,15 @@ void edma_cfg_rx_napi_enable(struct edma_gbl_ctx *egc);
 void edma_cfg_rx_napi_delete(struct edma_gbl_ctx *egc);
 void edma_cfg_rx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev);
 void edma_cfg_rx_mapping(struct edma_gbl_ctx *egc);
+void edma_cfg_rx_mcast_qid_to_core_mapping(struct edma_gbl_ctx *egc, uint8_t core_id);
 void edma_cfg_rx_rings_enable(struct edma_gbl_ctx *egc);
 void edma_cfg_rx_rings_disable(struct edma_gbl_ctx *egc);
 int edma_cfg_rx_fc_enable_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
 void edma_cfg_rx_page_mode_and_jumbo(struct edma_gbl_ctx *egc);
 int edma_cfg_rx_queue_tail_drop_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos);
+int edma_cfg_rx_inval(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_cfg_rx_rps(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
