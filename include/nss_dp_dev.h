@@ -265,6 +265,9 @@ struct nss_dp_dev {
 	uint32_t ethtool_priv_flags;	/* Ethtool private flags */
 #endif /* NSS_DP_ETHTOOL_MRR_OPS */
 	bool ppe_offload_disabled;
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+	bool nss_dp_mht_dev;		/* Netdevice belongs to MHT switch */
+#endif
 };
 
 /*
@@ -281,6 +284,9 @@ struct nss_dp_global_ctx {
 	bool overwrite_mode;		/* Overwrite mode for Rx processing */
 	bool page_mode;			/* Page mode for Rx processing */
 	bool tx_requeue_stop;		/* Disable queue stop for Tx processing */
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+	bool is_mht_dev;		/* MHT switch ports tx ring mapping flag */
+#endif
 #if defined(NSS_DP_MAC_POLL_SUPPORT)
 	bool enable_polling_task;	/* enable SSDK PHY polling task */
 #endif

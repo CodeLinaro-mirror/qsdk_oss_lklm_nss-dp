@@ -81,6 +81,12 @@ int nss_dp_tx_napi_budget = NSS_DP_HAL_TX_NAPI_BUDGET;
 module_param(nss_dp_tx_napi_budget, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_tx_napi_budget, "Tx NAPI budget");
 
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+int nss_dp_mht_multi_txring = 0;
+module_param(nss_dp_mht_multi_txring, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_mht_multi_txring, "MHT SW ports to Tx rings map");
+#endif
+
 #if defined(NSS_DP_EDMA_V2)
 int nss_dp_rx_fc_xoff = NSS_DP_RX_FC_XOFF_DEF;
 module_param(nss_dp_rx_fc_xoff, int, S_IRUGO);
@@ -1020,6 +1026,14 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	dp_priv->ppe_offload_disabled = of_property_read_bool(np, "qcom,ppe-offload-disabled");
 	pr_info("%s: ppe offload disabled: %d for macid %d\n", np->name,
 				dp_priv->ppe_offload_disabled, dp_priv->macid);
+
+	/*
+	 * Read switch dev when MHT switch port to txring mapping is enabled.
+	 */
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+	if (dp_global_ctx.is_mht_dev)
+		dp_priv->nss_dp_mht_dev = of_property_read_bool(np, "qcom,mht-dev");
+#endif
 	return 0;
 }
 
@@ -1434,6 +1448,16 @@ int __init nss_dp_init(void)
 	if ((overwrite_mode && page_mode) || jumbo_mru) {
 		pr_err("Low memory profiles does not support page mode/jumbo mru\n");
 	}
+#endif
+
+	/*
+	 * Configure MHT switch ports to tx ring mapping
+	 * Default mht ports mapping is disabled.
+	 */
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+	dp_global_ctx.is_mht_dev = false;
+	if (nss_dp_mht_multi_txring)
+		dp_global_ctx.is_mht_dev = true;
 #endif
 
 	/*
