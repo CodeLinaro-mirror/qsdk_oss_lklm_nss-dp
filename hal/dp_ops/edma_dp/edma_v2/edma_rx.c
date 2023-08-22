@@ -23,6 +23,7 @@
 #include <nss_dp_vp.h>
 #include <linux/phy.h>
 #include "edma.h"
+#include "edma_cfg_rx.h"
 #include "edma_debug.h"
 #include "edma_regs.h"
 #include "nss_dp_dev.h"
@@ -339,6 +340,7 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 	uint8_t cpu_code, service_code;
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
 	struct ppe_drv_sc_metadata sc_info = {0};
+	struct ppe_drv_acl_metadata acl_info = {0};
 
 	/*
 	 * The primary descriptor has CPU code valid indication bit while
@@ -349,8 +351,15 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
 
 		/*
-		 * TODO: Invalidate the secondary descriptor before use.
+		 * Invalidate the secondary descriptor before using its fields.
+		 * TODO:
+		 * 1. Optimize the invalidation of secondary descriptor.
+		 * 2. Remove the sysctl protecting invalidation.
 		 */
+		if (unlikely(edma_cfg_rx_sec_desc_inval)) {
+			dmac_inv_range((void *)rxdesc_sec, (void *)(rxdesc_sec + 1));
+		}
+
 		cpu_code = EDMA_RXDESC_CPU_CODE_GET(rxdesc_sec);
 
 		/*
@@ -362,6 +371,23 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 		next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
 		prefetch(next_rxdesc_sec);
 
+		/*
+		 * check if the ACL ID is valid or not, if yes,
+		 * first process the packet based on ACL ID and then look
+		 * for CPU code processing.
+		 */
+		if (unlikely(EDMA_RXDESC_ACL_IDX_VALID_GET(rxdesc_sec))) {
+			acl_info.acl_hw_index = EDMA_RXDESC_ACL_IDX_GET(rxdesc_sec);
+			acl_info.cpu_code = cpu_code;
+			if (ppe_drv_acl_process_skbuff(&acl_info, skb)) {
+				return true;
+			}
+		}
+
+		/*
+		 * In case if ACL based processing returns false, continue with the
+		 * CPU code process.
+		 */
 		if (cpu_code && ppe_drv_cc_process_skbuff(cpu_code, skb)) {
 			return true;
 		}
