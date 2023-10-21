@@ -17,6 +17,7 @@
  */
 
 #include <asm/cacheflush.h>
+#include <linux/debug_mem_usage.h>
 #include <linux/version.h>
 #include <linux/netdevice.h>
 #include <ppe_drv_public.h>
@@ -388,6 +389,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		 */
 		skb_alloc = netdev_alloc_skb_fast(NULL, rx_alloc_size);
 		if (likely(skb_alloc)) {
+			mem_debug_update_skb(skb_alloc);
 			list_add_tail(&skb_alloc->list, &rx_skb_alloc);
 			num_alloc++;
 		} else {
@@ -1673,6 +1675,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 		 * Get opaque from RXDESC
 		 */
 		skb = (struct sk_buff *)EDMA_RXDESC_OPAQUE_GET(rxdesc_desc);
+		mem_debug_update_skb(skb);
 
 #ifdef CONFIG_SKB_TIMESTAMP
 	if (EDMA_RX_SDESC_TSTAMP_VALID_GET(rxdesc_sec)) {

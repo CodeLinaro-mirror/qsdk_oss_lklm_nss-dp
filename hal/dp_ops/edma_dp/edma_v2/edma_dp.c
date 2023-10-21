@@ -16,6 +16,7 @@
  * USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
+#include <linux/debug_mem_usage.h>
 #include <fal/fal_vsi.h>
 #include <ppe_drv_public.h>
 #include "edma.h"
@@ -183,6 +184,8 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 
 	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
 	stats = this_cpu_ptr(pcpu_stats->tx_stats);
+
+	mem_debug_update_skb(skb);
 
 	/*
 	 * HW does not support TSO for packets with more than or equal to
