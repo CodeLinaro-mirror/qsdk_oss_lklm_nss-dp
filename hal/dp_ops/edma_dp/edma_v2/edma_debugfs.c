@@ -31,6 +31,18 @@ const char *edma_debugfs_ring_usage_dump[EDMA_RING_USAGE_MAX_FULL] = {
 };
 
 /*
+ * edma_debugfs_ring_usage_rx_fill_dump
+ * 	Format to print EDMA Rx fill ring empty
+ */
+const char *edma_debugfs_ring_usage_rx_fill_dump[EDMA_RING_USAGE_MAX_FULL] = {
+	"100 percentage empty",
+	"90 to 100 percentage empty",
+	"70 to 90 percentage empty",
+	"50 to 70 percentage empty",
+	"Less than 50 percentage empty"
+};
+
+/*
  * edma_debugfs_print_banner()
  *	API to print the banner for a node
  */
@@ -181,10 +193,10 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 		}
 
 		rxfill_ring = &ppeds_node->rxfill_ring;
-		seq_printf(m, "\t\t PPE-DS Rx fill ring full utilization stats & Ring id %d\n", rxfill_ring->ring_id);
+		seq_printf(m, "\t\t PPE-DS Rx fill ring empty stats & Ring id %d\n", rxfill_ring->ring_id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
-			seq_printf(m, "\t\t %s utilized %d times\n", edma_debugfs_ring_usage_dump[j],
+			seq_printf(m, "\t\t %s occurred %d times\n", edma_debugfs_ring_usage_rx_fill_dump[j],
 					rxfill_ring->rx_fill_stats.ring_stats.util[j]);
 		}
 
