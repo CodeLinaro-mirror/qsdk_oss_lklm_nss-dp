@@ -265,6 +265,7 @@ struct nss_dp_dev {
 	uint32_t ethtool_priv_flags;	/* Ethtool private flags */
 #endif /* NSS_DP_ETHTOOL_MRR_OPS */
 	bool ppe_offload_disabled;
+	bool is_switch_connected;       /* If there is an additional Switch connected */
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	bool nss_dp_mht_dev;		/* Netdevice belongs to MHT switch */
 #endif
