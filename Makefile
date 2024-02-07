@@ -108,6 +108,10 @@ ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ccflags-y += -DNSS_DP_EDMA_FLOW_COOKIE_SUPPORT
 endif
 
+ifeq ($(higher-address-support),y)
+ccflags-y += -DEDMA_40BIT_SUPPORT
+endif
+
 ccflags-y += $(NSS_DP_INCLUDE)
 ccflags-y += -Wall -Werror
 ccflags-y += -DEDMA_DEBUG_LEVEL=2
