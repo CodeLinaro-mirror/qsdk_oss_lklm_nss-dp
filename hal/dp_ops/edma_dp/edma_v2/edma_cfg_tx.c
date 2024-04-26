@@ -244,6 +244,7 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
  */
 static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 {
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	uint32_t data;
 
 	/*
@@ -288,7 +289,7 @@ static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring
 	/*
 	 * Configure the Mitigation timer
 	 */
-	data = MICROSEC_TO_TIMER_UNIT(nss_dp_tx_mitigation_timer);
+	data = MICROSEC_TO_TIMER_UNIT(nss_dp_tx_mitigation_timer, egc->edma_timer_rate);
 	data = ((data & EDMA_TX_MOD_TIMER_INIT_MASK)
 			<< EDMA_TX_MOD_TIMER_INIT_SHIFT);
 	edma_info("EDMA Tx mitigation timer value: %d\n", data);
@@ -389,6 +390,34 @@ void edma_cfg_tx_rings_enable(struct edma_gbl_ctx *egc)
 		data |= EDMA_TXDESC_CTRL_TXEN_SET(EDMA_TXDESC_TX_ENABLE);
 		edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
 	}
+}
+
+/*
+ * edma_cfg_tx_ring_reset()
+ *	API to reset the individual TX ring
+ *	NOTE: Caller is expected to ensure that no packets
+ *	will be coming on the ring and the producer and consumer
+ *	indexes are the same. (Currently used by PPE-DS only)
+ */
+void edma_cfg_tx_ring_reset(struct edma_txdesc_ring *ring)
+{
+	uint32_t data = 0;
+
+	/*
+	 * Reset the ring - wait untill the reset operation is done.
+	 */
+	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ring->id));
+	data |= EDMA_TXDESC_TX_RESET;
+	edma_reg_write(EDMA_REG_TXDESC_CTRL(ring->id), data);
+	do {
+		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ring->id));
+		data &= EDMA_TXDESC_TX_RESET;
+	} while (data);
+
+	/*
+	 * Reset the software producer index.
+	 */
+	ring->prod_idx = 0;
 }
 
 /*

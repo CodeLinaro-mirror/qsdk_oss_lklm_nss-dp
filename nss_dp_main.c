@@ -39,6 +39,7 @@
 #endif
 #include "nss_dp_hal.h"
 #define JUMBO_MRU_3K 3072
+#define NSS_DP_CAPWAP_VP_RX_CORE_INVALID 0XFFFF
 
 /* ipq40xx_mdio_data */
 struct ipq40xx_mdio_data {
@@ -67,6 +68,10 @@ MODULE_PARM_DESC(jumbo_mru, "jumbo mode");
 int tx_requeue_stop = 1;
 module_param(tx_requeue_stop, int, 0640);
 MODULE_PARM_DESC(tx_requeue_stop, "disable tx requeue function");
+
+uint32_t nss_dp_capwap_vp_rx_core = NSS_DP_CAPWAP_VP_RX_CORE_INVALID;
+module_param(nss_dp_capwap_vp_rx_core, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_capwap_vp_rx_core, "Capwap VP handling core");
 
 int nss_dp_rx_napi_budget = NSS_DP_HAL_RX_NAPI_BUDGET;
 module_param(nss_dp_rx_napi_budget, int, S_IRUGO);
@@ -114,6 +119,12 @@ MODULE_PARM_DESC(nss_dp_rx_mitigation_timer, "Rx mitigation timer value in micro
 int nss_dp_rx_mitigation_pkt_cnt = NSS_DP_RX_MITIGATION_PKT_CNT_DEF;
 module_param(nss_dp_rx_mitigation_pkt_cnt, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_rx_mitigation_pkt_cnt, "Rx mitigation packet count value");
+
+#ifdef CONFIG_SKB_TIMESTAMP
+static int nss_dp_tstamp_port_id = NSS_DP_EDMA_DEF_TSTAMP_PORT;
+module_param(nss_dp_tstamp_port_id, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_tstamp_port_id, "Port number for time stamping");
+#endif
 
 /*
  * Module parameter for priority mapping
@@ -986,6 +997,30 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	dp_global_ctx.slowproto_acl_bm = 0;
 
 	netdev_dbg(netdev, "Init NSS DP GMAC%d (base = 0x%lx)\n", dp_priv->macid, netdev->base_addr);
+
+#ifdef CONFIG_SKB_TIMESTAMP
+	/*
+	 * Validate the Latency port's value and fill up the GMAC timer register addresses
+	 */
+	if ((nss_dp_tstamp_port_id <= 0) || (nss_dp_tstamp_port_id > NSS_DP_HAL_MAX_PORTS)) {
+		nss_dp_tstamp_port_id = NSS_DP_EDMA_DEF_TSTAMP_PORT;
+	}
+
+	if ((dp_priv->macid == nss_dp_tstamp_port_id) && gmac_hal_pdata.mactype) {
+		phys_addr_t sec_addr = NSS_DP_GMAC_TS_ADDR_SEC(netdev->base_addr);
+		phys_addr_t nsec_addr = NSS_DP_GMAC_TS_ADDR_NSEC(netdev->base_addr);
+
+		edma_gbl_ctx.tstamp_sec = ioremap_nocache(sec_addr, sizeof(uint32_t));
+		edma_gbl_ctx.tstamp_nsec = ioremap_nocache(nsec_addr, sizeof(uint32_t));
+
+		if (unlikely(!edma_gbl_ctx.tstamp_sec || !edma_gbl_ctx.tstamp_nsec)) {
+			pr_err("Unable to map the timestamp registers, sec addr:0x%llx,"
+					" nsec addr: 0x%llx\n", sec_addr, nsec_addr);
+			return 0;
+		}
+		pr_info("tstamp_sec: 0x%llx, tstamp_nsec: 0x%llx\n", sec_addr, nsec_addr);
+	}
+#endif
 
 	return 0;
 

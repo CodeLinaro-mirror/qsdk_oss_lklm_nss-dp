@@ -146,6 +146,20 @@
 #define EDMA_RXDESC_ACL_IDX_VALID_GET(desc)	(((le32_to_cpu((desc)->word1)) & 0x80000000) >> 31)
 #define EDMA_RXDESC_ACL_IDX_GET(desc)		(((le32_to_cpu((desc)->word1)) & 0x3FFF0000) >> 16)
 
+
+/*
+ * Fields to be obtained from secondary descriptor
+ */
+#define EDMA_RX_SDESC_TSTAMP_VALID_SHIFT	23
+#define EDMA_RX_SDESC_TSTAMP_VALID_MASK		EDMA_RXDESC_GENMASK(23, 23)
+#define EDMA_RX_SDESC_TSTAMP_VALID_GET(desc)	((le32_to_cpu(((desc)->word3)) & EDMA_RX_SDESC_TSTAMP_VALID_MASK) >> EDMA_RX_SDESC_TSTAMP_VALID_SHIFT)
+
+#define EDMA_RX_SDESC_TSTAMP_LO_GET(desc)	(le32_to_cpu(((desc)->word0)))
+
+#define EDMA_RX_SDESC_TSTAMP_HI_SHIFT		0
+#define EDMA_RX_SDESC_TSTAMP_HI_MASK		EDMA_RXDESC_GENMASK(7, 0)
+#define EDMA_RX_SDESC_TSTAMP_HI_GET(desc)	((le32_to_cpu(((desc)->word1)) & EDMA_RX_SDESC_TSTAMP_HI_MASK) >> EDMA_RX_SDESC_TSTAMP_HI_SHIFT)
+
 /*
  * Extracting Tree ID and WiFi-QoS from descriptor.
  */
@@ -328,6 +342,8 @@ struct edma_rxfill_ring {
 					/* Rx fill ring statistics */
 };
 
+struct nss_dp_vp_skb_list;
+
 /*
  * RxDesc ring
  */
@@ -352,6 +368,8 @@ struct edma_rxdesc_ring {
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	struct sk_buff *head;		/* Head of the skb list in case of scatter-gather frame */
 	struct sk_buff *last;		/* Last skb of the skb list in case of scatter-gather frame */
+	struct nss_dp_vp_skb_list *vp_head;
+					/* Last skb of the skb list in case of scatter-gather frame */
 };
 
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);
@@ -361,5 +379,6 @@ irqreturn_t edma_rxfill_handle_irq(int irq, void *ctx);
 int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_napi_poll(struct napi_struct *napi, int budget);
 bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buff *skb, void *sc_data);
+int edma_rx_napi_capwap_poll(struct napi_struct *napi, int budget);
 
 #endif	/* __EDMA_RX_H__ */

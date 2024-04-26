@@ -20,6 +20,9 @@
 #include "edma_regs.h"
 #include "edma_debug.h"
 #include "nss_dp_dev.h"
+#include "edma_cfg_rx.h"
+#include "edma_cfg_tx.h"
+#include <ppe_drv.h>
 
 static char edma_ppeds_txcmpl_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
 static char edma_ppeds_rxdesc_irq_name[EDMA_PPEDS_MAX_NODES][EDMA_IRQ_NAME_SIZE];
@@ -1141,7 +1144,8 @@ int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 				struct nss_ppe_ds_ctx_info_handle *info_hdl)
 {
 	uint32_t data;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_ppeds_drv *drv = &egc->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 
@@ -1208,13 +1212,23 @@ int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	data &= ~EDMA_RXFILL_RING_DISABLE;
 	edma_reg_write(EDMA_REG_RXFILL_DISABLE(ppeds_node->rxfill_ring.ring_id), data);
 
-
 	/*
 	 * Enable Tx Ring.
 	 */
 	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id));
 	data |= EDMA_TXDESC_TX_ENABLE;
 	edma_reg_write(EDMA_REG_TXDESC_CTRL(ppeds_node->tx_ring.id), data);
+
+	/*
+	 * If the ring reset is supported,
+	 * Enable the queues that are disabled at the time of inst stop.
+	 */
+	if (edma_dp_per_ring_reset_support()) {
+		if (!edma_cfg_rx_ring_en_mapped_queues(egc, ppeds_node->rx_ring.ring_id, true)) {
+			edma_err("%px: Failed to enable the queue", ppeds_node);
+			return 0;
+		}
+	}
 
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_START_DONE;
@@ -1232,7 +1246,8 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 				struct nss_ppe_ds_ctx_info_handle *info_hdl)
 {
 	uint32_t data;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_gbl_ctx *gbl_ctx = &edma_gbl_ctx;
+	struct edma_ppeds_drv *drv = &gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 
@@ -1259,6 +1274,22 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	} while (data);
 
 	/*
+	 * Reset the TX ring if Hardware support is present.
+	 */
+	if (edma_dp_per_ring_reset_support()) {
+		edma_cfg_tx_ring_reset(&ppeds_node->tx_ring);
+
+		/*
+		 * Disable the PPE queues corresponding to RX ring to stop the incoming
+		 * traffic on the ring.
+		 */
+		if (!edma_cfg_rx_ring_en_mapped_queues(gbl_ctx, ppeds_node->rx_ring.ring_id, false)) {
+			edma_err("%px: Failed to disable the queue", ppeds_node);
+			return;
+		}
+	}
+
+	/*
 	 * Clear enable bit, set disable bit and wait untill Rx Desc ring is disabled.
 	 */
 	data = edma_reg_read(EDMA_REG_RXDESC_CTRL(ppeds_node->rx_ring.ring_id));
@@ -1272,6 +1303,12 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 	do {
 		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(ppeds_node->rx_ring.ring_id));
 	} while (!data);
+
+	/*
+	 * Reset the ring if Hardware support is present.
+	 */
+	if (edma_dp_per_ring_reset_support())
+		edma_cfg_rx_ring_reset(&ppeds_node->rx_ring);
 
 	/*
 	 * Disable Tx complete interrupt and NAPI
@@ -1468,12 +1505,22 @@ void edma_ppeds_deinit(struct edma_ppeds_drv *drv)
 }
 
 /*
+ * edma_ppeds_get_queue_start_for_node()
+ *	PPEDS get queue_start for a particular node id.
+ */
+static int edma_ppeds_get_queue_start_for_node(struct edma_ppeds_drv *drv, int i)
+{
+	return ((uint8_t) drv->ppeds_node_cfg[i].node_map[EDMA_PPEDS_ENTRY_QID_START_IDX]);
+}
+
+/*
  * edma_ppeds_init()
  *	PPEDS init
  */
 int edma_ppeds_init(struct edma_ppeds_drv *drv)
 {
 	uint32_t i;
+	uint8_t queue_start;
 
 	rwlock_init(&drv->lock);
 
@@ -1485,6 +1532,10 @@ int edma_ppeds_init(struct edma_ppeds_drv *drv)
 				drv->ppeds_node_cfg[i].node_map[j] =
 					 edma_gbl_ctx.ppeds_node_map[i][j];
 			}
+
+			queue_start = edma_ppeds_get_queue_start_for_node(drv, i);
+			ppe_drv_ds_map_node_to_queue(i, queue_start);
+
 			drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_AVAIL;
 			continue;
 		}

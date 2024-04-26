@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,6 +33,7 @@ uint32_t edma_cfg_rx_queue_tail_drop_enable = EDMA_RX_QUEUE_TAIL_DROP_ENABLE;
 uint32_t edma_cfg_rx_rps_num_cores = NR_CPUS;
 uint32_t edma_cfg_rx_sec_desc_inval = 0;
 uint32_t edma_cfg_rx_rps_bitmap_cores = EDMA_RX_DEFAULT_BITMAP;
+extern uint32_t nss_dp_capwap_vp_rx_core;
 
 /*
  * Rx ring queue offset
@@ -623,6 +624,7 @@ static int32_t edma_cfg_rx_mapped_queue_ac_fc_configure(uint16_t threshold,
  */
 static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring)
 {
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	uint32_t data;
 
 	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
@@ -663,7 +665,7 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 	/*
 	 * Configure the Mitigation timer
 	 */
-	data = MICROSEC_TO_TIMER_UNIT(nss_dp_rx_mitigation_timer);
+	data = MICROSEC_TO_TIMER_UNIT(nss_dp_rx_mitigation_timer, egc->edma_timer_rate);
 	data = ((data & EDMA_RX_MOD_TIMER_INIT_MASK)
 			<< EDMA_RX_MOD_TIMER_INIT_SHIFT);
 	edma_info("EDMA Rx mitigation timer value: %d\n", data);
@@ -944,6 +946,62 @@ void edma_cfg_rx_rings_enable(struct edma_gbl_ctx *egc)
 		data |= EDMA_RXFILL_RING_EN;
 		edma_reg_write(EDMA_REG_RXFILL_RING_EN(i), data);
 	}
+}
+
+/*
+ * edma_cfg_rx_ring_en_mapped_queues()
+ *	Enable / Disable the queues associated to the RX rings.
+ */
+bool edma_cfg_rx_ring_en_mapped_queues(struct edma_gbl_ctx *egc, uint16_t ring_id, bool enable)
+{
+	uint16_t ring_idx, queue_id, i;
+	sw_error_t ret;
+	a_bool_t en = enable;
+
+	ring_idx = ring_id - egc->rxdesc_ring_start;
+	for (i = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
+		queue_id = egc->rx_ring_queue_map[i][ring_idx];
+		ret = fal_qm_enqueue_ctrl_set(0, queue_id, en);
+		if (ret != SW_OK) {
+			edma_err("%px: Failed queue operation en %d", egc, enable);
+			return false;
+		}
+
+		ret = fal_scheduler_dequeue_ctrl_set(0, queue_id, en);
+		if (ret != SW_OK) {
+			edma_err("%px: Failed dequeue operation en %d", egc, enable);
+			return false;
+		}
+	}
+
+	return true;
+}
+
+/*
+ * edma_cfg_rx_ring_reset()
+ *	API to reset the individual RX ring
+ *	NOTE: Caller is expected to ensure that the corresponding
+ *	PPE queue is stopped and the ring is disabled.
+ */
+void edma_cfg_rx_ring_reset(struct edma_rxdesc_ring *ring)
+{
+	uint32_t data = 0;
+
+	/*
+	 * Reset the ring - wait untill the reset operation is done.
+	 */
+	data = edma_reg_read(EDMA_REG_RXDESC_RESET(ring->ring_id));
+	data |= EDMA_RXDESC_RX_RESET;
+	edma_reg_write(EDMA_REG_RXDESC_RESET(ring->ring_id), data);
+
+	do {
+		data = edma_reg_read(EDMA_REG_RXDESC_RESET(ring->ring_id));
+	} while (data);
+
+	/*
+	 * Reset the software consumer index.
+	 */
+	ring->cons_idx = 0;
 }
 
 /*
@@ -1426,11 +1484,23 @@ void edma_cfg_rx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev)
 	for (i = 0; i < egc->num_rxdesc_rings; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring = &egc->rxdesc_rings[i];
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-		netif_napi_add(netdev, &rxdesc_ring->napi,
-			 edma_rx_napi_poll, nss_dp_rx_napi_budget);
+		if (nss_dp_capwap_vp_rx_core == i) {
+			edma_info("Adding capwap napi for ring_id %d for core3\n", nss_dp_capwap_vp_rx_core);
+			netif_napi_add(netdev, &rxdesc_ring->napi,
+				edma_rx_napi_capwap_poll, nss_dp_rx_napi_budget);
+		} else {
+			netif_napi_add(netdev, &rxdesc_ring->napi,
+				edma_rx_napi_poll, nss_dp_rx_napi_budget);
+		}
 #else
-		netif_napi_add_weight(netdev, &rxdesc_ring->napi,
-			 edma_rx_napi_poll, nss_dp_rx_napi_budget);
+		if (nss_dp_capwap_vp_rx_core == i) {
+			edma_info("Adding capwap napi for ring_id %d for core3\n", nss_dp_capwap_vp_rx_core);
+			netif_napi_add_weight(netdev, &rxdesc_ring->napi,
+				edma_rx_napi_capwap_poll, nss_dp_rx_napi_budget);
+		} else {
+			netif_napi_add_weight(netdev, &rxdesc_ring->napi,
+				 edma_rx_napi_poll, nss_dp_rx_napi_budget);
+		}
 #endif
 		rxdesc_ring->napi_added = true;
 	}

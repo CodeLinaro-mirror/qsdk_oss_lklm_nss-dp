@@ -69,7 +69,6 @@
 #endif
 
 #define EDMA_IRQ_NAME_SIZE		32
-#define EDMA_SC_BYPASS			1
 #define EDMA_NETDEV_FEATURES		NETIF_F_FRAGLIST \
 					| NETIF_F_SG \
 					| NETIF_F_RXCSUM \
@@ -103,6 +102,10 @@
  * QID to RID Table
  */
 #define EDMA_QID2RID_TABLE_MEM(q)	(0xb9000 + (0x4 * (q)))
+
+#define EDMA_TIMESTAMP_SEC_MASK		EDMA_RX_SDESC_TSTAMP_HI_MASK
+#define EDMA_TIMESTAMP_NSEC_TO_USEC(x)	((x) / 1000)
+#define EDMA_TIMESTAMP_TO_USEC(x, y)	(((uint64_t)(x) * 1000000) + (EDMA_TIMESTAMP_NSEC_TO_USEC(y)))
 
 /*
  * edma_port_ucast_queues
@@ -141,18 +144,17 @@ enum edma_cpu_port_mcast_queues {
 #define EDMA_QID2RID_NUM_PER_REG	4
 
 /*
- * EDMA clock frequency: 352 MHZ
- * So, one clock cycle = (1/352) micro seconds
+ * One clock cycle = 1/(EDMA clock frequency in Mhz) micro seconds
  *
  * One timer unit is 128 clock cycles.
  *
  * So, therefore the microsecond to timer unit calculation is:
  * Timer unit	= time in microseconds / (one clock cycle in microsecond * cycles in 1 timer unit)
- * 		= ('x' microsecond * 352 / 128)
+ * 		= ('x' microsecond * EDMA clock frequency in MHz ('y') / 128)
  */
-#define EDMA_CLK_FREQ		352
 #define CYCLE_PER_TIMER_UNIT	128
-#define MICROSEC_TO_TIMER_UNIT(x)	(((x) * EDMA_CLK_FREQ) / CYCLE_PER_TIMER_UNIT)
+#define MICROSEC_TO_TIMER_UNIT(x, y)	((x) * (y) / CYCLE_PER_TIMER_UNIT)
+#define MHZ			1000000UL
 
 #define EDMA_DESC_AVAIL_COUNT(head, tail, max) (((head) - (tail)) + (max)) & ((max) - 1)
 
@@ -363,6 +365,14 @@ struct edma_gbl_ctx {
 #endif
 	struct work_struct work;
                         /* Creating work struct */
+	uint32_t edma_timer_rate;
+			/* EDMA clock's timer rate in Mhz */
+#ifdef CONFIG_SKB_TIMESTAMP
+	void __iomem *tstamp_sec;
+			/* EDMA timestamp value in second */
+	void __iomem *tstamp_nsec;
+			/* EDMA timestamp value in nano-second */
+#endif
 };
 
 extern struct edma_gbl_ctx edma_gbl_ctx;
@@ -450,5 +460,19 @@ static inline bool edma_dp_stats_fetch_retry(const struct u64_stats_sync *syncp,
 #endif
 }
 
+/*
+ * edma_dp_per_ring_reset_support
+ *	Check if EDMA ring reset is supported or not.
+ *	For now it is added for target IPQ54XX - this can further be
+ *	used for other platforms in future.
+ */
+static inline bool edma_dp_per_ring_reset_support(void)
+{
+	bool ring_reset_en = false;
+#if defined(NSS_DP_IPQ54XX)
+	ring_reset_en = true;
+#endif
+	return ring_reset_en;
+}
 
 #endif	/* __EDMA_H__ */

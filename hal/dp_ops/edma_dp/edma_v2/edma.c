@@ -174,29 +174,6 @@ static void edma_disable_port(void)
 }
 
 /*
- * edma_cfg_sc_bypass
- *	Set service code to disable PPE processing
- *
- * TODO: Use PPE APIs when they are available.
- */
-static sw_error_t edma_cfg_sc_bypass(struct edma_gbl_ctx *egc)
-{
-	sw_error_t ret;
-	fal_servcode_config_t entry = {0};
-	entry.bypass_bitmap[0] = ~((1 << FAKE_MAC_HEADER_BYP)
-					| (1 << SERVICE_CODE_BYP)
-					| (1 << FAKE_L2_PROTO_BYP));
-	entry.bypass_bitmap[1] = ~(1 << ACL_POST_ROUTING_CHECK_BYP);
-
-	ret = fal_servcode_config_set(0, EDMA_SC_BYPASS, &entry);
-	if (ret < 0) {
-		edma_err("%px: Error in configuring service code %d\n", egc, ret);
-	}
-
-	return ret;
-}
-
-/*
  * edma_cleanup()
  *	EDMA cleanup
  */
@@ -927,6 +904,26 @@ static sw_error_t edma_configure_ucast_prio_map_tbl(void)
 }
 
 /*
+ * edma_fetch_mitigation_timer_rate()
+ *	Fetch the EDMA mitigation timer rate
+ */
+static inline void edma_fetch_mitigation_timer_rate(struct edma_gbl_ctx *egc, const char *id)
+{
+	struct clk *clk = NULL;
+
+	clk = of_clk_get_by_name(egc->device_node, id);
+	if (IS_ERR(clk)) {
+		edma_err("Error in fetching %s clock reference. Setting the mitigation"
+				" timer rate to zero (means, mitigation will be disabled)\n", id);
+		egc->edma_timer_rate = 0;
+		return;
+	}
+
+	egc->edma_timer_rate = clk_get_rate(clk) / MHZ;
+	edma_debug("%s clock's rate: %u\n", id, egc->edma_timer_rate);
+}
+
+/*
  * edma_configure_rps_hash_map()
  *	Configure RPS hash map
  *
@@ -1004,12 +1001,6 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		return ret;
 	}
 
-	ret = (int)edma_cfg_sc_bypass(egc);
-	if (ret) {
-		edma_err("Error in configuring service code: %d\n", ret);
-		return ret;
-	}
-
 	/*
 	 * Set EDMA global page mode and jumbo MRU
 	 */
@@ -1044,6 +1035,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	edma_cfg_rx_point_offload_mapping(egc);
 #endif
 
+	edma_fetch_mitigation_timer_rate(egc, NSS_DP_EDMA_CLK);
 	edma_cfg_tx_rings(egc);
 	edma_cfg_rx_rings(egc);
 #if defined(NSS_DP_POINT_OFFLOAD)
@@ -1120,12 +1112,12 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		/*
 		 * Set the atheros header for MHT switch.
 		 */
-		tx_cfg.athtag_en = true;
+		tx_cfg.athtag_en = A_TRUE;
 		tx_cfg.athtag_type = MHT_ATHTAG_TYPE;
 		tx_cfg.version = FAL_ATHTAG_VER3;
 		tx_cfg.action = FAL_ATHTAG_ACTION_NORMAL;
-		tx_cfg.bypass_fwd_en = false;
-		tx_cfg.field_disable = false;
+		tx_cfg.bypass_fwd_en = A_FALSE;
+		tx_cfg.field_disable = A_FALSE;
 		fal_ret = fal_port_athtag_tx_set(EDMA_SWITCH_DEV_ID,
 						EDMA_MHT_SWITCH_PORT_ID,
 						&tx_cfg);

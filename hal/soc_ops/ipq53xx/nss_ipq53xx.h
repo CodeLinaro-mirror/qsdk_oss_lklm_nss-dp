@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -30,7 +30,17 @@
 #define NSS_DP_HAL_MHT_SWT_MAX_PORTS	4
 #define NSS_DP_HAL_MAX_TX_PORTS		(NSS_DP_HAL_MAX_PORTS + NSS_DP_HAL_MHT_SWT_MAX_PORTS - 1)
 #define NSS_DP_MHT_MAP_IDX		2
+
+/*
+ * Switch ID for IPQ53xx
+ */
+#define NSS_DP_MHT_SW_ID	1
 #endif
+
+/*
+ * Default device ID for IPQ53xx
+ */
+#define NSS_DP_DEV_ID	0
 
 /*
  * Maximum supported GSO segments
@@ -57,6 +67,13 @@
 #define NSS_DP_HAL_TX_NAPI_BUDGET	256
 
 /*
+ * Timestamp information for the latency measurement
+ */
+#define NSS_DP_GMAC_TS_ADDR_SEC(x)	((x) + 0xD08)
+#define NSS_DP_GMAC_TS_ADDR_NSEC(x)	((x) + 0xD0C)
+#define NSS_DP_EDMA_DEF_TSTAMP_PORT	2
+
+/*
  * EDMA clock's
  */
 #define NSS_DP_EDMA_CSR_CLK			"nss-csr-clk"
@@ -78,6 +95,7 @@
 #define NSS_DP_EDMA_CC_NSSNOC_CE_AXI_CLK	"nss-nssnoc-ce-axi-clk"
 #define NSS_DP_EDMA_SNOC_NSSNOC_CLK		"nss-snoc-nssnoc-clk"
 #define NSS_DP_EDMA_SNOC_NSSNOC_1_CLK		"nss-snoc-nssnoc-1-clk"
+#define NSS_DP_EDMA_CLK				"nss-edma-clk"
 
 /*
  * EDMA clock's frequencies
