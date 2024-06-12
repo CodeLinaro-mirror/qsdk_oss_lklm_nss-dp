@@ -40,7 +40,7 @@ ifeq ($(SoC),$(filter $(SoC),ipq60xx))
 ccflags-y += -DNSS_DP_IPQ60XX
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq53xx ipq54xx))
+ifeq ($(SoC),$(filter $(SoC),ipq53xx))
 ccflags-y += -DNSS_DP_MHT_SW_PORT_MAP
 ccflags-y += -DNSS_DP_CONFIG_RST
 endif
@@ -62,7 +62,7 @@ NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/syn_gmac_dp/include
 ccflags-y += -DNSS_DP_IPQ50XX -DNSS_DP_ENABLE_NAPI_GRO
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx))
+ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx))
 qca-nss-dp-objs += nss_dp_vp_main.o \
 		   nss_dp_ethtool_priv.o \
 		   hal/dp_ops/edma_dp/edma_v2/edma.o \
@@ -97,13 +97,6 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq95xx))
 ccflags-y += -DNSS_DP_IPQ95XX
-endif
-
-ifeq ($(SoC),$(filter $(SoC),ipq54xx))
-ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
-ccflags-y += -DNSS_DP_EDMA_REG_WORD_INDEXING
-ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES
-ccflags-y += -DNSS_DP_EDMA_MHT_SW_WITH_VP_RING
 endif
 
 ccflags-y += $(NSS_DP_INCLUDE)

@@ -41,7 +41,7 @@ static const struct syn_ethtool_stats syn_gstrings_stats[] = {
 #if defined(NSS_DP_EDMA_V2)
 	/*
 	 * Per GMAC DMA driver statistics are
-	 * supported only for IPQ95xx, IPQ53xx, and IPQ54xx.
+	 * supported only for IPQ95xx, IPQ53xx.
 	 */
 	{"rx_bytes", SYN_STAT(rx_bytes)},
 	{"rx_packets", SYN_STAT(rx_packets)},

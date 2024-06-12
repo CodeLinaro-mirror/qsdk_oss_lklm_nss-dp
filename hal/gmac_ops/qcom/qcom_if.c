@@ -44,7 +44,7 @@ static const struct qcom_ethtool_stats qcom_gstrings_stats[] = {
 #if defined(NSS_DP_EDMA_V2)
 	/*
 	 * Per GMAC DMA driver statistics are
-	 * supported only for IPQ95xx, IPQ53XX and IPQ54XX.
+	 * supported only for IPQ95xx, IPQ53XX.
 	 */
 	{"rx_bytes", QCOM_STAT(rx_bytes)},
 	{"rx_packets", QCOM_STAT(rx_packets)},

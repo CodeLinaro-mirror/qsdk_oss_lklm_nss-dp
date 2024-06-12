@@ -483,15 +483,10 @@ static inline bool edma_dp_stats_fetch_retry(const struct u64_stats_sync *syncp,
 /*
  * edma_dp_per_ring_reset_support
  *	Check if EDMA ring reset is supported or not.
- *	For now it is added for target IPQ54XX - this can further be
- *	used for other platforms in future.
  */
 static inline bool edma_dp_per_ring_reset_support(void)
 {
 	bool ring_reset_en = false;
-#if defined(NSS_DP_IPQ54XX)
-	ring_reset_en = true;
-#endif
 	return ring_reset_en;
 }
 
