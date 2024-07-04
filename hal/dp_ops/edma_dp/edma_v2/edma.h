@@ -451,6 +451,7 @@ struct edma_gbl_ctx {
 
 extern struct edma_gbl_ctx edma_gbl_ctx;
 extern uint32_t edma_hang_recover;
+extern int edma_dp_extension_en;
 
 int edma_irq_init(void);
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx);
@@ -460,6 +461,7 @@ void edma_enable_interrupts(struct edma_gbl_ctx *egc);
 void edma_disable_interrupts(struct edma_gbl_ctx *egc);
 void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc);
 int edma_hang_recovery_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
+int edma_vlan_append_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 
 /*
  * edma_reg_read()

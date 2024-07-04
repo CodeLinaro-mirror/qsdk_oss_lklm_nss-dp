@@ -46,6 +46,15 @@
 #include "edma_procfs.h"
 #include "nss_dp_dev.h"
 
+int edma_dp_extension_en = 0;
+module_param(edma_dp_extension_en, int, 0640);
+MODULE_PARM_DESC(edma_dp_extension_en, "Enable VLAN Insert Functionality (1 for enable, 0 for disable)");
+
+/*
+ * Input String length for VLAN insertion.
+ */
+#define EDMA_VLAN_APPEND_INFO_STR_LEN 40
+
 uint32_t edma_hang_recover = 0;
 
 /*
@@ -55,6 +64,11 @@ struct edma_gbl_ctx edma_gbl_ctx;
 
 static char edma_txcmpl_irq_name[EDMA_MAX_TXCMPL_RINGS][EDMA_IRQ_NAME_SIZE];
 static char edma_rxdesc_irq_name[EDMA_MAX_RXDESC_RINGS][EDMA_IRQ_NAME_SIZE];
+
+/*
+ * Input String for VLAN insertion.
+ */
+static char edma_vlan_append_info[EDMA_VLAN_APPEND_INFO_STR_LEN];
 
 char *argv[] = {"/usr/bin/edma_recover.sh", NULL };
 
@@ -1397,6 +1411,13 @@ static struct ctl_table edma_sub[] = {
 		.mode           =       0644,
 		.proc_handler   =       edma_hang_recovery_handler
 	},
+	{
+		.procname       =       "edma_vlan_append",
+		.data           =       &edma_vlan_append_info,
+		.maxlen         =       sizeof(char) * EDMA_VLAN_APPEND_INFO_STR_LEN,
+		.mode           =       0644,
+		.proc_handler   =       edma_vlan_append_handler
+	},
 	{}
 };
 
@@ -2076,5 +2097,156 @@ int edma_hang_recovery_handler(struct ctl_table *table, int write,
 		edma_hang_recovery();
 	}
 
+	return ret;
+}
+
+/*
+ * edma_vlan_append_handler()
+ *	Add VLAN Info.
+ */
+int edma_vlan_append_handler(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	uint16_t ether_type_0, ether_type_1;
+	struct nss_dp_dev *dp_dev;
+	uint32_t vlan_tag_info;
+	struct net_device *dev;
+	long int result;
+	char *work_str;
+	char *dev_name;
+	int base = 0;
+	char *token;
+	bool enable;
+	int ret;
+
+	/*
+	 * Find the string, return an error if not found
+	 */
+	ret = proc_dostring(table, write, buffer, lenp, ppos);
+	if (ret || !write) {
+		return ret;
+	}
+
+	edma_debug("Input String: %s\n", edma_vlan_append_info);
+
+	work_str = edma_vlan_append_info;
+
+	token = strsep(&work_str, " ");
+
+	if (strcmp(token, "E") == 0) {
+		enable = 1;
+	} else if (strcmp(token, "D") == 0) {
+		enable = 0;
+	} else {
+		edma_err("Invalid input, enter valid info, "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n");
+		return -EINVAL;
+	}
+
+	token = strsep(&work_str, " ");
+
+	dev_name = token;
+	if (!dev_name) {
+		edma_err("Invalid WAN Interface: %s, Enter valid info, "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n", dev_name);
+		return -EINVAL;
+	}
+
+	dev = dev_get_by_name(&init_net, dev_name);
+	if (!dev) {
+		edma_err("No valid Net Device found for the interface details configured, dev_name:%s", dev_name);
+		return -ENODEV;
+	}
+
+	edma_debug("dev_name:%s, ifindex:%d", dev->name, dev->ifindex);
+
+	dp_dev = (struct nss_dp_dev *)netdev_priv(dev);
+	if (!dp_dev) {
+		edma_err("dp_dev is NULL for ndev in edma vlan sysctl handler");
+		dev_put(dev);
+		return -ENODEV;
+	}
+
+	if (!enable) {
+		memset(&dp_dev->vlan_info, 0, sizeof(dp_dev->vlan_info));
+		edma_info("Disabled the VLAN Append Functionality, vlan_insert_en:%d, dev_name:%s",
+				dp_dev->vlan_info.vlan_en, dev_name);
+		dev_put(dev);
+		return ret;
+	}
+
+	token = strsep(&work_str, " ");
+	if(!token) {
+		edma_err("Invalid vlan_tag_info, Enter valid info, "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n");
+		dev_put(dev);
+		return -EINVAL;
+	}
+
+	if (kstrtol(token, base, &result)) {
+		edma_err("Invalid vlan_tag_info: %s, Enter valid info, "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n", token);
+		dev_put(dev);
+		return -EINVAL;
+	}
+
+	vlan_tag_info = (uint32_t)result;
+	edma_debug("VLAN_TAG_INFO: 0x%x\n", vlan_tag_info);
+
+	token = strsep(&work_str, " ");
+	if(!token) {
+		edma_err("Invalid ether_type_0, Enter valid info, "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n");
+		dev_put(dev);
+		return -EINVAL;
+	}
+
+	if (kstrtol(token, base, &result)) {
+		edma_err("Invalid ether_type_0: %s, Enter valid info, "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n", token);
+		dev_put(dev);
+		return -EINVAL;
+	}
+
+	ether_type_0 = (uint16_t)result;
+	edma_debug("ETHER_TYPE_0: 0x%x\n", ether_type_0);
+
+	/*
+	 * We do not return any error when
+	 * ether_type_1 is not configured
+	 * or invalid being an optional field.
+	 * We simply mark the value to 0 and continue
+	 * the execution in those cases.
+	 */
+	token = strsep(&work_str, " ");
+	if(!token) {
+		edma_info("Unconfigured ether_type_1 "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n");
+		ether_type_1 = 0;
+
+	} else {
+		if (kstrtol(token, base, &result)) {
+			edma_info("Invalid ether_type_1: %s, "
+			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n", token);
+			ether_type_1 = 0;
+		} else {
+			ether_type_1 = (uint16_t)result;
+		}
+	}
+
+	edma_debug("ETHER_TYPE_1: 0x%x\n", ether_type_1);
+
+	edma_debug("VLAN insert enable:%d, dev_name:%s, VLAN_TAG_INFO:0x%x, ETHER_TYPE_0 : 0x%x, ETHER_TYPE_1: 0x%x\n",
+			enable, dev_name, vlan_tag_info, ether_type_0, ether_type_1);
+
+	dp_dev->vlan_info.vlan_en = 1;
+	dp_dev->vlan_info.vlan_tag_info = htonl(vlan_tag_info);
+	dp_dev->vlan_info.ether_types[0] = htons(ether_type_0);
+	dp_dev->vlan_info.ether_types[1] = htons(ether_type_1);
+
+	edma_info("Enabled the VLAN Append Functionality, vlan_insert_en:%d, dev_name:%s, vlan_tag_info:0x%x, ether_type_0:0x%x, ether_type_1:0x%x",
+			dp_dev->vlan_info.vlan_en, dev_name, ntohl(dp_dev->vlan_info.vlan_tag_info), ntohs(dp_dev->vlan_info.ether_types[0]), ntohs(dp_dev->vlan_info.ether_types[1]));
+
+	dev_put(dev);
 	return ret;
 }

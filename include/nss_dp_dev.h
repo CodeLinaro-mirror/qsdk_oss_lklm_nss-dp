@@ -251,6 +251,9 @@ struct nss_dp_dev {
 	struct nss_dp_hal_info dp_info;
 					/* SoC specific data plane information */
 
+	struct nss_dp_vlan_append_info vlan_info;
+					/* VLAN header insertion details */
+
 	/* switchdev related attributes */
 #ifdef CONFIG_NET_SWITCHDEV
 	u8 stp_state;			/* STP state of this physical port */

@@ -22,6 +22,7 @@
 #include <ppe_drv_public.h>
 #include <nss_dp_vp.h>
 #include <linux/phy.h>
+#include <linux/if_vlan.h>
 #include "edma.h"
 #include "edma_debug.h"
 #include "edma_regs.h"
@@ -750,6 +751,55 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 }
 
 /*
+ * edma_rx_insert_vlan()
+ *	API to insert the VLAN tag on the Rx Packet.
+ *
+ * We use the following API to insert the VLAN header
+ * onto the desired packets of interest
+ * with the relevant header details as passed
+ * from the sysctl cmd.
+ */
+static int edma_rx_insert_vlan(struct nss_dp_dev *dp_dev, struct sk_buff *skb)
+{
+	struct ethhdr *eth_hdr;
+	__be16 eth_type;
+
+	eth_hdr = (struct ethhdr *)skb->data;
+	eth_type = eth_hdr->h_proto;
+
+	if (!eth_type || ((eth_type != dp_dev->vlan_info.ether_types[0]) &&
+		(eth_type != dp_dev->vlan_info.ether_types[1]))) {
+		return -1;
+	}
+
+	skb_push(skb, VLAN_HLEN);
+	memmove(skb->data, skb->data + VLAN_HLEN, ETH_ALEN * 2);
+
+	*(__be32 *)(skb->data + ETH_ALEN * 2) = dp_dev->vlan_info.vlan_tag_info;
+
+	return 0;
+}
+
+/*
+ * edma_rx_dp_extension_process()
+ *	API to perform the extended jobs
+ *	on the Rx Packet.
+ *
+ * We use the following API to perform various
+ * functionalities on the desired packets of interest
+ * with the relevant header details as passed
+ * from the sysctl cmd.
+ */
+static int edma_rx_dp_extension_process(struct nss_dp_dev *dp_dev, struct sk_buff *skb)
+{
+	if(unlikely(dp_dev->vlan_info.vlan_en)) {
+		return edma_rx_insert_vlan(dp_dev, skb);
+	}
+
+	return -1;
+}
+
+/*
  * edma_rx_handle_scatter_frames()
  *	Handle scattered packets in Rx direction
  *
@@ -973,6 +1023,14 @@ process_next_scatter:
 		rxdesc_ring->last = NULL;
 		rxdesc_ring->pdesc_head = NULL;
 		return;
+	}
+
+	/*
+	 * Perform the RX DP Extension processing
+	 * using the relevant details as configured.
+	 */
+	if (unlikely(edma_dp_extension_en)) {
+		edma_rx_dp_extension_process(dp_dev, skb_head);
 	}
 
 	skb_head->protocol = eth_type_trans(skb_head, dev);
@@ -1199,6 +1257,14 @@ send_to_stack:
 	if (EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK) {
 		edma_rx_process_vp(rxdesc_desc, rxdesc_ring, skb, &vprxi);
 		return false;
+	}
+
+	/*
+	 * Perform the RX DP Extension processing
+	 * using the relevant details as configured.
+	 */
+	if (unlikely(edma_dp_extension_en)) {
+		edma_rx_dp_extension_process(dp_dev, skb);
 	}
 
 	return true;
