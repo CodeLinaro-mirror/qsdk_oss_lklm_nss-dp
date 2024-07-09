@@ -745,6 +745,7 @@ static void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring
 	 * Alloc Rx buffers
 	 */
 	edma_rx_alloc_buffer(rxfill_ring, rxfill_ring->count - 1);
+	timer_setup(&rxfill_ring->delayed_intr, edma_rxfill_intr_timer, TIMER_PINNED);
 }
 
 #if defined(NSS_DP_POINT_OFFLOAD)
@@ -1461,6 +1462,18 @@ void edma_cfg_rx_napi_disable(struct edma_gbl_ctx *egc)
 
 		napi_disable(&rxdesc_ring->napi);
 	}
+
+	for (i = 0; i < egc->num_rxfill_rings; i++) {
+		struct edma_rxfill_ring *rxfill_ring;
+
+		rxfill_ring = &egc->rxfill_rings[i];
+
+		if (!rxfill_ring->napi_added) {
+			continue;
+		}
+
+		napi_disable(&rxfill_ring->napi);
+	}
 }
 
 /*
@@ -1481,6 +1494,18 @@ void edma_cfg_rx_napi_enable(struct edma_gbl_ctx *egc)
 		}
 
 		napi_enable(&rxdesc_ring->napi);
+	}
+
+	for (i = 0; i < egc->num_rxfill_rings; i++) {
+		struct edma_rxfill_ring *rxfill_ring;
+
+		rxfill_ring = &egc->rxfill_rings[i];
+
+		if (!rxfill_ring->napi_added) {
+			continue;
+		}
+
+		napi_enable(&rxfill_ring->napi);
 	}
 }
 
@@ -1503,6 +1528,19 @@ void edma_cfg_rx_napi_delete(struct edma_gbl_ctx *egc)
 
 		netif_napi_del(&rxdesc_ring->napi);
 		rxdesc_ring->napi_added = false;
+	}
+
+	for (i = 0; i < egc->num_rxfill_rings; i++) {
+		struct edma_rxfill_ring *rxfill_ring;
+
+		rxfill_ring = &egc->rxfill_rings[i];
+
+		if (!rxfill_ring->napi_added) {
+			continue;
+		}
+
+		netif_napi_del(&rxfill_ring->napi);
+		rxfill_ring->napi_added = false;
 	}
 }
 
@@ -1544,7 +1582,30 @@ void edma_cfg_rx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev)
 #endif
 		rxdesc_ring->napi_added = true;
 	}
+
 	edma_info("%s: Rx NAPI budget: %d\n", netdev->name, nss_dp_rx_napi_budget);
+
+	if ((nss_dp_rxfill_napi_budget < EDMA_RXFILL_NAPI_WORK_MIN) ||
+		(nss_dp_rxfill_napi_budget > EDMA_RXFILL_NAPI_WORK_MAX)) {
+		edma_err("Incorrect Rxfill NAPI budget: %d, setting to default: %d",
+			nss_dp_rxfill_napi_budget, NSS_DP_HAL_RXFILL_NAPI_BUDGET);
+		nss_dp_rxfill_napi_budget = NSS_DP_HAL_RXFILL_NAPI_BUDGET;
+	}
+
+	for (i = 0; i < egc->num_rxfill_rings; i++) {
+		struct edma_rxfill_ring *rxfill_ring = &egc->rxfill_rings[i];
+#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
+		netif_napi_add(netdev, &rxfill_ring->napi,
+			edma_rxfill_napi_poll, nss_dp_rxfill_napi_budget);
+#else
+		netif_napi_add_weight(netdev, &rxfill_ring->napi,
+			edma_rxfill_napi_poll, nss_dp_rxfill_napi_budget);
+#endif
+		rxfill_ring->napi_added = true;
+	}
+
+	edma_info("%s: Rxfill NAPI budget: %d\n", netdev->name, nss_dp_rxfill_napi_budget);
+
 }
 
 /*

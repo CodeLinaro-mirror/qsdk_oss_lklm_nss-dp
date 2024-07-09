@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -21,6 +21,9 @@
 
 #define EDMA_RX_NAPI_WORK_MIN		16
 #define EDMA_RX_NAPI_WORK_MAX		512
+#define EDMA_RXFILL_NAPI_WORK_MIN	(NSS_DP_RX_FC_XON_DEF - NSS_DP_RX_FC_XOFF_DEF)
+#define EDMA_RXFILL_NAPI_WORK_MAX	EDMA_RX_RING_SIZE
+#define EDMA_RXFILL_UGT_THRESHOLD	NSS_DP_RX_FC_XON_DEF
 #define EDMA_RX_PAGE_MODE_SKB_SIZE	256	/* SKB payload size used in page mode */
 #define EDMA_RX_DEFAULT_QUEUE_PRI	0
 #define EDMA_RX_DEFAULT_BITMAP		((1 << NR_CPUS) - 1)	/* Bitmap when using 4 cores */
@@ -37,6 +40,10 @@
 #define EDMA_RX_MITIGATION_TIMER_MAX	1000	/* Rx mitigation timer's maximum value in microseconds */
 #define EDMA_RX_MITIGATION_PKT_CNT_MIN	0	/* Rx mitigation packet count's minimum value */
 #define EDMA_RX_MITIGATION_PKT_CNT_MAX	256	/* Rx mitigation packet count's maximum value */
+
+#define EDMA_RXFILL_ONE_INTR_ATTEMPT_MAX	8 /* Max refill attempt in a single interrupt */
+#define EDMA_RXFILL_INTR_ATTEMPT_MAX		8 /* Max refill attempt through subsequent interrupts */
+#define EDMA_RXFILL_DELAY_INTR_MS		500 /* Time in milisecond for delayed interrupt */
 
 #if defined(NSS_DP_POINT_OFFLOAD)
 /* TODO: we need to close with ssdk team to close this numbers */

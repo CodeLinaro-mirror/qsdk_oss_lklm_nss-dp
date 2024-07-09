@@ -55,24 +55,6 @@ MODULE_PARM_DESC(edma_dp_extension_en, "Enable VLAN Insert Functionality (1 for 
  */
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40
 
-#if defined(NSS_DP_IPQ95XX)
-#define EDMA_INTR_MAX 37
-#define EDMA_RXFILL_INTR_FIRST 359
-#endif
-#if defined(NSS_DP_IPQ53XX)
-#define EDMA_INTR_MAX 21
-#define EDMA_RXFILL_INTR_FIRST 155
-#endif
-#if defined(NSS_DP_IPQ54XX)
-#define EDMA_INTR_MAX 25
-#define EDMA_RXFILL_INTR_FIRST 278
-#endif
-
-
-#define EDMA_INTR_FIELD_NUM 3
-static int32_t intr_map[EDMA_INTR_MAX][EDMA_INTR_FIELD_NUM];
-static bool intr_map_success;
-
 uint32_t edma_hang_recover = 0;
 
 /*
@@ -82,6 +64,7 @@ struct edma_gbl_ctx edma_gbl_ctx;
 
 static char edma_txcmpl_irq_name[EDMA_MAX_TXCMPL_RINGS][EDMA_IRQ_NAME_SIZE];
 static char edma_rxdesc_irq_name[EDMA_MAX_RXDESC_RINGS][EDMA_IRQ_NAME_SIZE];
+static char edma_rxfill_irq_name[EDMA_MAX_RXFILL_RINGS][EDMA_IRQ_NAME_SIZE];
 
 /*
  * Input String for VLAN insertion.
@@ -159,6 +142,13 @@ void edma_disable_interrupts(struct edma_gbl_ctx *egc)
 				EDMA_MASK_INT_CLEAR);
 	}
 
+	for (i = 0; i < egc->num_rxfill_rings; i++) {
+		struct edma_rxfill_ring *rxfill_ring =
+				&egc->rxfill_rings[i];
+		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
+				EDMA_MASK_INT_CLEAR);
+	}
+
 	for (i = 0; i < egc->num_txcmpl_rings; i++) {
 		struct edma_txcmpl_ring *txcmpl_ring =
 				&egc->txcmpl_rings[i];
@@ -185,6 +175,18 @@ void edma_enable_interrupts(struct edma_gbl_ctx *egc)
 				&egc->rxdesc_rings[i];
 		edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id),
 				egc->rxdesc_intr_mask);
+	}
+
+	for (i = 0; i < egc->num_rxfill_rings; i++) {
+		struct edma_rxfill_ring *rxfill_ring =
+				&egc->rxfill_rings[i];
+		/*
+		 * Configure just the low threshold value, the interrupts
+		 * are enabled when the available number of descriptors
+		 * in rx-fill ring goes below low threshold mark.
+		 */
+		edma_reg_write(EDMA_REG_RXFILL_UGT_THRE(rxfill_ring->ring_id),
+				EDMA_RXFILL_UGT_THRESHOLD);
 	}
 
 	for (i = 0; i < egc->num_txcmpl_rings; i++) {
@@ -738,14 +740,6 @@ static int edma_of_get_pdata(struct resource *edma_res)
 			edma_debug("txmap[%d][%d] = %d\n", i, j,
 					edma_gbl_ctx.tx_map[i][j]);
 		}
-	}
-
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
-		"interrupts",
-		(int32_t *)intr_map,
-		EDMA_INTR_MAX * EDMA_INTR_FIELD_NUM);
-	if (!ret) {
-		intr_map_success = true;
 	}
 
 	/*
@@ -1672,7 +1666,6 @@ int edma_irq_init(void)
 
 	/*
 	 * Get RXDESC rings IRQ numbers
-	 *
 	 */
 	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++, entry_num++) {
 		edma_gbl_ctx.rxdesc_intr[i] =
@@ -1700,17 +1693,20 @@ int edma_irq_init(void)
 	edma_debug("%s: misc IRQ:%u\n", (edma_gbl_ctx.device_node)->name,
 						edma_gbl_ctx.misc_intr);
 
-	if (intr_map_success) {
-		int tmp_entry_num = entry_num + 1;
-		if (intr_map[tmp_entry_num][1] == EDMA_RXFILL_INTR_FIRST) {
-			entry_num += 4;
-
-			edma_debug("found a match intr_map[%d]: < %d %d %d > \n",
-				tmp_entry_num, intr_map[tmp_entry_num][0],
-				intr_map[tmp_entry_num][1], intr_map[tmp_entry_num][2]);
-		} else {
-			edma_debug("No match at intr_map[%d]\n", tmp_entry_num);
+	/*
+	 * Get RXFILL rings IRQ numbers
+	 */
+	for (i = 0; i < edma_gbl_ctx.num_rxfill_rings; i++) {
+		entry_num++;
+		edma_gbl_ctx.rxfill_intr[i] = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
+		if (edma_gbl_ctx.rxfill_intr[i] < 0) {
+			edma_err("%s: rxfill_intr[%u] irq get failed\n",
+					(edma_gbl_ctx.device_node)->name, i);
+			return -1;
 		}
+
+		edma_debug("%s: rxfill_intr[%u] = %u\n", (edma_gbl_ctx.device_node)->name,
+				 i, edma_gbl_ctx.rxfill_intr[i]);
 	}
 
 #ifdef NSS_DP_PPEDS_SUPPORT
@@ -1785,9 +1781,9 @@ int edma_irq_init(void)
 				(edma_gbl_ctx.device_node)->name,
 				i, edma_gbl_ctx.txcmpl_intr[i]);
 	}
+
 done:
 #endif
-
 	/*
 	 * Request IRQ for Tx complete rings
 	 */
@@ -1849,7 +1845,39 @@ done:
 		goto misc_intr_req_fail;
 	}
 
+	/*
+	 * Request IRQ for RXFILL rings
+	 */
+	for (i = 0; i < edma_gbl_ctx.num_rxfill_rings; i++) {
+		snprintf(edma_rxfill_irq_name[i], 20, "edma_rxfill_%d", edma_gbl_ctx.rxfill_ring_start + i);
+
+		irq_set_status_flags(edma_gbl_ctx.rxfill_intr[i], IRQ_DISABLE_UNLAZY);
+
+		err = request_irq(edma_gbl_ctx.rxfill_intr[i],
+				edma_rxfill_handle_irq, IRQF_SHARED,
+				edma_rxfill_irq_name[i],
+				(void *)&(edma_gbl_ctx.rxfill_rings[i]));
+		if (err) {
+			edma_err("RXFILL ring IRQ:%d request failed\n",
+					edma_gbl_ctx.rxfill_intr[i]);
+			goto rx_fill_ring_intr_req_fail;
+		}
+
+		edma_debug("RXFILL ring(%d) IRQ:%d request success(%s)\n",
+					edma_gbl_ctx.rxfill_ring_start + i,
+					edma_gbl_ctx.rxfill_intr[i],
+					edma_rxfill_irq_name[i]);
+	}
+
 	return 0;
+
+rx_fill_ring_intr_req_fail:
+	/*
+	 * Free IRQ for MISC interrupt.
+	 */
+	synchronize_irq(edma_gbl_ctx.misc_intr);
+	free_irq(edma_gbl_ctx.misc_intr, (void *)edma_gbl_ctx.pdev);
+
 
 misc_intr_req_fail:
 	/*
