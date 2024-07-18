@@ -170,6 +170,18 @@
 #define EDMA_RXDESC_WIFI_QOS_GET(desc)		((le32_to_cpu(((desc)->word5)) & \
 						EDMA_RXDESC_WIFI_QOS_MASK) >> \
 						EDMA_RXDESC_WIFI_QOS_SHIFT)
+/*
+ * Flow cookie
+ *      -------------------------------------------------------------------------
+ *      |				Cookie_low (16 bits)			|
+ *      -------------------------------------------------------------------------
+ */
+
+#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+#define EDMA_RXDESC_FLOW_COOKIE_SHIFT		16
+#define EDMA_RXDESC_FLOW_COOKIE_MASK		EDMA_RXDESC_GENMASK(31, 16)
+#define EDMA_RXDESC_FLOW_COOKIE_GET(desc)	((le32_to_cpu((desc)->word6) & EDMA_RXDESC_FLOW_COOKIE_MASK) >> EDMA_RXDESC_FLOW_COOKIE_SHIFT)
+#endif
 
 /*
  * Check if WiFi-QoS flag is valid.
@@ -181,16 +193,33 @@
  *	---------------------------------------------------------------------------------
  *	|Tree_ID Type (4 bits) | 		Tree_ID Metadata(20 bits)		|
  *	---------------------------------------------------------------------------------
+ *
+ * Flow cookie
+ *      ---------------------------------------------------------------------------------
+ *      |Type (5 bits) |			Cookie_high (19 bits)			|
+ *      ---------------------------------------------------------------------------------
  */
+#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+#define EDMA_RXDESC_TREE_ID_TYPE_SHIFT                  19
+#define EDMA_RXDESC_TREE_ID_TYPE_MASK                   0x00F80000
+#else
 #define EDMA_RXDESC_TREE_ID_TYPE_SHIFT			20
 #define EDMA_RXDESC_TREE_ID_TYPE_MASK			0x00F00000
+#endif
+
 #define EDMA_RXDESC_TREE_ID_TYPE_GET(desc)		((EDMA_RXDESC_TREE_ID_GET(desc) & EDMA_RXDESC_TREE_ID_TYPE_MASK) \
 								>> EDMA_RXDESC_TREE_ID_TYPE_SHIFT)
 /*
  * SAWF related macros
  */
+#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+#define EDMA_RXDESC_SERVICE_CLASS_SHIFT                 0
+#define EDMA_RXDESC_SERVICE_CLASS_MASK                  0x000000FF
+#else
 #define EDMA_RXDESC_SERVICE_CLASS_SHIFT			10
 #define EDMA_RXDESC_SERVICE_CLASS_MASK			0x0003FC00
+#endif
+
 #define EDMA_RXDESC_SERVICE_CLASS_GET(desc)		((EDMA_RXDESC_TREE_ID_GET(desc) & EDMA_RXDESC_SERVICE_CLASS_MASK) \
 								>> EDMA_RXDESC_SERVICE_CLASS_SHIFT)
 #define EDMA_RXDESC_PEER_ID_MASK			0x000003FF
