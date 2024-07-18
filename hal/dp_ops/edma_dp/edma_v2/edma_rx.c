@@ -381,7 +381,11 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 		 * In case of SAWF, fetch the SAWF metadata from Tree ID.
 		 */
 		service_class = EDMA_RXDESC_SERVICE_CLASS_GET(rxdesc_sec);
+#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+		peer_id = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
+#else
 		peer_id = EDMA_RXDESC_PEER_ID_GET(rxdesc_sec);
+#endif
 		wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
 
 		/*
@@ -429,7 +433,17 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 		 * In case of MLO, fetch the MLO metadata from Tree ID.
 		 */
 		wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
+
+#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+		/*
+		 * Lower 16 bit is obtained from primary desc and
+		 * upper 2 bits from secondary desc
+		 */
+		mlo_mark = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
+		mlo_mark |= (EDMA_RXDESC_TREE_ID_GET(rxdesc_sec) & 0x3) << 16;
+#else
 		mlo_mark = EDMA_RXDESC_MLO_MARK_GET(rxdesc_sec);
+#endif
 
 		/*
 		 * Configure skb->mark with MLO metadata.
