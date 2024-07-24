@@ -30,6 +30,9 @@
 #include <fal/fal_vsi.h>
 #include <ref/ref_vsi.h>
 #endif
+#if defined(NSS_DP_EDMA_I2C_BUS_ENABLE)
+#include <fal/fal_port_ctrl.h>
+#endif
 #include <net/switchdev.h>
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 6, 0))
 #include <net/netdev_rx_queue.h>
@@ -662,9 +665,13 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	dp_priv->link_poll = of_property_read_bool(np, "qcom,link-poll");
 	if (of_property_read_u32(np, "qcom,phy-mdio-addr",
 		&dp_priv->phy_mdio_addr) && dp_priv->link_poll) {
+#ifdef NSS_DP_EDMA_I2C_BUS_ENABLE
+		dp_priv->phy_mdio_addr = FAL_SFP_PHY_ADDR;
+#else
 		pr_err("%s: mdio addr required if link polling is enabled\n",
 				np->name);
 		return -EFAULT;
+#endif
 	}
 
 	of_property_read_u32(np, "qcom,forced-speed", &dp_priv->forced_speed);
@@ -765,9 +772,22 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 static struct mii_bus *nss_dp_mdio_attach(struct platform_device *pdev)
 {
 	struct device_node *mdio_node;
+#ifdef NSS_DP_EDMA_I2C_BUS_ENABLE
+	struct device_node *i2c_node;
+#endif
 	struct platform_device *mdio_plat;
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6,1,0))
 	struct ipq40xx_mdio_data *mdio_data;
+#endif
+
+#ifdef NSS_DP_EDMA_I2C_BUS_ENABLE
+	/*
+	 * Find mii_bus using "i2c-bus" handle.
+	 */
+	i2c_node = of_parse_phandle(pdev->dev.of_node, "i2c-bus", 0);
+	if (i2c_node) {
+		return of_mdio_find_bus(i2c_node);
+	}
 #endif
 
 	/*
