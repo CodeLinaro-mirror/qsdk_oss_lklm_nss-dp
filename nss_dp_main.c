@@ -161,6 +161,26 @@ module_param(edma_loopback_disable, int, S_IRUGO);
 MODULE_PARM_DESC(edma_loopback_disable, "Loopback disable");
 #endif
 
+uint32_t rx_ring_sz_low_mem = 512;
+module_param(rx_ring_sz_low_mem, int, 0640);
+MODULE_PARM_DESC(rx_ring_sz_low_mem, "edma rx ring size for low memory");
+
+uint32_t rx_ring_sz_medium_mem = 1024;
+module_param(rx_ring_sz_medium_mem, int, 0640);
+MODULE_PARM_DESC(rx_ring_sz_medium_mem, "edma rx ring size for medium memory");
+
+uint32_t rx_ring_sz_high_mem = 4096;
+module_param(rx_ring_sz_high_mem, int, 0640);
+MODULE_PARM_DESC(rx_ring_sz_high_mem, "edma rx ring size for high memory");
+
+uint32_t tx_ring_sz_low_medium_mem = 1024;
+module_param(tx_ring_sz_low_medium_mem, int, 0640);
+MODULE_PARM_DESC(tx_ring_sz_low_medium_mem, "edma tx ring size for low and medium memory");
+
+uint32_t tx_ring_sz_high_mem = 2048;
+module_param(tx_ring_sz_high_mem, int, 0640);
+MODULE_PARM_DESC(tx_ring_sz_high_mem, "edma tx ring size for high memory");
+
 /*
  * nss_dp_do_ioctl()
  */

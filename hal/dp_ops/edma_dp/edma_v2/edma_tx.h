@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -18,6 +18,9 @@
 
 #ifndef __EDMA_TX_H__
 #define __EDMA_TX_H__
+
+extern uint32_t tx_ring_sz_low_medium_mem;
+extern uint32_t tx_ring_sz_high_mem;
 
 #define EDMA_GET_DESC(R, i, type)	(&(((type *)((R)->desc))[(i)]))
 #define EDMA_GET_PDESC(R, i, type)	(&(((type *)((R)->pdesc))[(i)]))
@@ -40,9 +43,9 @@
 
 #define EDMA_TX_MAX_PRIORITY_LEVEL	1
 #if defined(NSS_DP_MEM_PROFILE_LOW) || defined(NSS_DP_MEM_PROFILE_MEDIUM)
-#define EDMA_TX_RING_SIZE		1024
+#define EDMA_TX_RING_SIZE		tx_ring_sz_low_medium_mem
 #else
-#define EDMA_TX_RING_SIZE		2048
+#define EDMA_TX_RING_SIZE		tx_ring_sz_high_mem
 #endif
 
 #define EDMA_TX_RING_SIZE_MASK		(EDMA_TX_RING_SIZE - 1)

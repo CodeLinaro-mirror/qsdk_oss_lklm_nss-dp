@@ -18,6 +18,10 @@
 #ifndef __EDMA_RX_H__
 #define __EDMA_RX_H__
 
+extern uint32_t rx_ring_sz_low_mem;
+extern uint32_t rx_ring_sz_medium_mem;
+extern uint32_t rx_ring_sz_high_mem;
+
 #define EDMA_RXFILL_RING_PER_CORE_MAX	1
 #define EDMA_RXDESC_RING_PER_CORE_MAX	1
 
@@ -44,11 +48,11 @@
  * TODO - Make this a tunable parameter using module-param.
  */
 #if defined(NSS_DP_MEM_PROFILE_LOW)
-#define EDMA_RX_RING_SIZE		512
+#define EDMA_RX_RING_SIZE		rx_ring_sz_low_mem
 #elif defined(NSS_DP_MEM_PROFILE_MEDIUM)
-#define EDMA_RX_RING_SIZE		1024
+#define EDMA_RX_RING_SIZE		rx_ring_sz_medium_mem
 #else
-#define EDMA_RX_RING_SIZE		4096
+#define EDMA_RX_RING_SIZE		rx_ring_sz_high_mem
 #endif
 
 #define EDMA_RX_RING_SIZE_MASK		(EDMA_RX_RING_SIZE - 1)
