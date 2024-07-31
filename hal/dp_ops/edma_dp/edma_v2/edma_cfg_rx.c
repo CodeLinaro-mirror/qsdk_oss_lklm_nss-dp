@@ -626,21 +626,12 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 {
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	uint32_t data;
-	uint32_t paddr, saddr;
 
-	paddr = (uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK);
-	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id), paddr);
+	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
+			(uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK));
 
-	saddr = (uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK);
-	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id), saddr);
-
-#ifdef EDMA_40BIT_SUPPORT
-	paddr = (uint32_t)((rxdesc_ring->pdma >> 32) & EDMA_RXDESC_BA_HIGHER_MASK);
-	edma_reg_write(EDMA_REG_RXDESC_BA_HIGH(rxdesc_ring->ring_id), paddr);
-
-	saddr = (uint32_t)((rxdesc_ring->sdma >> 32) & EDMA_RXDESC_PREHEADER_BA_HIGHER_MASK);
-	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA_HIGH(rxdesc_ring->ring_id), saddr);
-#endif
+	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id),
+			(uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK));
 
 	data = rxdesc_ring->count & EDMA_RXDESC_RING_SIZE_MASK;
 
@@ -708,18 +699,9 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 static void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring)
 {
 	uint32_t ring_sz;
-	uint32_t paddr;
 
-	paddr = (uint32_t)(rxfill_ring->dma & EDMA_RING_DMA_MASK);
-	edma_reg_write(EDMA_REG_RXFILL_BA(rxfill_ring->ring_id), paddr);
-
-	/*
-	 * Fill up the higher 8 bits in another register
-	 */
-#ifdef EDMA_40BIT_SUPPORT
-	paddr = (uint32_t)((rxfill_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
-	edma_reg_write(EDMA_REG_RXFILL_BA_HIGH(rxfill_ring->ring_id), paddr);
-#endif
+	edma_reg_write(EDMA_REG_RXFILL_BA(rxfill_ring->ring_id),
+			(uint32_t)(rxfill_ring->dma & EDMA_RING_DMA_MASK));
 
 	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
 	edma_reg_write(EDMA_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
