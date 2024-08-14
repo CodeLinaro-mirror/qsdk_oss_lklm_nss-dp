@@ -99,7 +99,6 @@
 #define EDMA_SWITCH_DEV_ID	0
 #define EDMA_PPE_QUEUE_LEVEL	0
 #define EDMA_BITS_IN_WORD	32
-#define EDMA_MHT_SWITCH_PORT_ID	1
 
 /*
  * Maximum queue priority
