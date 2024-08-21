@@ -108,6 +108,7 @@ ccflags-y += -DNSS_DP_IPQ95XX
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
+ccflags-y += -DNSS_DP_IPQ54XX
 ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
 ccflags-y += -DNSS_DP_EDMA_REG_WORD_INDEXING
 ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES

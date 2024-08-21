@@ -707,9 +707,9 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		num_tx_desc_needed = edma_tx_num_descs_for_sg(skb);
 
 		/*
-		 * HW does not support TSO for packets with more than 32 segments.
-		 * HW hangs up if it sees more than 32 segments.
-		 * Kernel Perform GSO for such packets with netdev gso_max_segs set to 32.
+		 * HW does not support TSO for packets with more than 32 (48 In IPQ54xx) segments.
+		 * HW hangs up if it sees more than 32  (48 In IPQ54xx) segments.
+		 * Kernel Perform GSO for such packets with netdev gso_max_segs set to 32 (48 In IPQ54xx).
 		 */
 		if (unlikely(num_tx_desc_needed > EDMA_TX_TSO_SEG_MAX)) {
 			edma_debug("Number of segments %u more than %u for %d ring\n",

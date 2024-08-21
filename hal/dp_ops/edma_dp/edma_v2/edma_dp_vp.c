@@ -61,7 +61,7 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 
 	/*
 	 * HW does not support TSO for packets with more than or equal to
-	 * 32 segments. HW hangs up if it sees more than 32 segments.
+	 * 32(48 for IPQ54xx) segments. HW hangs up if it sees more than 32(48 for IPQ54xx) segments.
 	 * Perform SW GSO for such packets.
 	 */
 	result = edma_tx_gso_segment(skb, vpdev, &segs);

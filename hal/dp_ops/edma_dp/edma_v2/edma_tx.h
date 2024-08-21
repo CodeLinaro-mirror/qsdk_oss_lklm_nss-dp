@@ -50,7 +50,12 @@ extern uint32_t tx_ring_sz_high_mem;
 
 #define EDMA_TX_RING_SIZE_MASK		(EDMA_TX_RING_SIZE - 1)
 
+#ifdef NSS_DP_IPQ54XX
+#define EDMA_TX_TSO_SEG_MAX		48	/* Max segment processing capacity of HW for TSO */
+#else
 #define EDMA_TX_TSO_SEG_MAX		32	/* Max segment processing capacity of HW for TSO */
+#endif
+
 #define EDMA_TX_TSO_MSS_MIN		256	/* HW defined low MSS size */
 #define EDMA_TX_TSO_MSS_MAX		10240	/* HW defined high MSS size */
 
