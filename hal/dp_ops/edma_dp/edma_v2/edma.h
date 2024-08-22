@@ -489,7 +489,7 @@ static inline bool edma_dp_stats_fetch_retry(const struct u64_stats_sync *syncp,
 static inline bool edma_dp_per_ring_reset_support(void)
 {
 	bool ring_reset_en = false;
-#if defined(NSS_DP_IPQ54XX)
+#if defined(NSS_DP_EDMA_RING_RESET)
 	ring_reset_en = true;
 #endif
 	return ring_reset_en;
