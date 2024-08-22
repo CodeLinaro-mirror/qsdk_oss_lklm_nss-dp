@@ -106,6 +106,7 @@ ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES
 ccflags-y += -DNSS_DP_EDMA_MHT_SW_WITH_VP_RING
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ccflags-y += -DNSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+ccflags-y += -DNSS_DP_EDMA_RING_RESET
 endif
 
 ccflags-y += $(NSS_DP_INCLUDE)
