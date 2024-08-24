@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -573,6 +573,15 @@ static int edma_cfg_tx_rings_setup(struct edma_gbl_ctx *egc)
 	 */
 	if (!dp_global_ctx.is_mht_dev)
 		edma_max_gmac = egc->max_tx_ports - NSS_DP_VP_HAL_MAX_PORTS;
+
+#ifdef NSS_DP_EDMA_MHT_SW_WITH_VP_RING
+	/*
+	 * Marina has dedicated rings allocated to support
+	 * both MHT HOLB and VP based features together.
+	 * Hence subtract the VP port from max_tx_ports.
+	 */
+	edma_max_gmac = egc->max_tx_ports - NSS_DP_VP_HAL_MAX_PORTS;
+#endif
 #else
 	uint32_t edma_max_gmac = EDMA_MAX_GMACS;
 #endif
