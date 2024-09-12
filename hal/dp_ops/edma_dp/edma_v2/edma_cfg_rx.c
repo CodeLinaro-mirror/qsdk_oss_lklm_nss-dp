@@ -110,6 +110,21 @@ static void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
  */
 static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 {
+
+#ifdef CONFIG_IO_COHERENCY
+	/*
+         * Allocate RxFill ring descriptors
+         */
+        rxfill_ring->desc = kmalloc(roundup((sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+                                    SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
+        if (!rxfill_ring->desc) {
+                edma_err("Descriptor alloc for RXFILL ring %u failed\n",
+                                rxfill_ring->ring_id);
+
+                return -ENOMEM;
+        }
+        rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
+#else
 	struct platform_device *pdev = edma_gbl_ctx.pdev;
 
 	/*
@@ -119,6 +134,8 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 				(sizeof(struct edma_rxfill_desc)
 				* rxfill_ring->count),
 				&rxfill_ring->dma, GFP_KERNEL | __GFP_ZERO);
+#endif
+
 	return 0;
 }
 
