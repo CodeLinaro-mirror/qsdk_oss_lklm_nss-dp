@@ -132,16 +132,26 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 
 			txcmpl_errors = EDMA_TXCOMP_RING_ERROR_GET(txcmpl->word3);
 			if (unlikely(txcmpl_errors)) {
-				/*
-				 * TODO : Demux and add a debug print per error type.
-				 */
-				if (net_ratelimit()) {
-					edma_err("Error 0x%0x observed in tx complete %d ring\n",
-							txcmpl_errors, txcmpl_ring->id);
-				}
+				long bit_pos;
 
+
+				/*
+				 * Demux the txcmpl error type.
+				 * There can multiple txcmpl errors in the same descriptors.
+				 * Hence we need to check for all the set
+				 * bits instead of just the first one.
+				 */
 				u64_stats_update_begin(&txcmpl_stats->syncp);
-				++txcmpl_stats->errors;
+				bit_pos = __builtin_ffs(txcmpl_errors);
+				while (bit_pos) {
+					++txcmpl_stats->errors[bit_pos - 1];
+					txcmpl_errors = txcmpl_errors & ~(0x1 << (bit_pos - 1));
+					bit_pos = __builtin_ffs(txcmpl_errors);
+					if (net_ratelimit()) {
+						edma_warn("Error 0x%0x observed in tx complete %d ring\n",
+								txcmpl_errors, txcmpl_ring->id);
+					}
+				}
 				u64_stats_update_end(&txcmpl_stats->syncp);
 			}
 
@@ -341,7 +351,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 
 /*
  * edma_tx_fill_vp_desc()
- *	Enable PPE processing with VP as source port
+ *	Enable PPE processing with VP as source/dest port
  */
 static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_pri_txdesc *txd,
 			struct sk_buff *skb, struct nss_dp_vp_tx_info *dptxi)
@@ -360,10 +370,15 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	EDMA_TXDESC_FAKE_MAC_HDR_SET(txd, dptxi->fake_mac);
 
 	/*
-	 * Set Source port information in the descriptor
+	 * Set Source/Dest port information in the descriptor
 	 */
-	EDMA_SRC_INFO_SET(txd, dptxi->svp);
-	EDMA_DST_INFO_SET(txd, 0);
+	if (dptxi->svp) {
+		EDMA_SRC_INFO_SET(txd, dptxi->svp);
+		EDMA_DST_INFO_SET(txd, 0);
+	} else {
+		EDMA_SRC_INFO_SET(txd, 0);
+		EDMA_DST_INFO_SET(txd, dptxi->dvp);
+	}
 }
 
 /*
