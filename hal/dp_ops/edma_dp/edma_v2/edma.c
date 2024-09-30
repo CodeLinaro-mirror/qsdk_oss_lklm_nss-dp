@@ -1233,7 +1233,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	/*
 	 * Configure Tx Timeout Threshold
 	 */
-#if defined(NSS_DP_IPQ53XX)
+#if defined(NSS_DP_MAX_TXCOMP_TIMEOUT)
 	data = EDMA_TX_TIMEOUT_THRESH_VAL;
 	edma_reg_write(EDMA_REG_TX_TIMEOUT_THRESH, data);
 #endif

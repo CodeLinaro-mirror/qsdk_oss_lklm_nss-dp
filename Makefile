@@ -63,6 +63,7 @@ ccflags-y += -DNSS_DP_IPQ50XX -DNSS_DP_ENABLE_NAPI_GRO
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx))
+ccflags-y += -DNSS_DP_MAX_TXCOMP_TIMEOUT
 qca-nss-dp-objs += nss_dp_vp_main.o \
 		   nss_dp_ethtool_priv.o \
 		   hal/dp_ops/edma_dp/edma_v2/edma.o \
