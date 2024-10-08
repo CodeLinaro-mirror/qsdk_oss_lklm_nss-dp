@@ -80,7 +80,7 @@ qca-nss-dp-objs += nss_dp_vp_main.o \
 		   hal/dp_ops/edma_dp/edma_v2/edma_tx.o \
 		   hal/gmac_ops/qcom/qcom_if.o \
 		   hal/gmac_ops/syn/xgmac/syn_if.o
-
+ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ifeq ($(dp-ppe-ds),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v2/edma_ppeds.o
 ccflags-y += -DNSS_DP_PPEDS_SUPPORT
@@ -114,7 +114,6 @@ ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
 ccflags-y += -DNSS_DP_EDMA_REG_WORD_INDEXING
 ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES
 ccflags-y += -DNSS_DP_EDMA_MHT_SW_WITH_VP_RING
-ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ccflags-y += -DNSS_DP_EDMA_FLOW_COOKIE_SUPPORT
 endif
 
