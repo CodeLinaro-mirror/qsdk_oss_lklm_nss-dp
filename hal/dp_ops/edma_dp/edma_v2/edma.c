@@ -888,11 +888,9 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		edma_err("Unable to read loopback_queue_num_queues ret: %d\n", ret);
 		goto fail;
 	}
-#endif
-
-#if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 skip_loopback:
 #endif
+
 #ifdef NSS_DP_PPEDS_SUPPORT
 	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,ppeds-num",
 					&edma_gbl_ctx.ppeds_drv.num_nodes) != 0) {
