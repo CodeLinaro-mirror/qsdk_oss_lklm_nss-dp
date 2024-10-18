@@ -20,6 +20,13 @@
 #include <nss_dp_arch.h>
 #include "nss_dp_hal.h"
 
+#ifdef CONFIG_IO_COHERENCY
+#include <linux/tmelcom_ipc.h>
+#include <linux/of_platform.h>
+#include <linux/of_address.h>
+#include <linux/platform_device.h>
+#endif
+
 /*
  * nss_dp_hal_nsm_sawf_sc_stats_read()
  *	Send nsm stats for the given service-class.
@@ -37,6 +44,145 @@ struct nss_dp_data_plane_ops *nss_dp_hal_get_data_plane_ops(void)
 {
 	return &nss_dp_edma_ops;
 }
+
+#ifdef CONFIG_IO_COHERENCY
+
+/*
+ * nss_noc_reg_write - Write the value into NSS NOC registers
+ * @reg_base: base address for the NSS NOC registers
+ * @regs_off: Pointer to the register offset and data to be written into
+ * @count: Number of registers
+ * @secure_write: Indicates secure IO write/Regular IO write
+ *
+ * This function returns 0 on success, and negative error code on failure
+ */
+static inline int nss_noc_reg_write(uint32_t reg_base, uint32_t *regs_off, int count, bool secure_write)
+{
+	int i;
+
+	for (i = 0; i < count; i++, regs_off += 2) {
+		uint32_t reg_addr = reg_base + regs_off[0];
+		uint32_t reg_val = regs_off[1];
+
+		if (secure_write) {
+			struct tmel_secure_io nss_noc = {0};
+			int error;
+
+			/*
+			 * Write the value into the registers
+			 * using secure IO.
+			 */
+			nss_noc.reg_addr = reg_addr;
+			nss_noc.reg_val = reg_val;
+			error = tmelcom_secure_io_write(&nss_noc, sizeof(struct tmel_secure_io));
+			if (error) {
+				pr_err("Failed to configure NSS NOC reg = 0x%x, val=0x%x\n", reg_addr, reg_val);
+				return error;
+			}
+		} else {
+			void __iomem *map_addr;
+
+			/*
+			 * Write the value into the registers
+			 * using regular IO mapping.
+			 */
+			map_addr = ioremap(reg_addr, sizeof(uint32_t));
+			if (!map_addr) {
+				pr_err("Failed to configure NSS NOC reg = 0x%x, val=0x%x\n", reg_addr, reg_val);
+				return -EINVAL;
+			}
+
+			writel(reg_val, map_addr);
+			iounmap(map_addr);
+		}
+
+		pr_debug("Configuring nss_noc for addr: (0x%x), val: (0x%x)\n", reg_addr, reg_val);
+	}
+
+	return 0;
+}
+
+/*
+ * nss_noc_reg_update - Update NSS NOC register settings
+ * @pdev: Pointer to the platform device structure
+ *
+ * This function updates the NSS NoC Register addresses by writing
+ * the values to the respective registers.
+ *
+ * Return: 0 on success, negative error code on failure.
+ */
+static inline int nss_noc_reg_update(struct platform_device *pdev)
+{
+	int ret, count;
+	struct device_node *np = (&pdev->dev)->of_node;
+	struct device_node *child = NULL;
+	bool secure_write = false;
+	uint32_t *regs_off = NULL;
+	uint32_t reg_base;
+
+	for_each_available_child_of_node(np, child) {
+		/*
+		 * Only read the registers if the corresponding (nss-noc)
+		 * property is defined in the DTSI.
+		 * Else, bypass the IO write operations.
+		 */
+		if (of_property_match_string(child, "prop-name", "nss_noc") < 0)
+			continue;
+
+		secure_write = of_property_read_bool(child, "secure-write");
+
+		/*
+		 * Read the Register base address from the DTSI.
+		 */
+		ret = of_property_read_u32(child, "reg-base", &reg_base);
+		if (ret) {
+			pr_err("%px: Failed to read the Register base address\n", child);
+			return ret;
+		}
+
+		/*
+		 * Read the number of register elements.
+		 */
+		count = of_property_count_u32_elems(child, "reg-offset");
+		if ((count == 0) || (count % 2)) {
+			pr_err("%px: Invalid entries obtained from the DTSI\n", child);
+			return -EINVAL;
+		}
+
+		/*
+		 * Allocate memory for reading NOC register
+		 * values from DTSI.
+		 */
+		regs_off = vmalloc(sizeof(u32) * count);
+		if (!regs_off) {
+			pr_err("%px: Failed to allocate memory for reading NOC regs\n", child);
+			return -EINVAL;
+		}
+
+		/*
+		 * Read the register offsets and their values
+		 * from the DTSI and write into address.
+		 */
+		ret = of_property_read_u32_array(child, "reg-offset", regs_off, count);
+		if (ret) {
+			pr_err("%px: Error in fetching the offset address and value for Register\n", child);
+			goto fail;
+		}
+
+		ret = nss_noc_reg_write(reg_base, regs_off, count/2, secure_write);
+		if (ret)
+			goto fail;
+
+		vfree(regs_off);
+		return 0;
+fail:
+		vfree(regs_off);
+		return ret;
+	}
+
+	return 0;
+}
+#endif
 
 /*
  * nss_dp_hal_clock_set_and_enable()
@@ -170,6 +316,17 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
 		return -1;
 	}
 
+#ifdef CONFIG_IO_COHERENCY
+	/*
+	 * TODO: Get rid of the above compile time MACRO and
+	 * invoke the reg_update API based on the global flag
+	 * from the DTSI.
+	 */
+	err = nss_noc_reg_update(pdev);
+        if (err) {
+                return -1;
+        }
+#endif
 	return 0;
 }
 
