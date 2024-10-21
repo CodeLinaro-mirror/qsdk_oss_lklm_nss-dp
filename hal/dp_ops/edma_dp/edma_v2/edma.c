@@ -290,6 +290,15 @@ void edma_cleanup(bool is_dp_override)
 	}
 #endif
 
+#ifdef NSS_DP_PPEDS_SUPPORT
+	edma_ppeds_deinit(&edma_gbl_ctx.ppeds_drv);
+#endif
+
+	/*
+	 * Release EDMA HW reset reference.
+	 */
+	reset_control_put(edma_gbl_ctx.hw_rst);
+
 	iounmap(edma_gbl_ctx.reg_base);
 	release_mem_region((edma_gbl_ctx.reg_resource)->start,
 			resource_size(edma_gbl_ctx.reg_resource));
@@ -401,6 +410,10 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	int ret;
 	uint32_t i, j;
 
+#ifdef EDMA_40BIT_SUPPORT
+	struct platform_device *pdev;
+#endif
+
 	/*
 	 * Find EDMA node in device tree
 	 */
@@ -431,6 +444,18 @@ static int edma_of_get_pdata(struct resource *edma_res)
 			  EDMA_DEVICE_NODE_NAME"\n");
 		return -EINVAL;
 	}
+
+	/*
+	 * Set the DMA to allocate memory from beyond 4GB
+	 */
+#ifdef EDMA_40BIT_SUPPORT
+	pdev = edma_gbl_ctx.pdev;
+	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
+	if (ret) {
+		edma_err("dma_set_mask_and_coherent failed for mask 64 with ret %d\n", ret);
+		return -ENOMEM;
+	}
+#endif
 
 	/*
 	 * Get id of first TXDESC ring
@@ -863,11 +888,9 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		edma_err("Unable to read loopback_queue_num_queues ret: %d\n", ret);
 		goto fail;
 	}
-#endif
-
-#if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 skip_loopback:
 #endif
+
 #ifdef NSS_DP_PPEDS_SUPPORT
 	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,ppeds-num",
 					&edma_gbl_ctx.ppeds_drv.num_nodes) != 0) {
@@ -1245,7 +1268,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	/*
 	 * Configure Tx Timeout Threshold
 	 */
-#if defined(NSS_DP_IPQ53XX)
+#if defined(NSS_DP_MAX_TXCOMP_TIMEOUT)
 	data = EDMA_TX_TIMEOUT_THRESH_VAL;
 	edma_reg_write(EDMA_REG_TX_TIMEOUT_THRESH, data);
 #endif

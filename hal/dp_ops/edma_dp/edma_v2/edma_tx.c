@@ -132,16 +132,26 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 
 			txcmpl_errors = EDMA_TXCOMP_RING_ERROR_GET(txcmpl->word3);
 			if (unlikely(txcmpl_errors)) {
-				/*
-				 * TODO : Demux and add a debug print per error type.
-				 */
-				if (net_ratelimit()) {
-					edma_err("Error 0x%0x observed in tx complete %d ring\n",
-							txcmpl_errors, txcmpl_ring->id);
-				}
+				long bit_pos;
 
+
+				/*
+				 * Demux the txcmpl error type.
+				 * There can multiple txcmpl errors in the same descriptors.
+				 * Hence we need to check for all the set
+				 * bits instead of just the first one.
+				 */
 				u64_stats_update_begin(&txcmpl_stats->syncp);
-				++txcmpl_stats->errors;
+				bit_pos = __builtin_ffs(txcmpl_errors);
+				while (bit_pos) {
+					++txcmpl_stats->errors[bit_pos - 1];
+					txcmpl_errors = txcmpl_errors & ~(0x1 << (bit_pos - 1));
+					bit_pos = __builtin_ffs(txcmpl_errors);
+					if (net_ratelimit()) {
+						edma_warn("Error 0x%0x observed in tx complete %d ring\n",
+								txcmpl_errors, txcmpl_ring->id);
+					}
+				}
 				u64_stats_update_end(&txcmpl_stats->syncp);
 			}
 
@@ -267,6 +277,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 	uint8_t i = 0;
 	uint32_t nr_frags = 0, buf_len = 0, num_descs = 0, start_idx = 0, end_idx = 0;
 	struct edma_pri_txdesc *txd = *txdesc;
+	dma_addr_t buff_addr;
 
 	/*
 	 * Hold onto the index mapped to *txdesc.
@@ -304,7 +315,13 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 
 		txd = EDMA_TXDESC_PRI_DESC(txdesc_ring, *hw_next_to_use);
 		edma_tx_desc_init(txd);
-		EDMA_TXDESC_BUFFER_ADDR_SET(txd, (dma_addr_t)virt_to_phys(skb_frag_address(frag)));
+		buff_addr = (dma_addr_t)virt_to_phys(skb_frag_address(frag));
+		EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
+
+#ifdef EDMA_40BIT_SUPPORT
+		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
+#endif
+
 		dmac_clean_range_no_dsb((void *)skb_frag_address(frag),
 				(void *)(skb_frag_address(frag) + buf_len));
 
@@ -341,7 +358,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 
 /*
  * edma_tx_fill_vp_desc()
- *	Enable PPE processing with VP as source port
+ *	Enable PPE processing with VP as source/dest port
  */
 static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_pri_txdesc *txd,
 			struct sk_buff *skb, struct nss_dp_vp_tx_info *dptxi)
@@ -360,10 +377,15 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	EDMA_TXDESC_FAKE_MAC_HDR_SET(txd, dptxi->fake_mac);
 
 	/*
-	 * Set Source port information in the descriptor
+	 * Set Source/Dest port information in the descriptor
 	 */
-	EDMA_SRC_INFO_SET(txd, dptxi->svp);
-	EDMA_DST_INFO_SET(txd, 0);
+	if (dptxi->svp) {
+		EDMA_SRC_INFO_SET(txd, dptxi->svp);
+		EDMA_DST_INFO_SET(txd, 0);
+	} else {
+		EDMA_SRC_INFO_SET(txd, 0);
+		EDMA_DST_INFO_SET(txd, dptxi->dvp);
+	}
 }
 
 /*
@@ -442,6 +464,7 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 {
 	uint32_t buf_len = 0;
 	struct edma_pri_txdesc *txd = NULL;
+	dma_addr_t buff_addr;
 
 	/*
 	 * Get the packet length
@@ -455,7 +478,13 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	/*
 	 * Set the data pointer as the buffer address in the descriptor.
 	 */
-	EDMA_TXDESC_BUFFER_ADDR_SET(txd, (dma_addr_t)virt_to_phys(skb->data));
+	buff_addr = (dma_addr_t)virt_to_phys(skb->data);
+	EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
+
+#ifdef EDMA_40BIT_SUPPORT
+	EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
+#endif
+
 	dmac_clean_range_no_dsb((void *)skb->data, (void *)(skb->data + buf_len));
 
 	if (dptxi) {
@@ -486,6 +515,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 	struct sk_buff *iter_skb = NULL;
 	uint32_t num_sg_frag_list = 0;
 	struct edma_pri_txdesc *txd = *txdesc;
+	dma_addr_t buff_addr;
 
 	/*
 	 * Head skb processed already
@@ -535,7 +565,13 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 
 			txd = EDMA_TXDESC_PRI_DESC(txdesc_ring, *hw_next_to_use);
 			edma_tx_desc_init(txd);
-			EDMA_TXDESC_BUFFER_ADDR_SET(txd, (dma_addr_t)virt_to_phys(iter_skb->data));
+			buff_addr = (dma_addr_t)virt_to_phys(iter_skb->data);
+			EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
+
+#ifdef EDMA_40BIT_SUPPORT
+			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
+#endif
+
 			dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
 

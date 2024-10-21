@@ -65,6 +65,7 @@ ccflags-y += -DNSS_DP_IPQ50XX -DNSS_DP_ENABLE_NAPI_GRO
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx))
+ccflags-y += -DNSS_DP_MAX_TXCOMP_TIMEOUT
 qca-nss-dp-objs += nss_dp_vp_main.o \
 		   nss_dp_ethtool_priv.o \
 		   hal/dp_ops/edma_dp/edma_v2/edma.o \
@@ -115,6 +116,10 @@ ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES
 ccflags-y += -DNSS_DP_EDMA_MHT_SW_WITH_VP_RING
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ccflags-y += -DNSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+endif
+
+ifeq ($(higher-address-support),y)
+ccflags-y += -DEDMA_40BIT_SUPPORT
 endif
 
 ccflags-y += $(NSS_DP_INCLUDE)
