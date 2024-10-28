@@ -193,7 +193,7 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 	uint32_t buf_len = rxfill_ring->buf_len;
 	int i = 0, j = 0, loop_count = 0, alloc_new_count = 0, tot_memory = 0, rem;
         unsigned int order;
-	unsigned char *data[8];
+	unsigned char *data[EDMA_MAX_LOOPBACK_BUF];
 	uint16_t prod_idx;
 
 	/*

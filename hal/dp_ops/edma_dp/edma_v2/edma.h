@@ -129,8 +129,12 @@
 /*
  * Indicate the maximum 4MB byte of data which is expected to be used
  * So array of EDMA_MAX_LOOPBACK_BUF will have pointer to memory of max 4MB
+ * With maximum 32 index, we can store more DDR buffers for loopback ring.
+ *
+ * So for a 64K descriptor, each occupying 1536 bytes, total memory to be used is ~96MB for each
+ * we need an array of 32 to maintain these pages.
  */
-#define EDMA_MAX_LOOPBACK_BUF 8
+#define EDMA_MAX_LOOPBACK_BUF 32
 
 /*
  * edma_port_ucast_queues
