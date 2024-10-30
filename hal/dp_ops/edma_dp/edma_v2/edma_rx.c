@@ -1314,6 +1314,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 			 */
 			skb->dev = ndev;
 			skb->skb_iif = ndev->ifindex;
+			skb_set_int_pri(skb, EDMA_RXDESC_INT_PRI_GET(rxdesc_desc));
 
 			/*
 			 * Handle linear packets
@@ -1507,6 +1508,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 			 */
 			skb->dev = ndev;
 			skb->skb_iif = ndev->ifindex;
+			skb_set_int_pri(skb, EDMA_RXDESC_INT_PRI_GET(rxdesc_desc));
 
 			/*
 			 * Handle linear packets
