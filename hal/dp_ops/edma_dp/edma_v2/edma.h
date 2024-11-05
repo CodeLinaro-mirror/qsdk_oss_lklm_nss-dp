@@ -94,7 +94,8 @@
 					| NETIF_F_RXCSUM \
 					| NETIF_F_HW_CSUM \
 					| NETIF_F_TSO \
-					| NETIF_F_TSO6
+					| NETIF_F_TSO6 \
+					| NETIF_F_LLTX
 
 #define EDMA_SWITCH_DEV_ID	0
 #define EDMA_PPE_QUEUE_LEVEL	0
