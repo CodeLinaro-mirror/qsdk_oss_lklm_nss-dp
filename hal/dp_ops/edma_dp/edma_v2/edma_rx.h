@@ -112,6 +112,10 @@ extern uint32_t rx_ring_sz_high_mem;
 
 #define EDMA_RXDESC_DST_PORT		0x2 << EDMA_RXDESC_PID_SHIFT
 
+#define EDMA_RXDESC_INT_PRI_SHIFT	26
+#define EDMA_RXDESC_INT_PRI_MASK	EDMA_RXDESC_GENMASK(29,26)
+#define EDMA_RXDESC_INT_PRI_GET(desc)	((le32_to_cpu(((desc)->word1)) & EDMA_RXDESC_INT_PRI_MASK) >> EDMA_RXDESC_INT_PRI_SHIFT)
+
 /*
  * Mask for checking source or destination virtual port.
  * Note: PPE virtual port start from 64 onwards
