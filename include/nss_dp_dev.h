@@ -112,7 +112,7 @@
 #define NSS_DP_VP_MAC_ID		(NSS_DP_HAL_MAX_PORTS + 2)
 #endif
 
-#if defined(NSS_DP_NETSTANDBY) && defined(NSS_DP_IPQ53XX)
+#if defined(NSS_DP_NETSTANDBY) && (defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX))
 #define NSS_DP_EDMA_SWITCH_MHT_DEV_ID	1
 #endif
 
