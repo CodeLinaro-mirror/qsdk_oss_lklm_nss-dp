@@ -55,6 +55,24 @@ MODULE_PARM_DESC(edma_dp_extension_en, "Enable VLAN Insert Functionality (1 for 
  */
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40
 
+#if defined(NSS_DP_IPQ95XX)
+#define EDMA_INTR_MAX 37
+#define EDMA_RXFILL_INTR_FIRST 359
+#endif
+#if defined(NSS_DP_IPQ53XX)
+#define EDMA_INTR_MAX 37
+#define EDMA_RXFILL_INTR_FIRST 155
+#endif
+#if defined(NSS_DP_IPQ54XX)
+#define EDMA_INTR_MAX 37
+#define EDMA_RXFILL_INTR_FIRST 278
+#endif
+
+
+#define EDMA_INTR_FIELD_NUM 3
+static int32_t intr_map[EDMA_INTR_MAX][EDMA_INTR_FIELD_NUM];
+static bool intr_map_success;
+
 uint32_t edma_hang_recover = 0;
 
 /*
@@ -720,6 +738,14 @@ static int edma_of_get_pdata(struct resource *edma_res)
 			edma_debug("txmap[%d][%d] = %d\n", i, j,
 					edma_gbl_ctx.tx_map[i][j]);
 		}
+	}
+
+	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
+		"interrupts",
+		(int32_t *)intr_map,
+		EDMA_INTR_MAX * EDMA_INTR_FIELD_NUM);
+	if (!ret) {
+		intr_map_success = true;
 	}
 
 	/*
@@ -1673,6 +1699,19 @@ int edma_irq_init(void)
 
 	edma_debug("%s: misc IRQ:%u\n", (edma_gbl_ctx.device_node)->name,
 						edma_gbl_ctx.misc_intr);
+
+	if (intr_map_success) {
+		int tmp_entry_num = entry_num + 1;
+		if (intr_map[tmp_entry_num][1] == EDMA_RXFILL_INTR_FIRST) {
+			entry_num += 4;
+
+			edma_debug("found a match intr_map[%d]: < %d %d %d > \n",
+				tmp_entry_num, intr_map[tmp_entry_num][0],
+				intr_map[tmp_entry_num][1], intr_map[tmp_entry_num][2]);
+		} else {
+			edma_debug("No match at intr_map[%d]\n", tmp_entry_num);
+		}
+	}
 
 #ifdef NSS_DP_PPEDS_SUPPORT
 	/*
