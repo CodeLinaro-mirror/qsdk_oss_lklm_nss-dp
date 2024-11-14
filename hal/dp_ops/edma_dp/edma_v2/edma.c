@@ -1049,8 +1049,15 @@ static int edma_alloc_rings(struct edma_gbl_ctx *egc)
 		goto rx_rings_alloc_fail;
 	}
 
+	if (nss_dp_hal_cache_info_setup(egc)) {
+		edma_err("Error in writing data into the cache registers\n");
+		goto rings_alloc_fail;
+	}
+
 	return 0;
 
+rings_alloc_fail:
+	edma_cfg_rx_rings_cleanup(egc);
 rx_rings_alloc_fail:
 	edma_cfg_tx_rings_cleanup(egc);
 	return -ENOMEM;
