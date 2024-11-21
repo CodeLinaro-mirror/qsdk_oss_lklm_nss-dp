@@ -994,22 +994,20 @@ void edma_cfg_rx_rings_enable(struct edma_gbl_ctx *egc)
  * edma_cfg_rx_ring_en_mapped_queues()
  *	Enable / Disable the queues associated to the RX rings.
  */
-bool edma_cfg_rx_ring_en_mapped_queues(struct edma_gbl_ctx *egc, uint16_t ring_id, bool enable)
+bool edma_cfg_rx_ring_en_mapped_queues(struct edma_gbl_ctx *egc, uint32_t queue_id, uint32_t max_queues, bool enable)
 {
-	uint16_t ring_idx, queue_id, i;
+	uint32_t i;
 	sw_error_t ret;
 	a_bool_t en = enable;
 
-	ring_idx = ring_id - egc->rxdesc_ring_start;
-	for (i = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
-		queue_id = egc->rx_ring_queue_map[i][ring_idx];
-		ret = fal_qm_enqueue_ctrl_set(0, queue_id, en);
+	for (i = queue_id; i < (queue_id + max_queues); i++) {
+		ret = fal_qm_enqueue_ctrl_set(0, i, en);
 		if (ret != SW_OK) {
 			edma_err("%px: Failed queue operation en %d", egc, enable);
 			return false;
 		}
 
-		ret = fal_scheduler_dequeue_ctrl_set(0, queue_id, en);
+		ret = fal_scheduler_dequeue_ctrl_set(0, i, en);
 		if (ret != SW_OK) {
 			edma_err("%px: Failed dequeue operation en %d", egc, enable);
 			return false;
