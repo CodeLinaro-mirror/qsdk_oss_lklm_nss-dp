@@ -256,7 +256,7 @@ static void edma_cfg_rx_desc_loopback_ring_configure(struct edma_rxdesc_ring *rx
 {
 	uint32_t data;
 #ifdef EDMA_40BIT_SUPPORT
-	uint32_t paddr;
+	uint32_t paddr, saddr;
 #endif
 
 	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
