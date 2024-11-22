@@ -48,6 +48,10 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 	uint32_t end_idx;
 	uint32_t more_bit = 0;
 	struct netdev_queue *nq;
+#ifdef CONFIG_IO_COHERENCY
+	struct edma_txcmpl_desc *pf_desc;
+	uint32_t pf_cons_idx;
+#endif
 
 	cons_idx = txcmpl_ring->cons_idx;
 
@@ -92,12 +96,41 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 
 	skb_queue_head_init(&h);
 
+#ifdef CONFIG_IO_COHERENCY
+	if (likely(avail >= 5)) {
+		/*
+		 * Fetching the (5th (cons_idx + 4)) descriptor for prefetch purpose
+		 */
+		pf_cons_idx = ((cons_idx + 4) & EDMA_TX_RING_SIZE_MASK);
+		pf_desc = EDMA_TXCMPL_DESC(txcmpl_ring, pf_cons_idx);
+	}
+#endif
+
 	/*
 	 * TODO:
 	 * Instead of freeing the skb, it might be better to save and use
 	 * for Rxfill.
 	 */
 	while (likely(avail--)) {
+
+#ifdef CONFIG_IO_COHERENCY
+		if (likely(avail >= 5)) {
+			struct sk_buff *pf_skb;
+
+			/*
+			 * Prefetch 5th skb's 128B cache line from the current index
+			 */
+			pf_skb = (struct sk_buff *)EDMA_TXCMPL_OPAQUE_GET(pf_desc);
+			prefetch((uint8_t *)pf_skb + 128);
+
+			/*
+			 * Prefetch 6th descriptor's cache line from the current index
+			 */
+			pf_cons_idx = ((pf_cons_idx + 1) & EDMA_TX_RING_SIZE_MASK);
+			pf_desc = EDMA_TXCMPL_DESC(txcmpl_ring, pf_cons_idx);
+			prefetch(pf_desc);
+		}
+#endif
 
 		/*
 		 * The last descriptor holds the SKB pointer for scattered frames.
