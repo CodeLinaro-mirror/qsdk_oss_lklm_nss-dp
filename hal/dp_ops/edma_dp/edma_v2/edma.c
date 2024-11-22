@@ -60,11 +60,11 @@ MODULE_PARM_DESC(edma_dp_extension_en, "Enable VLAN Insert Functionality (1 for 
 #define EDMA_RXFILL_INTR_FIRST 359
 #endif
 #if defined(NSS_DP_IPQ53XX)
-#define EDMA_INTR_MAX 37
+#define EDMA_INTR_MAX 21
 #define EDMA_RXFILL_INTR_FIRST 155
 #endif
 #if defined(NSS_DP_IPQ54XX)
-#define EDMA_INTR_MAX 37
+#define EDMA_INTR_MAX 25
 #define EDMA_RXFILL_INTR_FIRST 278
 #endif
 
