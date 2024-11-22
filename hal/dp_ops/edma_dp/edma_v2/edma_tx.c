@@ -406,6 +406,14 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	}
 
 	/*
+	 * Set destination information in the descriptor
+	 */
+	EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
+	EDMA_DST_INFO_SET(txd, dp_dev->macid);
+
+	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
+
+	/*
 	 * Check if the packet needs TSO
 	 * This will be mostly true for SG packets.
 	 */
@@ -438,12 +446,6 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	}
 
 	/*
-	 * Set destination information in the descriptor
-	 */
-	EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
-	EDMA_DST_INFO_SET(txd, dp_dev->macid);
-
-	/*
 	 * Set the src info as destination dev in case if
 	 * port mirroring is enabled - to receive the packet back in
 	 * DP with valid source port.
@@ -451,8 +453,6 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 #if defined NSS_DP_PORT_MIRROR_EN
 	EDMA_SRC_INFO_SET(txd, dp_dev->macid);
 #endif
-
-	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
 }
 
 /*
@@ -473,6 +473,9 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	buf_len = skb_headlen(skb);
 
 	txd = EDMA_TXDESC_PRI_DESC(txdesc_ring, *hw_next_to_use);
+#ifdef CONFIG_IO_COHERENCY
+	prefetchw(txd);
+#endif
 
 	edma_tx_desc_init(txd);
 
@@ -486,7 +489,10 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
-	edma_dmac_clean_range_no_dsb((void *)skb->data, (void *)(skb->data + buf_len));
+	/*
+	 * Set packet length in the descriptor
+	 */
+	EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
 
 	if (dptxi) {
 		edma_tx_fill_vp_desc(dp_dev, txd, skb, dptxi);
@@ -494,10 +500,7 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 		edma_tx_fill_pp_desc(dp_dev, txd, skb, stats);
 	}
 
-	/*
-	 * Set packet length in the descriptor
-	 */
-	EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
+	edma_dmac_clean_range_no_dsb((void *)skb->data, (void *)(skb->data + buf_len));
 
 	*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK;
 
