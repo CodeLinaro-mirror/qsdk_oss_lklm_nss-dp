@@ -412,11 +412,6 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		dma_addr_t buff_addr;
 
 		/*
-		 * Get RXFILL descriptor
-		 */
-		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, prod_idx);
-
-		/*
 		 * Detach the current SKB to use from the list,
 		 * and prefetch the next SKB's cache lines.
 		 */
@@ -460,6 +455,18 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		}
 
 		/*
+		 * Get RXFILL descriptor
+		 */
+		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, prod_idx);
+#ifdef CONFIG_IO_COHERENCY
+		/*
+		 * With CONFIG_IO_COHERENCY, the Rxfill descriptors are cacheable.
+		 * Prefetch the Rxfill descriptor.
+		 */
+		prefetchw(rxfill_desc);
+#endif
+
+		/*
 		 * Set up Buffer high address.
 		 */
 		EDMA_RXFILL_BUFFER_ADDR_SET(rxfill_desc, buff_addr);
@@ -481,6 +488,11 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		EDMA_RXFILL_PACKET_LEN_SET(rxfill_desc, ((uint32_t)(buf_len) & EDMA_RXFILL_BUF_SIZE_MASK));
 
 		/*
+		 * Perform endianness conversion before writing to HW
+		 */
+		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
+
+		/*
 		 * Invalidate skb->data
 		 * A73 flush operation does an invalidate operation as well.
 		 * If the packet is fast transmitted and hence fast recycled,
@@ -497,11 +509,6 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		skb->fast_recycled = 0;
 
 		prod_idx = (prod_idx + 1) & EDMA_RX_RING_SIZE_MASK;
-
-		/*
-		 * Perform endianness conversion before writing to HW
-		 */
-		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
 	}
 
 	if (likely(num_alloc)) {
