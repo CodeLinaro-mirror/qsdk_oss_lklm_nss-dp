@@ -1152,9 +1152,9 @@ send_to_vp:
 static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 		struct edma_rxdesc_ring *rxdesc_ring,
 		struct edma_rxdesc_desc *rxdesc_desc,
+		struct nss_dp_dev *dp_dev,
 		struct sk_buff *skb)
 {
-	struct nss_dp_dev *dp_dev;
 	struct edma_pcpu_stats *pcpu_stats;
 	struct edma_rx_stats *rx_stats;
 	struct nss_dp_vp_rx_info vprxi;
@@ -1165,7 +1165,6 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	/*
 	 * Get stats for the netdevice
 	 */
-	dp_dev = netdev_priv(skb->dev);
 	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
 	rx_stats = this_cpu_ptr(pcpu_stats->rx_stats);
 
@@ -1783,11 +1782,15 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 			 */
 			if (likely(work_to_do >= 3)) {
 				struct sk_buff *pf_skb;
+				void *data;
+
 				pf_skb = (struct sk_buff *)EDMA_RXDESC_OPAQUE_GET(pf_desc);
+				data = phys_to_virt(EDMA_RXDESC_BUFFER_ADDR_GET(pf_desc));
 				prefetch(pf_skb);
 				prefetch((uint8_t *)pf_skb + 64);
 				prefetch((uint8_t *)pf_skb + 128);
 				prefetch((uint8_t *)pf_skb + 192);
+				prefetch((uint8_t *)data);
 				cons_idx_2 = (cons_idx_2 + 1) & EDMA_RX_RING_SIZE_MASK;
 
 				pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
@@ -1805,13 +1808,17 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 			 * Handle linear packets
 			 */
 			if (likely(!EDMA_RXDESC_MORE_BIT_GET(rxdesc_desc))) {
-				if (likely(edma_rx_handle_linear_packets(egc, rxdesc_ring, rxdesc_desc, skb))) {
+				struct nss_dp_dev *dp_dev = netdev_priv(skb->dev);
+
+				if (likely(edma_rx_handle_linear_packets(egc, rxdesc_ring, rxdesc_desc, dp_dev, skb))) {
 					if (unlikely(ndev->features & NETIF_F_GRO)) {
 						skb->protocol = eth_type_trans(skb, ndev);
 						napi_gro_receive(&rxdesc_ring->napi, skb);
+					} else if (test_bit(__NSS_DP_NO_LIST, &dp_dev->flags)) {
+						skb->protocol = eth_type_trans(skb, skb->dev);
+						netif_receive_skb(skb);
 					} else {
 						list_add_tail(&skb->list, &rx_list);
-
 					}
 				}
 				goto next_rx_desc;
