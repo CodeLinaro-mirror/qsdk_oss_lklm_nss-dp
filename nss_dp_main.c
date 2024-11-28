@@ -989,6 +989,8 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	nss_dp_switchdev_setup(netdev);
 #endif
 
+	nss_dp_hal_init_soc_priv_flags(dp_priv);
+
 	ret = nss_dp_of_get_pdata(np, netdev, &gmac_hal_pdata);
 	if (ret != 0) {
 		goto fail;
@@ -1157,6 +1159,8 @@ static int nss_dp_remove(struct platform_device *pdev)
 #ifdef CONFIG_NET_SWITCHDEV
 		nss_dp_switchdev_cleanup(dp_priv->netdev);
 #endif
+
+		nss_dp_hal_deinit_soc_priv_flags(dp_priv);
 
 		/*
 		 * Execution of unregister_netdev may access statistics of the

@@ -40,6 +40,24 @@ struct nss_dp_data_plane_ops *nss_dp_hal_get_data_plane_ops(void)
 }
 
 /*
+ * nss_dp_hal_deinit_soc_priv_flags()
+ *	API to de-initialize DP DEV flags field
+ */
+void nss_dp_hal_deinit_soc_priv_flags(struct nss_dp_dev *dp_priv)
+{
+	return;
+}
+
+/*
+ * nss_dp_hal_init_soc_priv_flags()
+ *	API to initialize DP DEV flags field
+ */
+void nss_dp_hal_init_soc_priv_flags(struct nss_dp_dev *dp_priv)
+{
+	return;
+}
+
+/*
  * nss_dp_hal_clock_set_and_enable()
  *	API to set and enable the EDMA common clocks
  */
