@@ -339,7 +339,7 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 		 * Make sure the information written to the descriptors
 		 * is updated before writing to the hardware.
 		 */
-		dsb(st);
+		edma_dsb();
 
 		edma_reg_write(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id),
 								prod_idx);
@@ -412,11 +412,6 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		dma_addr_t buff_addr;
 
 		/*
-		 * Get RXFILL descriptor
-		 */
-		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, prod_idx);
-
-		/*
 		 * Detach the current SKB to use from the list,
 		 * and prefetch the next SKB's cache lines.
 		 */
@@ -456,8 +451,20 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 			page_addr = page_address(pg);
 			buff_addr = (dma_addr_t)virt_to_phys(page_addr);
 			skb_fill_page_desc(skb, 0, pg, 0, PAGE_SIZE);
-			dmac_inv_range_no_dsb(page_addr, (page_addr + PAGE_SIZE));
+			edma_dmac_inv_range_no_dsb(page_addr, (page_addr + PAGE_SIZE));
 		}
+
+		/*
+		 * Get RXFILL descriptor
+		 */
+		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, prod_idx);
+#ifdef CONFIG_IO_COHERENCY
+		/*
+		 * With CONFIG_IO_COHERENCY, the Rxfill descriptors are cacheable.
+		 * Prefetch the Rxfill descriptor.
+		 */
+		prefetchw(rxfill_desc);
+#endif
 
 		/*
 		 * Set up Buffer high address.
@@ -481,6 +488,11 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		EDMA_RXFILL_PACKET_LEN_SET(rxfill_desc, ((uint32_t)(buf_len) & EDMA_RXFILL_BUF_SIZE_MASK));
 
 		/*
+		 * Perform endianness conversion before writing to HW
+		 */
+		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
+
+		/*
 		 * Invalidate skb->data
 		 * A73 flush operation does an invalidate operation as well.
 		 * If the packet is fast transmitted and hence fast recycled,
@@ -488,7 +500,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		 * time of previous transmit
 		 */
 		if (unlikely(!skb->fast_recycled)) {
-			dmac_inv_range_no_dsb((void *)skb->data,
+			edma_dmac_inv_range_no_dsb((void *)skb->data,
 					      (void *)(skb->data + rx_alloc_size -
 					      EDMA_RX_SKB_HEADROOM -
 					      NET_IP_ALIGN));
@@ -497,11 +509,6 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		skb->fast_recycled = 0;
 
 		prod_idx = (prod_idx + 1) & EDMA_RX_RING_SIZE_MASK;
-
-		/*
-		 * Perform endianness conversion before writing to HW
-		 */
-		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
 	}
 
 	if (likely(num_alloc)) {
@@ -510,7 +517,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		 * Make sure the information written to the descriptors
 		 * is updated before writing to the hardware.
 		 */
-		dsb(st);
+		edma_dsb();
 
 		edma_reg_write(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id),
 								prod_idx);
@@ -846,7 +853,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 		/*
 		 * Invalidate the buffer received from the HW
 		 */
-		dmac_inv_range((void *)skb->data,
+		edma_dmac_inv_range((void *)skb->data,
 				(void *)(skb->data + pkt_length));
 
 		if (!(rxdesc_ring->head)) {
@@ -886,7 +893,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 	 * Manage fragments for page mode
 	 */
 	frag = &skb_shinfo(skb)->frags[0];
-	dmac_inv_range((void *)skb_frag_page(frag), (void *)(skb_frag_page(frag) + pkt_length));
+	edma_dmac_inv_range((void *)skb_frag_page(frag), (void *)(skb_frag_page(frag) + pkt_length));
 
 	if (!(rxdesc_ring->head)) {
 		skb->len = pkt_length;
@@ -1182,7 +1189,7 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 		/*
 		 * Invalidate the buffer received from the HW
 		 */
-		dmac_inv_range((void *)skb->data,
+		edma_dmac_inv_range((void *)skb->data,
 				(void *)(skb->data + pkt_length));
 		skb_put(skb, pkt_length);
 		goto send_to_stack;
@@ -1192,7 +1199,7 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	 * Handle linear packet in page mode
 	 */
 	frag = &skb_shinfo(skb)->frags[0];
-	dmac_inv_range((void *)skb_frag_page(frag),
+	edma_dmac_inv_range((void *)skb_frag_page(frag),
 			(void *)(skb_frag_page(frag) + pkt_length));
 	skb_add_rx_frag(skb, 0, skb_frag_page(frag), 0, pkt_length, PAGE_SIZE);
 
@@ -1710,18 +1717,18 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 	 * that'll be processed.
 	 */
 	if (end_idx > cons_idx) {
-		dmac_inv_range_no_dsb((void *)rxdesc_desc,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
 			(void *)(rxdesc_desc + work_to_do));
-		dmac_inv_range_no_dsb((void *)rxdesc_sec,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_sec,
 			(void *)(rxdesc_sec + work_to_do));
 	} else {
-		dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
 			(void *)(rxdesc_ring->pdesc + end_idx));
-		dmac_inv_range_no_dsb((void *)rxdesc_ring->sdesc,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->sdesc,
 			(void *)(rxdesc_ring->sdesc + end_idx));
-		dmac_inv_range_no_dsb((void *)rxdesc_desc,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
 			(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
-		dmac_inv_range_no_dsb((void *)rxdesc_sec,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_sec,
 			(void *)(rxdesc_ring->sdesc + EDMA_RX_RING_SIZE));
 	}
 

@@ -1229,12 +1229,11 @@ int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 
 	/*
 	 * If the ring reset is supported,
-	 * Enable the queues that are disabled at the time of inst stop.
+	 * Enable the PPE-DS node queues that are disabled at the time of inst stop.
 	 */
 	if (edma_dp_per_ring_reset_support()) {
-		if (!edma_cfg_rx_ring_en_mapped_queues(egc, ppeds_node->rx_ring.ring_id, true)) {
-			edma_err("%px: Failed to enable the queue", ppeds_node);
-			return 0;
+		if (!edma_cfg_rx_ring_en_mapped_queues(egc, ppeds_node->ppe_qid, ppeds_node->ppe_num_queues, true)) {
+			edma_err("%px: Failed to enable the queue in PPE-DS start%d qid \n", ppeds_node, ppeds_node->ppe_qid);
 		}
 	}
 
@@ -1291,9 +1290,8 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 		 * Disable the PPE queues corresponding to RX ring to stop the incoming
 		 * traffic on the ring.
 		 */
-		if (!edma_cfg_rx_ring_en_mapped_queues(gbl_ctx, ppeds_node->rx_ring.ring_id, false)) {
-			edma_err("%px: Failed to disable the queue", ppeds_node);
-			return;
+		if (!edma_cfg_rx_ring_en_mapped_queues(gbl_ctx, ppeds_node->ppe_qid, ppeds_node->ppe_num_queues, false)) {
+			edma_err("%px: Failed to disable the queue in PPE-DS stop %d queue id", ppeds_node, ppeds_node->ppe_qid);
 		}
 	}
 

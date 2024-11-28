@@ -48,6 +48,10 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 	uint32_t end_idx;
 	uint32_t more_bit = 0;
 	struct netdev_queue *nq;
+#ifdef CONFIG_IO_COHERENCY
+	struct edma_txcmpl_desc *pf_desc;
+	uint32_t pf_cons_idx;
+#endif
 
 	cons_idx = txcmpl_ring->cons_idx;
 
@@ -82,15 +86,25 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 	txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
 
 	if (end_idx > cons_idx) {
-		dmac_inv_range_no_dsb((void *)txcmpl, txcmpl + avail);
+		edma_dmac_inv_range_no_dsb((void *)txcmpl, txcmpl + avail);
 	} else {
-		dmac_inv_range_no_dsb(txcmpl_ring->desc, txcmpl_ring->desc + end_idx);
-		dmac_inv_range_no_dsb((void *)txcmpl, txcmpl_ring->desc + EDMA_TX_RING_SIZE);
+		edma_dmac_inv_range_no_dsb(txcmpl_ring->desc, txcmpl_ring->desc + end_idx);
+		edma_dmac_inv_range_no_dsb((void *)txcmpl, txcmpl_ring->desc + EDMA_TX_RING_SIZE);
 	}
 
 	dsb(st);
 
 	skb_queue_head_init(&h);
+
+#ifdef CONFIG_IO_COHERENCY
+	if (likely(avail >= 5)) {
+		/*
+		 * Fetching the (5th (cons_idx + 4)) descriptor for prefetch purpose
+		 */
+		pf_cons_idx = ((cons_idx + 4) & EDMA_TX_RING_SIZE_MASK);
+		pf_desc = EDMA_TXCMPL_DESC(txcmpl_ring, pf_cons_idx);
+	}
+#endif
 
 	/*
 	 * TODO:
@@ -98,6 +112,25 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 	 * for Rxfill.
 	 */
 	while (likely(avail--)) {
+
+#ifdef CONFIG_IO_COHERENCY
+		if (likely(avail >= 5)) {
+			struct sk_buff *pf_skb;
+
+			/*
+			 * Prefetch 5th skb's 128B cache line from the current index
+			 */
+			pf_skb = (struct sk_buff *)EDMA_TXCMPL_OPAQUE_GET(pf_desc);
+			prefetch((uint8_t *)pf_skb + 128);
+
+			/*
+			 * Prefetch 6th descriptor's cache line from the current index
+			 */
+			pf_cons_idx = ((pf_cons_idx + 1) & EDMA_TX_RING_SIZE_MASK);
+			pf_desc = EDMA_TXCMPL_DESC(txcmpl_ring, pf_cons_idx);
+			prefetch(pf_desc);
+		}
+#endif
 
 		/*
 		 * The last descriptor holds the SKB pointer for scattered frames.
@@ -323,7 +356,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
-		dmac_clean_range_no_dsb((void *)skb_frag_address(frag),
+		edma_dmac_clean_range_no_dsb((void *)skb_frag_address(frag),
 				(void *)(skb_frag_address(frag) + buf_len));
 
 		EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
@@ -344,12 +377,12 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 	 * Need to flush all the descriptors but last-one that we filled as well.
 	 */
 	if (end_idx > start_idx) {
-		dmac_clean_range_no_dsb((void *)(*txdesc),
+		edma_dmac_clean_range_no_dsb((void *)(*txdesc),
 				((*txdesc) + num_descs));
 	} else {
-		dmac_clean_range_no_dsb(txdesc_ring->pdesc,
+		edma_dmac_clean_range_no_dsb(txdesc_ring->pdesc,
 				txdesc_ring->pdesc + end_idx);
-		dmac_clean_range_no_dsb((void *)(*txdesc),
+		edma_dmac_clean_range_no_dsb((void *)(*txdesc),
 				txdesc_ring->pdesc + EDMA_TX_RING_SIZE);
 	}
 
@@ -406,6 +439,14 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	}
 
 	/*
+	 * Set destination information in the descriptor
+	 */
+	EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
+	EDMA_DST_INFO_SET(txd, dp_dev->macid);
+
+	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
+
+	/*
 	 * Check if the packet needs TSO
 	 * This will be mostly true for SG packets.
 	 */
@@ -438,12 +479,6 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	}
 
 	/*
-	 * Set destination information in the descriptor
-	 */
-	EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
-	EDMA_DST_INFO_SET(txd, dp_dev->macid);
-
-	/*
 	 * Set the src info as destination dev in case if
 	 * port mirroring is enabled - to receive the packet back in
 	 * DP with valid source port.
@@ -451,8 +486,6 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 #if defined NSS_DP_PORT_MIRROR_EN
 	EDMA_SRC_INFO_SET(txd, dp_dev->macid);
 #endif
-
-	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
 }
 
 /*
@@ -473,6 +506,9 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	buf_len = skb_headlen(skb);
 
 	txd = EDMA_TXDESC_PRI_DESC(txdesc_ring, *hw_next_to_use);
+#ifdef CONFIG_IO_COHERENCY
+	prefetchw(txd);
+#endif
 
 	edma_tx_desc_init(txd);
 
@@ -486,7 +522,10 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
-	dmac_clean_range_no_dsb((void *)skb->data, (void *)(skb->data + buf_len));
+	/*
+	 * Set packet length in the descriptor
+	 */
+	EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
 
 	if (dptxi) {
 		edma_tx_fill_vp_desc(dp_dev, txd, skb, dptxi);
@@ -494,10 +533,7 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 		edma_tx_fill_pp_desc(dp_dev, txd, skb, stats);
 	}
 
-	/*
-	 * Set packet length in the descriptor
-	 */
-	EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
+	edma_dmac_clean_range_no_dsb((void *)skb->data, (void *)(skb->data + buf_len));
 
 	*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK;
 
@@ -573,7 +609,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
-			dmac_clean_range_no_dsb((void *)iter_skb->data,
+			edma_dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
 
 			EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
@@ -615,12 +651,12 @@ skip_primary:
 		 * This may result double flush if fraglist iter_skb has nr_frags which is rare.
 		 */
 		if (end_idx > start_idx) {
-			dmac_clean_range_no_dsb((void *)(start_desc),
+			edma_dmac_clean_range_no_dsb((void *)(start_desc),
 					((start_desc) + num_sg_frag_list));
 		} else {
-			dmac_clean_range_no_dsb(txdesc_ring->pdesc,
+			edma_dmac_clean_range_no_dsb(txdesc_ring->pdesc,
 					txdesc_ring->pdesc + end_idx);
-			dmac_clean_range_no_dsb((void *)(start_desc),
+			edma_dmac_clean_range_no_dsb((void *)(start_desc),
 					txdesc_ring->pdesc + EDMA_TX_RING_SIZE);
 		}
 
@@ -787,7 +823,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	/*
 	 * Flush the last descriptor.
 	 */
-	dmac_clean_range_no_dsb(txdesc, txdesc + 1);
+	edma_dmac_clean_range_no_dsb(txdesc, txdesc + 1);
 
 	/*
 	 * Update producer index
@@ -804,7 +840,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	 * Make sure the information written to the descriptors
 	 * is updated before writing to the hardware.
 	 */
-	dsb(st);
+	edma_dsb();
 
 	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id),
 			txdesc_ring->prod_idx);
