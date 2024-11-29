@@ -89,6 +89,19 @@ int32_t nss_dp_hal_clock_set_and_enable(struct device *dev, const char *id, unsi
 }
 
 /*
+ * nss_dp_hal_cache_info_setup()
+ *	Dummy wrap-around function.
+ *	Returns 0: success
+ */
+int nss_dp_hal_cache_info_setup(void *ctx)
+{
+	struct edma_gbl_ctx *egc = (struct edma_gbl_ctx *)ctx;
+
+	egc->cache_data = NULL;
+	return 0;
+}
+
+/*
  * nss_dp_hal_configure_clocks()
  *	configure the EDMA clock's.
  */

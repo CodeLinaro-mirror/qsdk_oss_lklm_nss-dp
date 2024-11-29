@@ -313,6 +313,8 @@ struct edma_gbl_ctx {
 			/* Rx Descriptor ring per-core mapping from device tree */
 	uint32_t (*rxdesc_ring_to_queue_bm)[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT];
 			/* Bitmap of mapped PPE queue ids of the Rx descriptor rings */
+	uint32_t *cache_data;
+			/* pointer to EDMA descriptor rings cache register data */
 	int32_t tx_to_txcmpl_map[EDMA_MAX_TXDESC_RINGS];
 			/* Tx ring to Tx complete ring mapping */
 	int32_t tx_map[EDMA_MAX_TX_PORTS][NR_CPUS];

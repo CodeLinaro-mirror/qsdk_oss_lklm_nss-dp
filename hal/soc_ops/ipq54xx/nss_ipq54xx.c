@@ -21,6 +21,7 @@
 #include "nss_dp_hal.h"
 
 #ifdef CONFIG_IO_COHERENCY
+#include "edma_regs.h"
 #include <linux/tmelcom_ipc.h>
 #include <linux/of_platform.h>
 #include <linux/of_address.h>
@@ -228,6 +229,96 @@ int32_t nss_dp_hal_clock_set_and_enable(struct device *dev, const char *id, unsi
 		return -1;
 	}
 
+	return 0;
+}
+
+#ifdef CONFIG_IO_COHERENCY
+/*
+ * nss_dp_hal_configure_llc()
+ *	Writes into the EDMA Descriptor rings cache registers.
+ */
+static int nss_dp_hal_configure_llc(struct edma_gbl_ctx *egc, struct device_node *np)
+{
+	int ring_idx, count, ret;
+
+	/*
+	 * Read the number of elements.
+	 */
+	count = of_property_count_u32_elems(np, "cache_val");
+	if (!count) {
+		pr_err("%px: Invalid entries obtained from the DTSI\n", np);
+		return -EINVAL;
+	}
+
+	/*
+	 * Allocate memory for reading cache
+	 * register data from DTSI.
+	 */
+	egc->cache_data = vmalloc(sizeof(u32) * count);
+	if (!egc->cache_data) {
+		pr_err("%px: Failed to allocate memory for reading cache register data\n", np);
+		return -EINVAL;
+	}
+
+	/*
+	 * Read the cache register data
+	 * from the DTSI.
+	 */
+	ret = of_property_read_u32_array(np, "cache_val", egc->cache_data, count);
+	if (ret) {
+		pr_err("%px: Error in fetching the data for cache Registers\n", np);
+		goto fail;
+	}
+
+	/*
+	 * Write the data into cache registers
+	 */
+	for (ring_idx = 0; ring_idx < EDMA_MAX_RXDESC_RINGS; ring_idx++) {
+		edma_reg_write(EDMA_REG_RXDESC_CACHE(ring_idx), egc->cache_data[0]);
+	}
+
+	for (ring_idx = 0; ring_idx < EDMA_MAX_TXCMPL_RINGS; ring_idx++) {
+		edma_reg_write(EDMA_REG_TXCMPL_CACHE(ring_idx), egc->cache_data[1]);
+	}
+
+	edma_reg_write(EDMA_REG_CACHEINDEX_LUT, egc->cache_data[2]);
+	edma_reg_write(EDMA_REG_AXCACHE_OVERRIDE, egc->cache_data[3]);
+	edma_reg_write(EDMA_REG_AXIW_CTRL, egc->cache_data[4]);
+	vfree(egc->cache_data);
+	return 0;
+
+fail:
+	vfree(egc->cache_data);
+	return ret;
+}
+#endif
+
+/*
+ * nss_dp_hal_cache_info_setup()
+ *	Setup the Descriptor rings cache data
+ *	from the DTSI.
+ *
+ * Returns 0: success and a negative error code on failure.
+ */
+int nss_dp_hal_cache_info_setup(void *ctx)
+{
+	struct edma_gbl_ctx *egc = (struct edma_gbl_ctx *)ctx;
+	egc->cache_data = NULL;
+
+#ifdef CONFIG_IO_COHERENCY
+	struct platform_device *pdev = egc->pdev;
+	struct device_node *np = (&pdev->dev)->of_node;
+	struct device_node *child = NULL;
+
+	for_each_available_child_of_node(np, child) {
+		/*
+		 * Read the EDMA Descriptor rings cache register data
+		 * defined in the DTSI.
+		 */
+		if (!of_property_match_string(child, "prop-name", "llcc_cache"))
+			return nss_dp_hal_configure_llc(egc, child);
+	}
+#endif
 	return 0;
 }
 

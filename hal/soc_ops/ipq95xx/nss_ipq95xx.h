@@ -151,6 +151,7 @@ extern bool nss_dp_hal_nsm_sawf_sc_stats_read(struct nss_dp_hal_nsm_sawf_sc_stat
 extern int32_t nss_dp_hal_clock_set_and_enable(struct device *dev, const char *id, unsigned long rate);
 extern struct nss_dp_data_plane_ops nss_dp_edma_ops;
 extern int32_t nss_dp_hal_configure_clocks(void *ctx);
+extern int nss_dp_hal_cache_info_setup(void *ctx);
 extern int32_t nss_dp_hal_hw_reset(void *ctx);
 #ifdef NSS_DP_PPEDS_SUPPORT
 extern struct nss_dp_ppeds_ops edma_ppeds_ops;
