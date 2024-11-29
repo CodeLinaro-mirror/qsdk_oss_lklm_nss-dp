@@ -116,6 +116,7 @@ ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES
 ccflags-y += -DNSS_DP_EDMA_MHT_SW_WITH_VP_RING
 ccflags-y += -DNSS_DP_EDMA_FLOW_COOKIE_SUPPORT
 ccflags-y += -DNSS_DP_EDMA_RING_RESET
+ccflags-y += -DNSS_DP_EDMA_LOOPBACK_BUF_CONFIG
 endif
 
 ifeq ($(higher-address-support),y)
