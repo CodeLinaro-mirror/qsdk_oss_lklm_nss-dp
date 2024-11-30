@@ -27,6 +27,7 @@
 #include "edma.h"
 #include "edma_debug.h"
 #include "edma_regs.h"
+#include "edma_cfg_rx.h"
 #include "nss_dp_dev.h"
 
 extern nss_dp_vp_rx_cb_t nss_dp_vp_rx_reg_cb;
@@ -354,14 +355,14 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
  * edma_rx_alloc_buffer_list()
  *	Write a given list of Rx buffers to the Rx fill ring
  */
-static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring, int alloc_count)
+static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring, int reap_count)
 {
 	struct edma_rxfill_desc *rxfill_desc;
 	struct edma_rx_fill_stats *rxfill_stats = &rxfill_ring->rx_fill_stats;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	struct list_head rx_skb_alloc;
 	uint16_t prod_idx, start_idx, cons_idx;
-	uint16_t num_alloc = 0;
+	uint16_t num_alloc = 0, alloc_count;
 	uint16_t avail_desc = 0;
 	uint32_t rx_alloc_size = rxfill_ring->alloc_size;
 	uint32_t buf_len = rxfill_ring->buf_len;
@@ -387,6 +388,8 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 				       &rxfill_ring->rx_fill_stats.ring_stats);
 	}
 
+	rxfill_ring->num_rxfill_pending += reap_count;
+	alloc_count = rxfill_ring->num_rxfill_pending;
 	while (likely(alloc_count--)) {
 		struct sk_buff *skb_alloc;
 
@@ -404,6 +407,8 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 			u64_stats_update_end(&rxfill_stats->syncp);
 		}
 	}
+
+	rxfill_ring->num_rxfill_pending -= num_alloc;
 
 	while (likely(!list_empty(&rx_skb_alloc))) {
 		void *page_addr = NULL;
@@ -1670,10 +1675,11 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 	struct edma_rxdesc_desc *rxdesc_desc, *pf_desc = NULL;
 	struct edma_rxdesc_sec_desc *rxdesc_sec;
 	struct edma_rx_desc_stats *rxdesc_stats = &rxdesc_ring->rx_desc_stats;
-	uint32_t work_to_do, work_done = 0;
+	uint32_t work_to_do, work_done = 0, num_alloc, num_reap;
 	uint16_t prod_idx, cons_idx, end_idx;
 	uint16_t cons_idx_1, cons_idx_2;
 	struct sk_buff *cur_skb = NULL, *next_skb = NULL;
+	struct edma_rxfill_ring *rxfill_ring;
 	struct list_head rx_list;
 	INIT_LIST_HEAD(&rx_list);
 
@@ -1734,7 +1740,9 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 	/*
 	 * TODO: Handle refill failures using retry
 	 */
-	edma_rx_alloc_buffer_list(rxdesc_ring->rxfill, work_to_do);
+	rxfill_ring = rxdesc_ring->rxfill;
+	num_reap = work_to_do;
+	num_alloc = edma_rx_alloc_buffer_list(rxfill_ring, work_to_do);
 
 	/*
 	 * Prefetch upto 3 Rx descriptors.
@@ -1882,6 +1890,13 @@ next_rx_desc:
 		netif_receive_skb(cur_skb);
 	}
 
+	if (unlikely(rxfill_ring->num_rxfill_pending >=
+			(EDMA_RX_RING_SIZE - EDMA_RXFILL_UGT_THRESHOLD))) {
+
+		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
+				egc->rxfill_intr_mask);
+	}
+
 	return work_done;
 }
 
@@ -1987,6 +2002,87 @@ irqreturn_t edma_rx_handle_irq(int irq, void *ctx)
 }
 
 /*
+ * edma_rxfill_intr_timer()
+ *	Delayed rx-fill interrupt timer.
+ */
+void edma_rxfill_intr_timer(struct timer_list *tm)
+{
+	struct edma_rxfill_ring *rxfill_ring = from_timer(rxfill_ring, tm, delayed_intr);
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+
+	/*
+	 * Being called from a delayed timer, reset the rxfill interrupt attempts
+	 * to allow interrupts to try to replenish buffers until the max attempt.
+	 */
+	rxfill_ring->rxfill_intr_attempt = 0;
+	edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id), egc->rxfill_intr_mask);
+}
+
+/*
+ * edma_rxfill_napi_poll()
+ *	EDMA RXfill NAPI handler
+ */
+int edma_rxfill_napi_poll(struct napi_struct *napi, int budget)
+{
+	struct edma_rxfill_ring *rxfill_ring = (struct edma_rxfill_ring *)napi;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	int32_t work_done = 0;
+	uint32_t refill_attempt = 0;
+
+	/*
+	 * We try maximum descriptor re-fill to avoid getting into low
+	 * threshold interrupt repeatedly. For a lower budget, the hardware
+	 * consumes all the available buffers in rx-fill ring and raise subsequent
+	 * low threshold interrrupt immediately without allowing rx-reap to proceed.
+	 */
+	do {
+		edma_rx_alloc_buffer(rxfill_ring, 0);
+		if (likely(!rxfill_ring->num_rxfill_pending)) {
+			break;
+		}
+
+		/*
+		 * In low memory situations, the allocation may fail.
+		 * Return after certain number of retry to allow other NAPIs to get processed.
+		 */
+		refill_attempt++;
+	} while (likely(refill_attempt < EDMA_RXFILL_ONE_INTR_ATTEMPT_MAX));
+
+	/*
+	 * Either all the empty buffers are replenished or we exhausted maximum
+	 * retry attempts. Finish NAPI processing and let HW generate another
+	 * low threshold interrupt if we still remain out of empty buffers.
+	 */
+	napi_complete(napi);
+
+	/*
+	 * Maintain a state to detect rx-fill urg interrupt flood.
+	 * Count for how many interrupts we are not able to completely
+	 * replenish the rx-fill ring.
+	 */
+	if (unlikely(rxfill_ring->num_rxfill_pending)) {
+		rxfill_ring->rxfill_intr_attempt++;
+	} else {
+		rxfill_ring->rxfill_intr_attempt = 0;
+	}
+
+	/*
+	 * Set RXFILL ring interrupt mask if
+	 *
+	 * During flood leave low threshold interrupt disabled and reenable
+	 * it through a timer after a while to allow system to recover from
+	 * a temporary OOM situation.
+	 */
+	if (rxfill_ring->rxfill_intr_attempt < EDMA_RXFILL_INTR_ATTEMPT_MAX) {
+		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id), egc->rxfill_intr_mask);
+	} else {
+		mod_timer(&rxfill_ring->delayed_intr, jiffies + msecs_to_jiffies(EDMA_RXFILL_DELAY_INTR_MS));
+	}
+
+	return work_done;
+}
+
+/*
  * edma_rx_phy_tstamp_buf()
  *	Receive skb for PHY timestamping
  */
@@ -2022,7 +2118,6 @@ bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buf
 	return false;
 }
 
-#ifdef NSS_DP_PPEDS_SUPPORT
 /*
  * edma_rxfill_handle_irq()
  *	Process RXFill IRQ and schedule napi
@@ -2035,14 +2130,12 @@ irqreturn_t edma_rxfill_handle_irq(int irq, void *ctx)
 
 	if (likely(napi_schedule_prep(&rxfill_ring->napi))) {
 
-		/*
-		 * Disable Rxfill interrupt
-		 */
-		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
-							EDMA_MASK_INT_DISABLE);
 		__napi_schedule(&rxfill_ring->napi);
 	}
 
+	/*
+	 * Disable Rxfill interrupt
+	 */
+	edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id), EDMA_MASK_INT_DISABLE);
 	return IRQ_HANDLED;
 }
-#endif

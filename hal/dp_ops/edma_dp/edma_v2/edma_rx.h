@@ -404,17 +404,19 @@ struct edma_rxfill_desc {
  * RxFill ring
  */
 struct edma_rxfill_ring {
-#ifdef NSS_DP_PPEDS_SUPPORT
 	struct napi_struct napi;	/* Napi structure */
-#endif
 	uint32_t ring_id;		/* RXFILL ring number */
 	uint32_t count;			/* number of descriptors in the ring */
 	uint32_t prod_idx;		/* Ring producer index */
 	uint32_t alloc_size;		/* Buffer size to allocate */
+	uint32_t num_rxfill_pending;	/* Number of allocation pending */
 	struct edma_rxfill_desc *desc;	/* descriptor ring virtual address */
 	dma_addr_t dma;			/* descriptor ring physical address */
 	uint32_t buf_len;		/* Buffer length for rxfill descriptor */
+	uint32_t rxfill_intr_attempt;	/* Number of rxfill attempt through interrupt */
+	struct timer_list delayed_intr; /* Timer used to delay the low threshold interrupt */
 	bool page_mode;			/* Page mode for Rx processing */
+	bool napi_added;		/* Flag to indicate NAPI add status */
 	struct edma_rx_fill_stats rx_fill_stats;
 					/* Rx fill ring statistics */
 };
@@ -457,6 +459,8 @@ void edma_rx_free_buffer_loopback(void);
 bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_napi_poll(struct napi_struct *napi, int budget);
+int edma_rxfill_napi_poll(struct napi_struct *napi, int budget);
+void edma_rxfill_intr_timer(struct timer_list *tm);
 bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buff *skb, void *sc_data);
 int edma_rx_napi_capwap_poll(struct napi_struct *napi, int budget);
 
