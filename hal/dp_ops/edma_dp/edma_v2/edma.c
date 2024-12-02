@@ -2300,14 +2300,14 @@ int edma_vlan_append_handler(struct ctl_table *table, int write,
 
 	token = strsep(&work_str, " ");
 	if(!token) {
-		edma_err("Invalid vlan_tag_info, Enter valid info, "
+		edma_err("Unconfigured vlan_tag_info, Enter valid info, "
 			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n");
 		dev_put(dev);
 		memset(edma_vlan_append_info, 0, sizeof(edma_vlan_append_info));
 		return -EINVAL;
 	}
 
-	if (kstrtol(token, base, &result)) {
+	if(kstrtou32(token, 0, &vlan_tag_info)) {
 		edma_err("Invalid vlan_tag_info: %s, Enter valid info, "
 			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n", token);
 		dev_put(dev);
@@ -2315,12 +2315,11 @@ int edma_vlan_append_handler(struct ctl_table *table, int write,
 		return -EINVAL;
 	}
 
-	vlan_tag_info = (uint32_t)result;
 	edma_debug("VLAN_TAG_INFO: 0x%x\n", vlan_tag_info);
 
 	token = strsep(&work_str, " ");
 	if(!token) {
-		edma_err("Invalid ether_type_0, Enter valid info, "
+		edma_err("Unconfigured ether_type_0, Enter valid info, "
 			"Usage: echo 'E/D <WAN_INTF> <VLAN_TAG in Binary/Hex> <ETHER_TYPE in Binary/hex> <ETHER_TYPE in Binary/hex(optional)>' > /proc/sys/net/edma/edma_vlan_append\n");
 		dev_put(dev);
 		memset(edma_vlan_append_info, 0, sizeof(edma_vlan_append_info));
