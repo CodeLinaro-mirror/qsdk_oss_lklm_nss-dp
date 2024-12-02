@@ -337,6 +337,7 @@ enum nss_dp_state {
 	__NSS_DP_RXCSUM,	/* Rx checksum enabled			*/
 	__NSS_DP_AUTONEG,	/* Autonegotiation Enabled		*/
 	__NSS_DP_LINKPOLL,	/* Poll link status			*/
+	__NSS_DP_NO_LIST,	/* Deliver the packet directly to the Kernel stack without list based packet processing	*/
 };
 
 /*

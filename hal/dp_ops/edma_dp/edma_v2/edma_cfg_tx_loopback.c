@@ -130,7 +130,7 @@ static int edma_cfg_tx_desc_loopback_ring_setup(struct edma_txdesc_ring *txdesc_
 static void edma_cfg_tx_desc_loopback_ring_configure(struct edma_txdesc_ring *txdesc_ring)
 {
 #ifdef EDMA_40BIT_SUPPORT
-	uint32_t paddr;
+	uint32_t paddr, saddr;
 #endif
 
 	/*

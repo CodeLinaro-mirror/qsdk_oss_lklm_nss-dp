@@ -256,7 +256,7 @@ static void edma_cfg_rx_desc_loopback_ring_configure(struct edma_rxdesc_ring *rx
 {
 	uint32_t data;
 #ifdef EDMA_40BIT_SUPPORT
-	uint32_t paddr;
+	uint32_t paddr, saddr;
 #endif
 
 	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
@@ -280,12 +280,10 @@ static void edma_cfg_rx_desc_loopback_ring_configure(struct edma_rxdesc_ring *rx
          * fields, skip writing that data into the Register.
          */
 #if !defined(NSS_DP_EDMA_SKIP_PL_OFFSET)
-        data |= (EDMA_RXDESC_PL_DEFAULT_VALUE & EDMA_RXDESC_PL_OFFSET_MASK)
-                 << EDMA_RXDESC_PL_OFFSET_SHIFT;
-#endif
-
 	data |= (EDMA_RXDESC_PL_DEFAULT_VALUE & EDMA_RXDESC_PL_OFFSET_MASK)
 		 << EDMA_RXDESC_PL_OFFSET_SHIFT;
+#endif
+
 	edma_reg_write(EDMA_REG_RXDESC_RING_SIZE(rxdesc_ring->ring_id), data);
 }
 
@@ -309,7 +307,7 @@ static void edma_cfg_rx_fill_loopback_ring_configure(struct edma_rxfill_ring *rx
 #endif
 
 	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
-	edma_reg_write(EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
+	edma_reg_write(EDMA_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
 
 	/*
 	 * Alloc Rx buffers

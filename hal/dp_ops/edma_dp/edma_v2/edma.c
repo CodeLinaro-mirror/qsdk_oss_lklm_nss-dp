@@ -993,7 +993,11 @@ static void edma_hw_loopback_init(struct edma_gbl_ctx *egc)
 	for (i = 0; i < egc->num_loopback_rings; i++) {
 		int ring_id = egc->rxfill_loopback_ring_id_arr[i];
 		data = edma_reg_read(EDMA_REG_RXFILL_RING_SIZE(ring_id));
+#ifdef NSS_DP_EDMA_LOOPBACK_BUF_CONFIG
+		data |= egc->loopback_buf_size;
+#else
 		data |= (egc->loopback_buf_size << 16);
+#endif
 		edma_reg_write(EDMA_REG_RXFILL_RING_SIZE(ring_id), data);
 
 		/*
@@ -1049,8 +1053,15 @@ static int edma_alloc_rings(struct edma_gbl_ctx *egc)
 		goto rx_rings_alloc_fail;
 	}
 
+	if (nss_dp_hal_cache_info_setup(egc)) {
+		edma_err("Error in writing data into the cache registers\n");
+		goto rings_alloc_fail;
+	}
+
 	return 0;
 
+rings_alloc_fail:
+	edma_cfg_rx_rings_cleanup(egc);
 rx_rings_alloc_fail:
 	edma_cfg_tx_rings_cleanup(egc);
 	return -ENOMEM;

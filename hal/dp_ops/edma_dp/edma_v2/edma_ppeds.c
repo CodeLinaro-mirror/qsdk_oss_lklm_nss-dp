@@ -38,6 +38,19 @@ static int edma_ppeds_tx_ring_entries;
  */
 static int edma_ppeds_rx_fill_ring_alloc(struct edma_rxfill_ring *rxfill_ring)
 {
+#ifdef CONFIG_IO_COHERENCY
+	/*
+	 * Allocate RxFill ring descriptors
+	 */
+	rxfill_ring->desc = kmalloc(roundup((sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+				SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
+	if (!rxfill_ring->desc) {
+		edma_err("Cached descriptor alloc for RXFILL ring %u failed\n",
+							rxfill_ring->ring_id);
+		return -ENOMEM;
+	}
+	rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
+#else
 	/*
 	 * Allocate RxFill ring descriptors
 	 */
@@ -49,6 +62,7 @@ static int edma_ppeds_rx_fill_ring_alloc(struct edma_rxfill_ring *rxfill_ring)
 							rxfill_ring->ring_id);
 		return -ENOMEM;
 	}
+#endif
 
 	return 0;
 }
@@ -109,6 +123,17 @@ static int edma_ppeds_rx_secondary_alloc(struct edma_rxdesc_ring *rxdesc_ring)
  */
 static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
 {
+#ifdef CONFIG_IO_COHERENCY
+
+	txcmpl_ring->desc = kmalloc(roundup((sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
+				SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
+	if (!txcmpl_ring->desc) {
+		edma_err("Cached descriptor alloc for TXCMPL ring %u failed\n",
+				txcmpl_ring->id);
+		return -ENOMEM;
+	}
+	txcmpl_ring->dma = (dma_addr_t)virt_to_phys(txcmpl_ring->desc);
+#else
 	txcmpl_ring->desc = dma_alloc_coherent(&edma_gbl_ctx.pdev->dev,
 				(sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
 				&txcmpl_ring->dma, GFP_KERNEL | __GFP_ZERO);
@@ -117,6 +142,7 @@ static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
 				txcmpl_ring->id);
 		return -ENOMEM;
 	}
+#endif
 
 	return 0;
 }
