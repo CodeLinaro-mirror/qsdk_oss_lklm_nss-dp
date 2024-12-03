@@ -315,9 +315,7 @@ struct edma_gbl_ctx {
 	struct edma_txcmpl_ring *txcmpl_loopback_rings;
 			/* TX completion loopback ring */
 #endif
-	uint32_t rxfill_ring_map[EDMA_RXFILL_RING_PER_CORE_MAX][NR_CPUS];
-			/* Rx Fill ring per-core mapping from device tree */
-	uint32_t rxdesc_ring_map[EDMA_RXDESC_RING_PER_CORE_MAX][NR_CPUS];
+	uint32_t rxdesc_ring_map[EDMA_RXDESC_RING_PER_CORE_MAX][EDMA_RX_DESC_RING_MAX];
 			/* Rx Descriptor ring per-core mapping from device tree */
 	uint32_t (*rxdesc_ring_to_queue_bm)[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT];
 			/* Bitmap of mapped PPE queue ids of the Rx descriptor rings */
@@ -435,7 +433,7 @@ struct edma_gbl_ctx {
 #endif
 	bool edma_initialized;
 			/* Flag to check initialization status */
-	uint32_t rx_ring_queue_map[EDMA_MAX_PRI_PER_CORE][NR_CPUS];
+	uint32_t rx_ring_queue_map[EDMA_MAX_PRI_PER_CORE][EDMA_RX_DESC_RING_MAX];
 			/* Rx ring to queue mapping */
 #ifdef NSS_DP_PPEDS_SUPPORT
 	uint32_t ppeds_node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
@@ -467,6 +465,10 @@ struct edma_gbl_ctx {
 	void __iomem *tstamp_nsec;
 			/* EDMA timestamp value in nano-second */
 #endif
+	uint32_t rxdesc_vp_ring_idx;
+			/* VP rx ring index */
+	uint32_t rx_vp_rings;
+			/* Number of VP rings */
 };
 
 extern struct edma_gbl_ctx *edma_gbl_ctx;

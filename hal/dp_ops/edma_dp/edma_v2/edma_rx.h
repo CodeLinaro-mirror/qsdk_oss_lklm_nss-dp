@@ -438,6 +438,7 @@ struct edma_rxdesc_ring {
 	struct sk_buff *last;		/* Last skb of the skb list in case of scatter-gather frame */
 	struct nss_dp_vp_skb_list *vp_head;
 					/* Last skb of the skb list in case of scatter-gather frame */
+	bool is_vp;			/* Set if the ring is configured for ppe-vp usage */
 };
 
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);

@@ -404,7 +404,7 @@ static bool edma_validate_desc_map(void)
 
 	desc_bitmap = 0;
 
-	for_each_possible_cpu(i) {
+	for (i = 0; i < edma_gbl_ctx->num_rxdesc_rings; i++) {
 		int32_t desc_num = edma_gbl_ctx->rxdesc_ring_map[0][i];
 		if (desc_num < 0) {
 			continue;
@@ -467,14 +467,39 @@ static uint64_t edma_get_dma_mask(uint64_t ddr_size)
 }
 
 /*
+ * edma_of_get_vp_pdata()
+ *	Read the device tree details for EDMA
+ */
+static void edma_of_get_vp_pdata(void)
+{
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	int err;
+
+	err = of_property_read_u32(egc->device_node, "qcom,rxdesc-vp-ring-idx", &egc->rxdesc_vp_ring_idx);
+	if (err) goto no_vp;
+
+	err = of_property_read_u32(egc->device_node, "qcom,rx-vp-rings", &egc->rx_vp_rings);
+	if (err) goto no_vp;
+
+	edma_info("VP rings detected (ring_idx :%d, num_rings:%d)", egc->rx_vp_ring_idx, egc->rx_vp_rings);
+
+	BUG_ON(egc->rx_vp_rings > NSS_DP_VP_NUM_RINGS);
+	return;
+no_vp:
+	egc->rx_vp_rings = 0;
+	return;
+}
+
+/*
  * edma_of_get_pdata()
  *	Read the device tree details for EDMA
  */
 static int edma_of_get_pdata(struct resource *edma_res)
 {
+	uint32_t i, j, tmp_sz, tmp_idx;
 	struct platform_device *pdev;
 	uint64_t mem_size, mask;
-	uint32_t i, j;
+	uint32_t *tmp_arr;
 	int ret;
 	bool ddr_ext_upstream __maybe_unused;
 	uint32_t loopback_feature_type __maybe_unused = 0;
@@ -530,6 +555,11 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		edma_err("dma_set_mask_and_coherent failed for mask (%llx)\n", mask);
 		return -ENOMEM;
 	}
+
+	/*
+	 * Check for new vp ring support
+	 */
+	edma_of_get_vp_pdata();
 
 	/*
 	 * Get id of first TXDESC ring
@@ -810,19 +840,37 @@ static int edma_of_get_pdata(struct resource *edma_res)
 			edma_gbl_ctx->rx_queue_start);
 
 	/*
-	 * Get rx_ring to queue mapping
+	 * We need a temporary arrary to store rxdesc ring and queue mapping.
+	 * This is needed bcz if a specific board version doesn't have DTSI change
+	 * for VP ring and DP driver allocates extra memory for ring and queue
+	 * map arrays, then we might populate the arrays incorrectly.
+	 */
+	tmp_sz = max(EDMA_RXDESC_RING_PER_CORE_MAX, EDMA_MAX_PRI_PER_CORE) * edma_gbl_ctx->num_rxdesc_rings;
+	tmp_arr = vzalloc(tmp_sz);
+	if (!tmp_arr) {
+		edma_err("Unable to allocate memory for DTSI parsing\n");
+		return -ENOMEM;
+	}
+
+	/*
+	 * Get rx_ring to queue mapping into temporary array
 	 */
 	ret = of_property_read_u32_array(edma_gbl_ctx->device_node,
 			"qcom,rx-ring-queue-map",
-			(int32_t *)edma_gbl_ctx->rx_ring_queue_map,
-			(EDMA_MAX_PRI_PER_CORE * NR_CPUS));
+			tmp_arr,
+			(EDMA_MAX_PRI_PER_CORE * edma_gbl_ctx->num_rxdesc_rings));
 	if (ret) {
 		edma_err("Unable to read Rx ring to queue map array. ret: %d\n", ret);
+		vfree(tmp_arr);
 		return -EINVAL;
 	}
 
-	for (i = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
-		for_each_possible_cpu(j) {
+	/*
+	 * Copy to original queue map array
+	 */
+	for (i = 0, tmp_idx = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
+		for (j = 0; j < edma_gbl_ctx->num_rxdesc_rings; j++) {
+			edma_gbl_ctx->rx_ring_queue_map[i][j] = tmp_arr[tmp_idx++];
 			edma_debug("Rx ring to queue map[%d][%d] = %d\n", i, j,
 					edma_gbl_ctx->rx_ring_queue_map[i][j]);
 		}
@@ -837,25 +885,38 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	if (ret) {
 		edma_err("Unable to read TxDesc-Fc-Grp map array. \
 				ret: %d\n", ret);
-			return -EINVAL;
-	}
-
-	/*
-	 * Get RXDESC Map
-	 */
-	ret = of_property_read_u32_array(edma_gbl_ctx->device_node,
-			"qcom,rxdesc-map",
-			(int32_t *)edma_gbl_ctx->rxdesc_ring_map,
-			(EDMA_RXDESC_RING_PER_CORE_MAX * NR_CPUS));
-	if (ret) {
-		edma_err("Unable to read Rx ring map array. Return: %d\n", ret);
+		vfree(tmp_arr);
 		return -EINVAL;
 	}
 
-	for_each_possible_cpu(i) {
-		edma_debug("rxdesc_ring_map[%d] = %d\n", i,
-				edma_gbl_ctx->rxdesc_ring_map[0][i]);
+	/*
+	 * Get rx_ring to queue mapping into temporary array
+	 */
+	ret = of_property_read_u32_array(edma_gbl_ctx->device_node,
+			"qcom,rxdesc-map",
+			tmp_arr,
+			(EDMA_RXDESC_RING_PER_CORE_MAX * edma_gbl_ctx->num_rxdesc_rings));
+	if (ret) {
+		edma_err("Unable to read Rx ring to queue map array. ret: %d\n", ret);
+		vfree(tmp_arr);
+		return -EINVAL;
 	}
+
+	/*
+	 * Copy to original queue map array
+	 */
+	for (i = 0, tmp_idx = 0; i < EDMA_RXDESC_RING_PER_CORE_MAX; i++) {
+		for (j = 0; j < edma_gbl_ctx->num_rxdesc_rings; j++) {
+			edma_gbl_ctx->rxdesc_ring_map[i][j] = tmp_arr[tmp_idx++];
+			BUILD_BUG_ON(EDMA_RXDESC_RING_PER_CORE_MAX > 1);
+			edma_debug("rxdesc_ring_map[%d][%d] = %d\n", i, j, edma_gbl_ctx->rxdesc_ring_map[i][j]);
+		}
+	}
+
+	/*
+	 * We no longer need temporary storage
+	 */
+	vfree(tmp_arr);
 
 #if defined(NSS_DP_POINT_OFFLOAD)
 	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,txdesc_point_offload_ring", &edma_gbl_ctx->txdesc_point_offload_ring);

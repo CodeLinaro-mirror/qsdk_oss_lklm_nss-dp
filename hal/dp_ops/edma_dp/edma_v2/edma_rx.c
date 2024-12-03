@@ -1491,6 +1491,17 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 	 */
 	cons_idx = rxdesc_ring->cons_idx;
 
+	/*
+	 * Record ring utilization for capwap ring
+	 */
+	if (unlikely(egc->enable_ring_util_stats)) {
+		prod_idx = edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) & EDMA_RXDESC_PROD_IDX_MASK;
+		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, EDMA_RX_RING_SIZE);
+
+		edma_update_ring_stats(work_to_do, EDMA_RX_RING_SIZE,
+				&rxdesc_ring->rx_desc_stats.ring_stats);
+	}
+
 	if (likely(rxdesc_ring->work_leftover > budget)) {
 		work_to_do = budget;
 	} else {
