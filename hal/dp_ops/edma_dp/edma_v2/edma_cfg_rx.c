@@ -33,7 +33,6 @@ uint32_t edma_cfg_rx_queue_tail_drop_enable = EDMA_RX_QUEUE_TAIL_DROP_ENABLE;
 uint32_t edma_cfg_rx_rps_num_cores = NR_CPUS;
 uint32_t edma_cfg_rx_sec_desc_inval = 0;
 uint32_t edma_cfg_rx_rps_bitmap_cores = EDMA_RX_DEFAULT_BITMAP;
-extern uint32_t nss_dp_capwap_vp_rx_core;
 
 /*
  * Rx ring queue offset
@@ -324,7 +323,7 @@ static int32_t edma_cfg_rx_desc_ring_reset_queue_config(struct edma_gbl_ctx *egc
 {
 	int32_t i;
 
-	if (unlikely(egc->num_rxdesc_rings > NR_CPUS)) {
+	if (unlikely(egc->num_rxdesc_rings > EDMA_RX_DESC_RING_MAX)) {
 		edma_err("Invalid count of rxdesc rings: %d\n", egc->num_rxdesc_rings);
 		return -1;
 	}
@@ -913,6 +912,45 @@ static void edma_cfg_rx_qid_to_rx_desc_ring_mapping(struct edma_gbl_ctx *egc)
 	}
 
 	/*
+	 * Map the queues to vp ring
+	 */
+	switch (egc->rx_vp_rings) {
+	case 1:
+		desc_index = egc->rxdesc_vp_ring_idx;
+
+		BUILD_BUG_ON(EDMA_RXDESC_RING_PER_CORE_MAX > 1);
+		q_id = egc->rx_ring_queue_map[0][desc_index];
+		ring_index = egc->rxdesc_ring_map[0][desc_index];
+
+		reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
+
+		data = EDMA_RX_RING_ID_QUEUE0_SET(ring_index);
+		data |= EDMA_RX_RING_ID_QUEUE1_SET(ring_index);
+		data |= EDMA_RX_RING_ID_QUEUE2_SET(ring_index);
+		data |= EDMA_RX_RING_ID_QUEUE3_SET(ring_index);
+
+		/*
+		 * Program the first 4 queues
+		 */
+		edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
+
+		/*
+		 * Program the next 4 queues
+		 */
+		q_id += EDMA_QID2RID_NUM_PER_REG;
+		reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
+		edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
+
+		edma_info("Configure QID2RID(%d) reg:0x%x to 0x%x, desc_index: %d, reg_index: %d\n",
+				q_id, EDMA_QID2RID_TABLE_MEM(reg_index), data, desc_index, reg_index);
+		break;
+
+	default:
+		edma_warn("Failed to initialize VP to queue map (%d)", egc->rx_vp_rings);
+		break;
+	}
+
+	/*
 	 * Map PPE multicast queues to the first Rx ring.
 	 */
 	desc_index = (egc->rxdesc_ring_start & EDMA_RX_RING_ID_MASK);
@@ -1205,6 +1243,12 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		rxdesc_ring = &egc->rxdesc_rings[ring_idx];
 		rxdesc_ring->count = EDMA_RX_RING_SIZE;
 		rxdesc_ring->ring_id = egc->rxdesc_ring_start + ring_idx;
+
+		/*
+		 * Mark ring is VP
+		 */
+		if (egc->rx_vp_rings)
+			rxdesc_ring->is_vp = (ring_idx >= egc->rxdesc_vp_ring_idx);
 
 		if (queue_id > EDMA_CPU_PORT_QUEUE_MAX(egc->rx_queue_start)) {
 			edma_err("Invalid queue_id: %d\n", queue_id);
@@ -1592,24 +1636,17 @@ void edma_cfg_rx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev)
 
 	for (i = 0; i < egc->num_rxdesc_rings; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring = &egc->rxdesc_rings[i];
+		int (*napi_poll)(struct napi_struct *, int) = edma_rx_napi_poll;
+
+		/*
+		 * If, this a VP ring then change the poll function to capwap
+		 */
+		if (rxdesc_ring->is_vp) napi_poll = edma_rx_napi_capwap_poll;
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-		if (nss_dp_capwap_vp_rx_core == i) {
-			edma_info("Adding capwap napi for ring_id %d for core3\n", nss_dp_capwap_vp_rx_core);
-			netif_napi_add(netdev, &rxdesc_ring->napi,
-				edma_rx_napi_capwap_poll, nss_dp_rx_napi_budget);
-		} else {
-			netif_napi_add(netdev, &rxdesc_ring->napi,
-				edma_rx_napi_poll, nss_dp_rx_napi_budget);
-		}
+		netif_napi_add(netdev, &rxdesc_ring->napi, napi_poll, nss_dp_rx_napi_budget);
 #else
-		if (nss_dp_capwap_vp_rx_core == i) {
-			edma_info("Adding capwap napi for ring_id %d for core3\n", nss_dp_capwap_vp_rx_core);
-			netif_napi_add_weight(netdev, &rxdesc_ring->napi,
-				edma_rx_napi_capwap_poll, nss_dp_rx_napi_budget);
-		} else {
-			netif_napi_add_weight(netdev, &rxdesc_ring->napi,
-				 edma_rx_napi_poll, nss_dp_rx_napi_budget);
-		}
+		netif_napi_add_weight(netdev, &rxdesc_ring->napi, napi_poll, nss_dp_rx_napi_budget);
 #endif
 		rxdesc_ring->napi_added = true;
 	}

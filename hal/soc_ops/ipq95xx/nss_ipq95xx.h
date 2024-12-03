@@ -112,6 +112,20 @@
 
 #define EDMA_MAX_DMA_MASK_BIT_HI 32
 
+/*
+ * SoC specific RX ring max value
+ */
+#if defined (NSS_DP_VP_RINGS)
+#define NSS_DP_VP_NUM_RINGS 1
+#else
+#define NSS_DP_VP_NUM_RINGS 0
+#endif
+
+/*
+ * SoC specific RX ring max value
+ */
+#define EDMA_RX_DESC_RING_MAX (NR_CPUS + NSS_DP_VP_NUM_RINGS)
+
 /**
  * nss_dp_hal_gmac_stats
  *	The per-GMAC statistics structure.
