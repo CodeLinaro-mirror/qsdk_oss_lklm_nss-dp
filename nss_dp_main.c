@@ -82,6 +82,10 @@ int nss_dp_rx_napi_budget = NSS_DP_HAL_RX_NAPI_BUDGET;
 module_param(nss_dp_rx_napi_budget, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_rx_napi_budget, "Rx NAPI budget");
 
+int nss_dp_rxfill_napi_budget = NSS_DP_HAL_RXFILL_NAPI_BUDGET;
+module_param(nss_dp_rxfill_napi_budget, int, S_IRUGO);
+MODULE_PARM_DESC(nss_dp_rxfill_napi_budget, "Rx-fill NAPI budget");
+
 int nss_dp_tx_napi_budget = NSS_DP_HAL_TX_NAPI_BUDGET;
 module_param(nss_dp_tx_napi_budget, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_tx_napi_budget, "Tx NAPI budget");

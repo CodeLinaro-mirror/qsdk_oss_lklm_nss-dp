@@ -58,6 +58,7 @@
  */
 #define NSS_DP_HAL_RX_NAPI_BUDGET       128
 #define NSS_DP_HAL_TX_NAPI_BUDGET       256
+#define NSS_DP_HAL_RXFILL_NAPI_BUDGET	512
 
 /*
  * EDMA clock's

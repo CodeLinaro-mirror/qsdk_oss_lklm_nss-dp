@@ -304,6 +304,7 @@ extern struct nss_dp_global_ctx dp_global_ctx;
 extern struct nss_dp_data_plane_ctx dp_global_data_plane_ctx[NSS_DP_MAX_PORTS];
 extern int nss_dp_rx_napi_budget;
 extern int nss_dp_tx_napi_budget;
+extern int nss_dp_rxfill_napi_budget;
 
 #if defined(NSS_DP_EDMA_V2)
 extern int nss_dp_rx_fc_xon;

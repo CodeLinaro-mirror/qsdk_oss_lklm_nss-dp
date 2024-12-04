@@ -25,6 +25,7 @@
 #include <linux/reset.h>
 #include <linux/of_platform.h>
 #include <linux/version.h>
+#include <linux/timer.h>
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 6, 0))
 #include <net/gso.h>
 #endif
@@ -87,6 +88,7 @@
 #define EDMA_MAX_FC_GRP			EDMA_MAX_GMACS
 #define EDMA_MAC_TX_MAP			EDMA_MAX_PORTS
 #endif
+
 
 #define EDMA_IRQ_NAME_SIZE		32
 #define EDMA_NETDEV_FEATURES		NETIF_F_FRAGLIST \
