@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -162,9 +162,12 @@ int edma_loopback_buffer_size = EDMA_LOOPBACK_BUFFER_SIZE;
 module_param(edma_loopback_buffer_size, int, S_IRUGO);
 MODULE_PARM_DESC(edma_loopback_buffer_size, "Loopback buffer size");
 
-int edma_loopback_disable = 0;
-module_param(edma_loopback_disable, int, S_IRUGO);
-MODULE_PARM_DESC(edma_loopback_disable, "Loopback disable");
+/*
+ * Module parameter to enable / disable spectific loopback feature type
+ */
+uint32_t edma_loopback_feature_type = 1;
+module_param(edma_loopback_feature_type, int, 0644);
+MODULE_PARM_DESC(edma_loopback_feature_type, "loopback feature type 0x0: disabled, 0x1: default, 0x2: ddr extended buffer, 0x4: gretap to mapt");
 #endif
 
 uint32_t rx_ring_sz_low_mem = 512;
@@ -1278,17 +1281,8 @@ int __init nss_dp_init(void)
 	dp_global_ctx.rx_buf_size = NSS_DP_RX_BUFFER_SIZE;
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (edma_loopback_ring_size) {
-		dp_global_ctx.edma_loopback_ring_size = edma_loopback_ring_size;
-	}
-
-	if (edma_loopback_buffer_size) {
-		dp_global_ctx.edma_loopback_buffer_size = edma_loopback_buffer_size;
-	}
-
-	if (edma_loopback_disable) {
-		dp_global_ctx.edma_disable_loopback = edma_loopback_disable;
-	}
+	dp_global_ctx.edma_loopback_ring_size = edma_loopback_ring_size;
+	dp_global_ctx.edma_loopback_buffer_size = edma_loopback_buffer_size;
 #endif
 
 	/*

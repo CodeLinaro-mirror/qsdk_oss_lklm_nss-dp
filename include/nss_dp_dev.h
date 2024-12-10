@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -286,7 +286,6 @@ struct nss_dp_global_ctx {
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	uint32_t edma_loopback_ring_size;	/* Loopback ring size */
 	uint32_t edma_loopback_buffer_size;	/* Loopback ring size */
-	bool edma_disable_loopback;		/* Disable loopback ring configuration */
 #endif
 	bool overwrite_mode;		/* Overwrite mode for Rx processing */
 	bool page_mode;			/* Page mode for Rx processing */
@@ -305,6 +304,10 @@ extern struct nss_dp_data_plane_ctx dp_global_data_plane_ctx[NSS_DP_MAX_PORTS];
 extern int nss_dp_rx_napi_budget;
 extern int nss_dp_tx_napi_budget;
 extern int nss_dp_rxfill_napi_budget;
+
+#if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
+extern uint32_t edma_loopback_feature_type;
+#endif
 
 #if defined(NSS_DP_EDMA_V2)
 extern int nss_dp_rx_fc_xon;
