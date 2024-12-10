@@ -135,7 +135,7 @@ static int edma_dp_change_mtu(struct nss_dp_data_plane_ctx *dpc, uint32_t mtu)
 	ret = ppe_drv_iface_mtu_set(iface, mtu);
 
 	if (ret != PPE_DRV_RET_SUCCESS) {
-		netdev_dbg(dpc->dev, "MTU %d is not supported:%p\n", mtu, dpc->dev);
+		netdev_warn(dpc->dev, "MTU %d is not supported:%p\n", mtu, dpc->dev);
 		return NSS_DP_FAILURE;
 	}
 
