@@ -428,6 +428,7 @@ struct edma_gbl_ctx {
 			/* Number of loopback queues */
 	bool loopback_en;
 			/* Loopback enabled */
+	uint32_t loopback_feature_type; /* Loopback ring feature type */
 	struct edma_dp_loopback_buf_info buf_info[EDMA_MAX_LOOPBACK_BUF];
 #endif
 	bool edma_initialized;

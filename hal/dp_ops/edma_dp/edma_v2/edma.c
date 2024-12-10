@@ -456,6 +456,8 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	uint64_t mem_size;
 	uint32_t i, j;
 	int ret, mask;
+	bool ddr_ext_upstream;
+	uint32_t loopback_feature_type = 0;
 
 	/*
 	 * Find EDMA node in device tree
@@ -860,15 +862,47 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		edma_err("Unable to read RX desc point offload ring with err: %d\n", ret);
 		return -EINVAL;
 	}
+
 #elif defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	/*
-	 * Check if loopback ring is disabled globally
+	 * Check if loopback ring enabled
 	 */
-	edma_gbl_ctx.loopback_en = of_property_read_bool(edma_gbl_ctx.device_node, "qcom,edma_loopback_ring");
-	if (dp_global_ctx.edma_disable_loopback || !edma_gbl_ctx.loopback_en) {
-		edma_gbl_ctx.loopback_en = 0;
+	if (edma_loopback_feature_type == PPE_DRV_LOOPBACK_FEATURE_TYPE_DISABLED) {
 		goto skip_loopback;
 	}
+
+	/*
+	 * Check in dts file whether any loopback ring feature enabled by default.
+	 */
+	if (edma_loopback_feature_type == PPE_DRV_LOOPBACK_FEATURE_TYPE_DEFAULT) {
+		ddr_ext_upstream = of_property_read_bool(edma_gbl_ctx.device_node, "qcom,loopback_ext_ddr_upstream");
+		if (ddr_ext_upstream) {
+			loopback_feature_type |= PPE_DRV_LOOPBACK_FEATURE_TYPE_EXT_DDR_UPSTREAM;
+		}
+	}
+
+	if (edma_loopback_feature_type == PPE_DRV_LOOPBACK_FEATURE_TYPE_EXT_DDR_UPSTREAM) {
+		loopback_feature_type |= PPE_DRV_LOOPBACK_FEATURE_TYPE_EXT_DDR_UPSTREAM;
+	}
+
+	if (edma_loopback_feature_type == PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT) {
+		loopback_feature_type |= PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT;
+	}
+
+	if (loopback_feature_type == 0) {
+		goto skip_loopback;
+	}
+
+	/*
+	 * We dont support more than one loopback ring features at a time.
+	 */
+	if (!((loopback_feature_type & ~(loopback_feature_type - 1)) == loopback_feature_type)) {
+		edma_err("loopback ring feature not supported: %u %u\n", loopback_feature_type, edma_loopback_feature_type);
+		return -EINVAL;
+	}
+
+	edma_gbl_ctx.loopback_en = true;
+	edma_gbl_ctx.loopback_feature_type = loopback_feature_type;
 
 	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,num_loopback_rings", &edma_gbl_ctx.num_loopback_rings);
 	if (ret) {
@@ -941,6 +975,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		edma_err("Unable to read loopback_queue_num_queues ret: %d\n", ret);
 		goto fail;
 	}
+
 skip_loopback:
 #endif
 
@@ -1637,7 +1672,7 @@ int edma_init(void)
 	 */
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	if (edma_gbl_ctx.loopback_en) {
-		ppe_drv_loopback_base_queue(edma_gbl_ctx.loopback_queue_base);
+		ppe_drv_loopback_base_queue(edma_gbl_ctx.loopback_queue_base, edma_gbl_ctx.loopback_feature_type);
 	}
 #endif
 
