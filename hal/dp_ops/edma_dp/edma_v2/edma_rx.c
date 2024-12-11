@@ -610,12 +610,14 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 		/*
 		 * Update stats for the SAWF service class.
 		 */
-		BUG_ON(!PPE_DRV_SERVICE_CLASS_IS_VALID(service_class));
-		edma_rx_sawf_sc_stats_update(skb->len, &egc->sawf_sc_stats[service_class]);
+		if (PPE_DRV_SERVICE_CLASS_IS_VALID(service_class)) {
+			edma_rx_sawf_sc_stats_update(skb->len, &egc->sawf_sc_stats[service_class]);
+		}
+
 		/*
 		 * Configure skb->mark with SAWF metadata.
 		 */
-		skb->mark = EDMA_RX_SAWF_METADATA_CONSTRUCT(service_class, peer_id, wifi_qos);
+		skb->mark = EDMA_RX_SAWF_METADATA_CONSTRUCT(peer_id, wifi_qos);
 
 		edma_debug("%px : SAWF mark configured = 0x%x\n", egc, skb->mark);
 		break;
