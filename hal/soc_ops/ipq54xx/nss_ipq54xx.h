@@ -74,6 +74,8 @@
 #define NSS_DP_EDMA_NSSCFG_CLK			"nss-nsscfg-clk"
 #define NSS_DP_EDMA_NSSNOC_ATB_CLK		"nss-nssnoc-atb-clk"
 #define NSS_DP_EDMA_NSSNOC_NSSCC_CLK		"nss-nssnoc-nsscc-clk"
+#define NSS_DP_EDMA_NSSNOC_MEMNOC_CLK		"nss-nssnoc-memnoc-clk"
+#define NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK	"nss-nssnoc-mem-noc-1-clk"
 #define NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK		"nss-nssnoc-pcnoc-1-clk"
 #define NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK	"nss-nssnoc-qosgen-ref-clk"
 #define NSS_DP_EDMA_NSSNOC_SNOC_1_CLK		"nss-nssnoc-snoc-1-clk"
@@ -96,6 +98,8 @@
 #define NSS_DP_EDMA_NSSCFG_CLK_FREQ			100000000
 #define NSS_DP_EDMA_NSSNOC_ATB_CLK_FREQ			240000000
 #define NSS_DP_EDMA_NSSNOC_NSSCC_CLK_FREQ		100000000
+#define NSS_DP_EDMA_NSSNOC_MEMNOC_CLK_FREQ		375000000
+#define NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK_FREQ		375000000
 #define NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK_FREQ		100000000
 #define NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK_FREQ		6000000
 #define NSS_DP_EDMA_NSSNOC_SNOC_1_CLK_FREQ		266666666

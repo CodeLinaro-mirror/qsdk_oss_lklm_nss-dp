@@ -425,6 +425,18 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
 		return -1;
 	}
 
+	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_MEMNOC_CLK,
+					NSS_DP_EDMA_NSSNOC_MEMNOC_CLK_FREQ);
+	if (err) {
+		return -1;
+	}
+
+	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK,
+					NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK_FREQ);
+	if (err) {
+		return -1;
+	}
+
 #ifdef CONFIG_IO_COHERENCY
 	/*
 	 * TODO: Get rid of the above compile time MACRO and
