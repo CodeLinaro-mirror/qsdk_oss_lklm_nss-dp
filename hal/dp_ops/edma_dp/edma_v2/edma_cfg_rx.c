@@ -96,10 +96,14 @@ static void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free RXFILL ring descriptors
 	 */
+#ifdef CONFIG_IO_COHERENCY
+	kfree(rxfill_ring->desc);
+#else
 	dma_free_coherent(&egc->pdev->dev,
 				(sizeof(struct edma_rxfill_desc)
 				* rxfill_ring->count),
 				rxfill_ring->desc, rxfill_ring->dma);
+#endif
 	rxfill_ring->desc = NULL;
 	rxfill_ring->dma = (dma_addr_t)0;
 }
