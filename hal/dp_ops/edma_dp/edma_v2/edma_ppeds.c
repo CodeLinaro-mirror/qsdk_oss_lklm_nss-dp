@@ -76,9 +76,13 @@ static void edma_ppeds_rx_fill_ring_free(struct edma_rxfill_ring *rxfill_ring)
 	/*
 	 * Free RXFILL ring descriptors
 	 */
+#ifdef CONFIG_IO_COHERENCY
+        kfree(rxfill_ring->desc);
+#else
 	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
 			(sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
 			rxfill_ring->desc, rxfill_ring->dma);
+#endif
 	rxfill_ring->desc = NULL;
 	rxfill_ring->dma = (dma_addr_t)0;
 }
@@ -153,9 +157,13 @@ static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
  */
 static void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring)
 {
+#ifdef CONFIG_IO_COHERENCY
+	kfree(txcmpl_ring->desc);
+#else
 	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
 			(sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
 			txcmpl_ring->desc, txcmpl_ring->dma);
+#endif
 	txcmpl_ring->desc = NULL;
 	txcmpl_ring->dma = (dma_addr_t)0;
 }
