@@ -154,6 +154,13 @@ static void edma_debugfs_print_rx_desc_section(struct seq_file *m,
 	}
 	seq_printf(m, "\n");
 
+	seq_printf(m, "%-*s", EDMA_DEBUGFS_FIELD_WIDTH, "payload_buf_alloc_failed");
+	for (i = 0; i < count; i++) {
+		seq_printf(m, " %*llu", EDMA_DEBUGFS_RING_COL_WIDTH,
+			   stats[start_idx + i].payload_buf_alloc_failed);
+	}
+	seq_printf(m, "\n");
+
 	for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
 		seq_printf(m, "%-*s", EDMA_DEBUGFS_FIELD_WIDTH,
 			   edma_debugfs_ring_usage_dump[j]);
@@ -390,6 +397,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 			rx_desc_stats[i].src_port_inval_type = desc_stats->src_port_inval_type;
 			rx_desc_stats[i].src_port_inval_netdev = desc_stats->src_port_inval_netdev;
 			rx_desc_stats[i].rx_napi_sched = desc_stats->rx_napi_sched;
+			rx_desc_stats[i].payload_buf_alloc_failed = desc_stats->payload_buf_alloc_failed;
 			memcpy(&rx_desc_stats[i].ring_stats, &desc_stats->ring_stats,
 					sizeof(struct edma_ring_util_stats));
 		} while (edma_dp_stats_fetch_retry(&desc_stats->syncp, start));

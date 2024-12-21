@@ -67,6 +67,15 @@
 #define NSS_DP_RX_BUFFER_SIZE		1984
 #endif
 
+/*
+ * With Page pool Keep Rx buffer allocation size to (2048-320) = 1728.
+ */
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+#undef NSS_DP_RX_BUFFER_SIZE
+#define NSS_DP_RX_BUFFER_SIZE (SKB_WITH_OVERHEAD(2048))
+#define EDMA_PP_ALLOC_MAX_ORDER 2
+#endif
+
 #if defined(NSS_DP_EDMA_V2) || defined(NSS_DP_EDMA_V3)
 /*
  * Rx rings flow control threshold values

@@ -367,6 +367,7 @@ struct edma_rx_desc_stats {
 	uint64_t src_port_inval_type;		/* Source type is not PORT ID */
 	uint64_t src_port_inval_netdev;		/* Invalid net device for the source port */
 	uint64_t rx_napi_sched;			/* Number of times napi is scheduled for RxDesc */
+	uint64_t payload_buf_alloc_failed;	/* SKB Allocation failed when in PP Mode */
 	struct edma_ring_util_stats ring_stats;	/* Tracking EDMA Rx Desc ring utilization */
 	struct u64_stats_sync syncp;		/* Synchronization pointer */
 };
@@ -447,6 +448,10 @@ struct edma_rxfill_ring {
 	struct timer_list delayed_intr; /* Timer used to delay the low threshold interrupt */
 	bool page_mode;			/* Page mode for Rx processing */
 	bool napi_added;		/* Flag to indicate NAPI add status */
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+	bool page_pool_alloc_mode;	/* Page pool enabled */
+	struct page_pool *page_pool;
+#endif
 	struct edma_rx_fill_stats rx_fill_stats;
 					/* Rx fill ring statistics */
 	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
@@ -482,6 +487,9 @@ struct edma_rxdesc_ring {
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	struct sk_buff *head;		/* Head of the skb list in case of scatter-gather frame */
 	struct sk_buff *last;		/* Last skb of the skb list in case of scatter-gather frame */
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+	bool page_pool_alloc_mode;			/* Page pool enabled */
+#endif
 };
 
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);

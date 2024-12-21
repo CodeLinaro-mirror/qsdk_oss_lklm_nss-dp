@@ -9,6 +9,7 @@
 #include <linux/of_address.h>
 #include <linux/of_platform.h>
 #include <linux/reset.h>
+#include <net/page_pool/helpers.h>
 #include "edma.h"
 #include "edma_cfg_rx.h"
 #include "edma_regs.h"
@@ -32,6 +33,51 @@ extern struct nss_dp_vp_ctx g_vp_ctx;
  * Rx EDMA maximum queue supported
  */
 #define EDMA_CPU_PORT_QUEUE_MAX(queue_start)	queue_start + (EDMA_MAX_PRI_PER_CORE * NR_CPUS) - 1
+
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+/*
+ * edma_cfg_rx_pp_alloc()
+ *	Allocate Page pool.
+ */
+static inline struct page_pool *edma_cfg_rx_pp_alloc(uint32_t pool_size, uint32_t alloc_size, uint32_t inval_size)
+{
+	struct page_pool_params pp_params = {0};
+
+	/*
+	 * Order 0 for half page allocation. For other sizes, order 2/3 gives efficient allocation.
+	 */
+	pp_params.order = (alloc_size <= (PAGE_SIZE / 2)) ? 0 : EDMA_PP_ALLOC_MAX_ORDER;
+	pp_params.nid = NUMA_NO_NODE;
+	pp_params.napi = NULL;
+	pp_params.pool_size = pool_size;
+
+#ifdef CONFIG_IO_COHERENCY
+	pp_params.flags = PP_FLAG_PAGE_FRAG;
+#else
+	pp_params.flags = PP_FLAG_PAGE_FRAG | PP_FLAG_DMA_MAP | PP_FLAG_DMA_SYNC_DEV;
+	pp_params.dma_dir = DMA_FROM_DEVICE;
+	pp_params.max_len = inval_size;				/* maximum sync size when freed in slow path */
+	pp_params.offset = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;	/* DMA sync will start from here */
+	pp_params.dev = &edma_gbl_ctx.pdev->dev;
+#endif
+
+	return page_pool_create(&pp_params);
+}
+
+/*
+ * edma_cfg_rx_pp_free()
+ *	Free Page pool.
+ */
+static inline void edma_cfg_rx_pp_free(struct edma_rxfill_ring *rxfill_ring)
+{
+	if (!rxfill_ring->page_pool_alloc_mode) {
+		return;
+	}
+
+	page_pool_destroy(rxfill_ring->page_pool);
+	rxfill_ring->page_pool = NULL;
+}
+#endif
 
 #ifdef NSS_DP_HW_GRO
 /*
@@ -171,7 +217,7 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 	cons_idx = reg_data & EDMA_RXFILL_CONS_IDX_MASK;
 
 	while (curr_idx != cons_idx) {
-		struct sk_buff *skb;
+		void *opaque;
 		struct edma_rxfill_desc *rxfill_desc;
 
 		/*
@@ -184,13 +230,21 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 		/*
 		 * Get skb from opaque
 		 */
-		skb = (struct sk_buff *)EDMA_RXFILL_OPAQUE_GET(rxfill_desc);
-		if (unlikely(!skb)) {
-			edma_warn("Empty skb reference at index:%d\n",
+		opaque = (void *)EDMA_RXFILL_OPAQUE_GET(rxfill_desc);
+		if (unlikely(!opaque)) {
+			edma_warn("Empty opaque/skb reference at index:%d\n",
 					cons_idx);
 			continue;
 		}
-		dev_kfree_skb_any(skb);
+
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+		if (rxfill_ring->page_pool_alloc_mode) {
+			napi_pp_put_page(virt_to_page(opaque), false);
+			continue;
+		}
+#endif
+
+		dev_kfree_skb_any((struct sk_buff *)opaque);
 	}
 
 	edma_reg_write(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id), cons_idx_prev);
@@ -208,6 +262,10 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 #endif
 	rxfill_ring->desc = NULL;
 	rxfill_ring->dma = (dma_addr_t)0;
+
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+	edma_cfg_rx_pp_free(rxfill_ring);
+#endif
 }
 
 /*
@@ -216,6 +274,19 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
  */
 static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 {
+
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+	if (rxfill_ring->page_pool_alloc_mode) {
+		rxfill_ring->page_pool = edma_cfg_rx_pp_alloc(rxfill_ring->count, rxfill_ring->alloc_size, rxfill_ring->buf_len);
+		if (IS_ERR(rxfill_ring->page_pool)) {
+			int err = PTR_ERR(rxfill_ring->page_pool);
+			rxfill_ring->page_pool = NULL;
+			edma_err("Page pool allocation failed for RXFILL ring %u: %d\n",
+							rxfill_ring->ring_id, err);
+			return err;
+		}
+	}
+#endif
 
 #ifdef CONFIG_IO_COHERENCY
 	/*
@@ -227,7 +298,7 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
                 edma_err("Descriptor alloc for RXFILL ring %u failed\n",
                                 rxfill_ring->ring_id);
 
-                return -ENOMEM;
+                goto desc_fail;
         }
         rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
 #else
@@ -235,14 +306,27 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 
 	/*
 	 * Allocate RxFill ring descriptors
+	 * FIXME: Allocate cachable memory using kmalloc only?
 	 */
 	rxfill_ring->desc = dma_alloc_coherent(&pdev->dev,
 				(sizeof(struct edma_rxfill_desc)
 				* rxfill_ring->count),
 				&rxfill_ring->dma, GFP_KERNEL | __GFP_ZERO);
+	if (!rxfill_ring->desc) {
+                edma_err("Descriptor alloc for RXFILL ring %u failed\n",
+                                rxfill_ring->ring_id);
+                goto desc_fail;
+        }
+
 #endif
 
 	return 0;
+
+desc_fail:
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+	edma_cfg_rx_pp_free(rxfill_ring);
+#endif
+	return -ENOMEM;
 }
 
 /*
@@ -314,7 +398,7 @@ void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 	 * Free any buffers assigned to any descriptors
 	 */
 	while (cons_idx != prod_idx) {
-		struct sk_buff *skb;
+		void *opaque;
 		struct edma_rxdesc_desc *rxdesc_desc =
 			EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
 
@@ -326,13 +410,21 @@ void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 		/*
 		 * Get opaque from RXDESC
 		 */
-		skb = (struct sk_buff *)EDMA_RXDESC_OPAQUE_GET(rxdesc_desc);
-		if (unlikely(!skb)) {
-			edma_warn("Empty skb reference at index:%d\n",
+		opaque = (void *)EDMA_RXDESC_OPAQUE_GET(rxdesc_desc);
+		if (unlikely(!opaque)) {
+			edma_warn("Empty opaque/skb reference at index:%d\n",
 								cons_idx);
 			continue;
 		}
-		dev_kfree_skb_any(skb);
+
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+		if (rxdesc_ring->page_pool_alloc_mode) {
+			napi_pp_put_page(virt_to_page(opaque), false);
+			continue;
+		}
+#endif
+
+		dev_kfree_skb_any((struct sk_buff *)opaque);
 	}
 
 	/*
@@ -1601,6 +1693,20 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		rxfill_ring->alloc_size = rxfill_info[ring_idx].alloc_size;
 		rxfill_ring->buf_len = rxfill_info[ring_idx].buffer_len;
 		rxfill_ring->page_mode = rxfill_info[ring_idx].page_mode;
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+		/*
+		 * TODO: Now rx_page_mode looks confusing. May be support as rx_jumbo_mru=PAGE_SIZE ?
+		 */
+		rxfill_ring->page_mode = false;
+		rxfill_ring->page_pool_alloc_mode = true;
+
+		/*
+		 * Add Shinfo size.
+		 */
+		rxfill_ring->alloc_size = SKB_HEAD_ALIGN(rxfill_ring->alloc_size);
+		edma_debug("EDMA rx_fill_ring(%u) Page pool mode enabled with alloc_size(%d) buf_len(%d)\n",
+				ring_idx, rxfill_ring->alloc_size, rxfill_ring->buf_len);
+#endif
 
 		ret = edma_cfg_rx_fill_ring_setup(rxfill_ring);
 		if (ret != 0) {
@@ -1626,6 +1732,9 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		rxdesc_ring = rxdesc_info[ring_idx].rxdesc_ring;
 		rxdesc_ring->count = rxdesc_info[ring_idx].desc_count;
 		rxdesc_ring->count_mask = rxdesc_ring->count - 1;
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+		rxdesc_ring->page_pool_alloc_mode = true;
+#endif
 
 		/*
 		 * Fetch the mode in which the particular ring has to be configured
@@ -1646,6 +1755,16 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		}
 
 		rxdesc_ring->rxfill = rxfill_info[rxfill_id].rxfill_ring;
+
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+		/*
+		 * As We are refilling in Rx NAPI context, update PP napi pointer.
+		 */
+		WARN_ON(rxdesc_ring->page_pool_alloc_mode != rxdesc_ring->rxfill->page_pool_alloc_mode);
+		if (rxdesc_ring->rxfill->page_pool)
+			WRITE_ONCE(rxdesc_ring->rxfill->page_pool->p.napi, &rxdesc_ring->napi);
+
+#endif
 
 		/*
 		 * ASSERT if the mapped Rxfill ring has a valid mode set and the mode is not

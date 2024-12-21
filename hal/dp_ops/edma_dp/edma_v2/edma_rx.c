@@ -14,6 +14,7 @@
 #include <nss_dp_vp.h>
 #include <linux/phy.h>
 #include <linux/if_vlan.h>
+#include <net/page_pool/helpers.h>
 #include "edma.h"
 #include "edma_debug.h"
 #include "edma_regs.h"
@@ -474,6 +475,132 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 
 	return num_alloc;
 }
+
+#ifdef EDMA_ALLOC_PAGE_POOL_MODE
+/*
+ * edma_rx_alloc_pages()
+ *	Write a given list of Rx buffers to the Rx fill ring
+ */
+static inline int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int reap_count)
+{
+	struct edma_rxfill_desc *rxfill_desc;
+	struct edma_rx_fill_stats *rxfill_stats = &rxfill_ring->rx_fill_stats;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	uint16_t prod_idx, start_idx, cons_idx;
+	uint16_t num_alloc = 0, alloc_count;
+	uint16_t avail_desc = 0;
+	uint32_t rx_alloc_size = rxfill_ring->alloc_size;
+	uint32_t buf_len = rxfill_ring->buf_len;
+
+	/*
+	 * Get RXFILL ring producer index
+	 */
+	prod_idx = rxfill_ring->prod_idx;
+	start_idx = prod_idx;
+
+	/*
+	 * When tracking ring util stats is enabled via procfs,
+	 * we will compute avail desc and compute how much percentage the ring is full.
+	 * Above stats are maintained at ring level.
+	 */
+	if (unlikely(egc->enable_ring_util_stats)) {
+		cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) & EDMA_RXFILL_CONS_IDX_MASK;
+		avail_desc = EDMA_DESC_AVAIL_COUNT(cons_idx, prod_idx, EDMA_RX_RING_SIZE);
+
+		edma_update_ring_stats(avail_desc, EDMA_RX_RING_SIZE,
+				&rxfill_ring->rx_fill_stats.ring_stats);
+	}
+
+	rxfill_ring->num_rxfill_pending += reap_count;
+	alloc_count = rxfill_ring->num_rxfill_pending;
+
+	while (likely(alloc_count--)) {
+		dma_addr_t data_addr;
+		struct page *page;
+		void *opaque;
+		void *buff;
+		int offset;
+
+		/*
+		 * Allocate fragment from page pool.
+		 * TODO: If this is multi-order allocation then on failure we can do slow allocation using kmem.
+		 */
+		page = page_pool_dev_alloc_frag(rxfill_ring->page_pool, &offset, rx_alloc_size);
+		if (!page) {
+			u64_stats_update_begin(&rxfill_stats->syncp);
+			++rxfill_stats->alloc_failed;
+			u64_stats_update_end(&rxfill_stats->syncp);
+			goto done;
+		}
+
+		buff = page_address(page) + offset;
+
+		/*
+		 * Reserve headroom
+		 */
+		data_addr = (dma_addr_t)virt_to_phys(buff + EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN);
+		opaque = buff;
+
+		/*
+		 * Get RXFILL descriptor
+		 */
+		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, prod_idx);
+#ifdef CONFIG_IO_COHERENCY
+		/*
+		 * With CONFIG_IO_COHERENCY, the Rxfill descriptors are cacheable.
+		 * Prefetch the Rxfill descriptor.
+		 */
+		prefetchw(rxfill_desc);
+#endif
+
+		/*
+		 * Set up Buffer high address.
+		 */
+		EDMA_RXFILL_BUFFER_ADDR_SET(rxfill_desc, data_addr);
+#if defined(NSS_DP_HIGHMEM_SUPP)
+		EDMA_RXFILL_BUFFER_ADDR_HI_SET(rxfill_desc, data_addr);
+#endif
+
+		/*
+		 * Store buffer in opaque
+		 */
+		EDMA_RXFILL_OPAQUE_LO_SET(rxfill_desc, opaque);
+#ifdef __LP64__
+		EDMA_RXFILL_OPAQUE_HI_SET(rxfill_desc, opaque);
+#endif
+
+		/*
+		 * Save buffer size in RXFILL descriptor
+		 */
+		EDMA_RXFILL_PACKET_LEN_SET(rxfill_desc, ((uint32_t)(buf_len) & EDMA_RXFILL_BUF_SIZE_MASK));
+
+		/*
+		 * Perform endianness conversion before writing to HW
+		 */
+		EDMA_RXFILL_ENDIAN_SET(rxfill_desc);
+
+		prod_idx = (prod_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		num_alloc++;
+	}
+
+done:
+	if (likely(num_alloc)) {
+
+		/*
+		 * Make sure the information written to the descriptors
+		 * is updated before writing to the hardware.
+		 */
+		edma_dsb();
+
+		edma_reg_write(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id),
+				prod_idx);
+		rxfill_ring->prod_idx = prod_idx;
+		rxfill_ring->num_rxfill_pending -= num_alloc;
+	}
+
+	return num_alloc;
+}
+#endif
 
 /*
  * edma_rx_alloc_buffer()
@@ -2025,20 +2152,20 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 		mem_debug_update_skb(skb);
 
 #ifdef CONFIG_SKB_TIMESTAMP
-	if (EDMA_RX_SDESC_TSTAMP_VALID_GET(rxdesc_sec)) {
-		uint64_t pkt_time, cur_time;
+		if (EDMA_RX_SDESC_TSTAMP_VALID_GET(rxdesc_sec)) {
+			uint64_t pkt_time, cur_time;
 
-		pkt_time = edma_rx_get_tstamp(rxdesc_sec);
-		cur_time = edma_rx_read_gmac_timer(egc);
+			pkt_time = edma_rx_get_tstamp(rxdesc_sec);
+			cur_time = edma_rx_read_gmac_timer(egc);
 
-		if (likely(cur_time > pkt_time)) {
-			skb->delta_ts0 = cur_time - pkt_time;
-			skb->delta_ts1 = EDMA_TIMESTAMP_NSEC_TO_USEC(ktime_get_ns());
-			edma_debug("skb: %p, pkt_time: %llu, cur_time: %llu, delta_ts0: %llu, delta_ts1: %llu\n",
-					skb, pkt_time, cur_time,
-					skb->delta_ts0, skb->delta_ts1);
+			if (likely(cur_time > pkt_time)) {
+				skb->delta_ts0 = cur_time - pkt_time;
+				skb->delta_ts1 = EDMA_TIMESTAMP_NSEC_TO_USEC(ktime_get_ns());
+				edma_debug("skb: %p, pkt_time: %llu, cur_time: %llu, delta_ts0: %llu, delta_ts1: %llu\n",
+						skb, pkt_time, cur_time,
+						skb->delta_ts0, skb->delta_ts1);
+			}
 		}
-	}
 #endif
 
 		/*
