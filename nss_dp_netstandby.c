@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for
  * any purpose with or without fee is hereby granted, provided that the
@@ -30,6 +30,33 @@
 
 struct nss_dp_netstandby_gbl_ctx standby_gbl_ctx;
 
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+/*
+ * nss_dp_netstandby_is_switch_connected()
+ *	Check if switch is connected
+ */
+bool nss_dp_netstandby_is_switch_connected(struct nss_dp_netstandby_gbl_ctx *gbl_ctx)
+{
+	struct nss_dp_global_ctx *ctx = gbl_ctx->ctx;
+	struct nss_dp_dev *dp_priv;
+	int i = 0;
+
+	for (i = 0; i < NSS_DP_MAX_PORTS; i++) {
+		dp_priv = ctx->nss_dp[i];
+		if (!dp_priv) {
+			pr_warn("%p Error in retrieving netdev for ethernet port %d\n", ctx, i);
+			continue;
+		}
+
+		if (dp_priv->is_switch_connected)
+			return true;
+	}
+
+
+	return false;
+}
+#endif
+
 /*
  * nss_dp_netstandby_exit_standby()
  *	Exit standby API()
@@ -46,11 +73,16 @@ int nss_dp_netstandby_exit_standby(void *app_data, struct netstandby_exit_info *
 	}
 
 #if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+	if (!nss_dp_netstandby_is_switch_connected(gbl_ctx))
+		goto exit_completion;
+
 	sw_err = fal_erp_standby_exit(DP_STANDBY_SWITCH_MHT_DEV_ID);
 	if (sw_err != SW_OK) {
 		pr_warn("Error in bringing MHT device out of power state\n");
 		return -ENOTSUPP;
 	}
+
+exit_completion:
 #endif
 
 	/*
@@ -129,6 +161,9 @@ int nss_dp_netstandby_enter_standby(void *app_data, struct netstandby_entry_info
 	}
 
 #if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+	if (!nss_dp_netstandby_is_switch_connected(gbl_ctx))
+		goto enter_completion;
+
 	if (entry_info->nss_info.port_id > NSS_DP_HAL_MHT_SWT_MAX_PORTS) {
 		pr_warn("%p Port_id out of range(%d)\n", ctx, entry_info->nss_info.port_id);
 		fal_erp_standby_exit(DP_STANDBY_SWITCH_DEV_ID);
@@ -156,6 +191,7 @@ int nss_dp_netstandby_enter_standby(void *app_data, struct netstandby_entry_info
 			return -EINVAL;
 		}
 	}
+enter_completion:
 #endif
 
 	/*
