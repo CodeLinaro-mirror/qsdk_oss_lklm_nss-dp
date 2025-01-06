@@ -561,11 +561,11 @@ static inline void edma_rx_sawf_sc_stats_update(uint64_t pkt_length, struct edma
  */
 static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring, struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb, struct nss_dp_vp_rx_info *vprxi_p)
 {
-	uint16_t desc_index, peer_id, next_desc_index;
-	uint8_t service_class, wifi_qos;
+	uint16_t desc_index, next_desc_index;
+	uint8_t wifi_qos;
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
 	ppe_drv_tree_id_type_t tree_id_type;
-	uint32_t mlo_mark;
+	uint32_t mlo_mark, sawf_mark;
 
 	desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
 	rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
@@ -601,25 +601,22 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 		/*
 		 * In case of SAWF, fetch the SAWF metadata from Tree ID.
 		 */
-		service_class = EDMA_RXDESC_SERVICE_CLASS_GET(rxdesc_sec);
 #ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
-		peer_id = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
+		/*
+		 * Lower 16 bit is obtained from primary desc and
+		 * upper 2 bits from secondary desc
+		 */
+		sawf_mark = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
+		sawf_mark |= (EDMA_RXDESC_TREE_ID_GET(rxdesc_sec) & 0x3) << 16;
 #else
-		peer_id = EDMA_RXDESC_PEER_ID_GET(rxdesc_sec);
+		sawf_mark = EDMA_RXDESC_SAWF_MARK_GET(rxdesc_sec);
 #endif
 		wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
 
 		/*
-		 * Update stats for the SAWF service class.
-		 */
-		if (PPE_DRV_SERVICE_CLASS_IS_VALID(service_class)) {
-			edma_rx_sawf_sc_stats_update(skb->len, &egc->sawf_sc_stats[service_class]);
-		}
-
-		/*
 		 * Configure skb->mark with SAWF metadata.
 		 */
-		skb->mark = EDMA_RX_SAWF_METADATA_CONSTRUCT(peer_id, wifi_qos);
+		skb->mark = EDMA_RX_SAWF_METADATA_CONSTRUCT(sawf_mark, wifi_qos);
 
 		edma_debug("%px : SAWF mark configured = 0x%x\n", egc, skb->mark);
 		break;
