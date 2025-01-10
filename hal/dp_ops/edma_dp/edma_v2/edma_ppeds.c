@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -324,6 +324,11 @@ static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int
 		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, prod_idx);
 
 		EDMA_RXFILL_BUFFER_ADDR_SET(rxfill_desc, rx_fill_arr[num_alloc].buff_addr);
+
+#ifdef EDMA_40BIT_SUPPORT
+		EDMA_RXFILL_BUFFER_ADDR_HI_SET(rxfill_desc, rx_fill_arr[num_alloc].buff_addr);
+#endif
+
 		rxfill_desc->word2 = rx_fill_arr[num_alloc].opaque_lo;
 		rxfill_desc->word3 = rx_fill_arr[num_alloc].opaque_hi;
 		EDMA_RXFILL_PACKET_LEN_SET(rxfill_desc,
@@ -560,19 +565,26 @@ static void edma_ppeds_set_tx_mapping(uint32_t tx_ring_id, uint32_t txcmpl_ring_
 static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 {
 	uint32_t tx_mod_timer;
+	uint32_t paddr, saddr;
 	struct edma_txdesc_ring *txdesc_ring = &ppeds_node->tx_ring;
 	struct edma_txcmpl_ring *txcmpl_ring = &ppeds_node->txcmpl_ring;
 
 	/*
 	 * Configure TXDESC ring
 	 */
-	edma_reg_write(EDMA_REG_TXDESC_BA(txdesc_ring->id),
-			(uint32_t)(txdesc_ring->pdma &
-				EDMA_RING_DMA_MASK));
+	paddr = (uint32_t)(txdesc_ring->pdma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA(txdesc_ring->id), paddr);
 
-	edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id),
-			(uint32_t)(txdesc_ring->sdma &
-				EDMA_RING_DMA_MASK));
+	saddr = (uint32_t)(txdesc_ring->sdma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id), saddr);
+
+#ifdef EDMA_40BIT_SUPPORT
+	paddr = (uint32_t)((txdesc_ring->pdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA_HIGH(txdesc_ring->id), paddr);
+
+	saddr = (uint32_t)((txdesc_ring->sdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA2_HIGH(txdesc_ring->id), saddr);
+#endif
 
 	edma_reg_write(EDMA_REG_TXDESC_RING_SIZE(txdesc_ring->id),
 			(uint32_t)(txdesc_ring->count &
@@ -583,8 +595,14 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	/*
 	 * Configure TxCmpl ring base address
 	 */
-	edma_reg_write(EDMA_REG_TXCMPL_BA(txcmpl_ring->id),
-			(uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK));
+	paddr = (uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_TXCMPL_BA(txcmpl_ring->id), paddr);
+
+#ifdef EDMA_40BIT_SUPPORT
+	paddr = (uint32_t)((txcmpl_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+	edma_reg_write(EDMA_REG_TXCMPL_BA_HIGH(txcmpl_ring->id), paddr);
+#endif
+
 	edma_reg_write(EDMA_REG_TXCMPL_RING_SIZE(txcmpl_ring->id),
 			(uint32_t)(txcmpl_ring->count & EDMA_TXDESC_RING_SIZE_MASK));
 
@@ -697,20 +715,37 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 	struct edma_rxdesc_ring *rxdesc_ring = &ppeds_node->rx_ring;
 	uint32_t ring_sz;
 	uint32_t data;
+	uint32_t paddr, saddr;
 
-	edma_reg_write(EDMA_REG_RXFILL_BA(rxfill_ring->ring_id),
-			(uint32_t)(rxfill_ring->dma & EDMA_RING_DMA_MASK));
+	paddr = (uint32_t)(rxfill_ring->dma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_RXFILL_BA(rxfill_ring->ring_id), paddr);
+
+	/*
+	 * Fill up the higher 8 bits in another register
+	 */
+#ifdef EDMA_40BIT_SUPPORT
+	paddr = (uint32_t)((rxfill_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+	edma_reg_write(EDMA_REG_RXFILL_BA_HIGH(rxfill_ring->ring_id), paddr);
+#endif
 
 	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
 	edma_reg_write(EDMA_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
 
 	rxfill_ring->prod_idx = edma_reg_read(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id));
 
-	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
-			(uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK));
+	paddr = (uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK);
+	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id), paddr);
 
-	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id),
-			(uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK));
+	saddr = (uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK);
+	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id), saddr);
+
+#ifdef EDMA_40BIT_SUPPORT
+	paddr = (uint32_t)((rxdesc_ring->pdma >> 32) & EDMA_RXDESC_BA_HIGHER_MASK);
+	edma_reg_write(EDMA_REG_RXDESC_BA_HIGH(rxdesc_ring->ring_id), paddr);
+
+	saddr = (uint32_t)((rxdesc_ring->sdma >> 32) & EDMA_RXDESC_PREHEADER_BA_HIGHER_MASK);
+	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA_HIGH(rxdesc_ring->ring_id), saddr);
+#endif
 
 	data = rxdesc_ring->count & EDMA_RXDESC_RING_SIZE_MASK;
 
