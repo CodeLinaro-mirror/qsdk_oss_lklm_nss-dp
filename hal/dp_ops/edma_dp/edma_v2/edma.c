@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -327,7 +327,7 @@ void edma_cleanup(bool is_dp_override)
 	 * Clean the debugfs entries for the EDMA
 	 */
 	edma_debugfs_exit();
-#if !defined(NSS_DP_MEM_PROFILE_MEDIUM)
+#if !defined(NSS_DP_MEM_PROFILE_LOW)
 	/*
 	 * Unregister PTP service code callback function
 	 */
@@ -1573,7 +1573,7 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_hw_init_fail;
 	}
-#if !defined(NSS_DP_MEM_PROFILE_MEDIUM)
+#if !defined(NSS_DP_MEM_PROFILE_LOW)
 	/*
 	 * Register PTP service code callback function
 	 */
