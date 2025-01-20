@@ -125,6 +125,7 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 	nss_dp_vp_rx_cb_t edma_rx_vp_cb;
 
 	rcu_read_lock();
+
 	edma_rx_vp_cb = rcu_dereference(nss_dp_vp_rx_reg_cb);
 	if (unlikely(!edma_rx_vp_cb)) {
 		struct edma_pcpu_stats *pcpu_stats;
@@ -159,6 +160,7 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 	vprxi_p->svp = EDMA_RXDESC_SRC_INFO_GET(rxdesc_desc) & EDMA_RXDESC_PORTNUM_BITS;
 	vprxi_p->napi = &rxdesc_ring->napi;
 	vprxi_p->ip_summed = edma_rx_checksum_verify(rxdesc_desc, skb);
+	vprxi_p->fake_mac = EDMA_RXDESC_FAKE_MAC_GET(rxdesc_desc);
 
 	/*
 	 * Pass the packet to VP to process
