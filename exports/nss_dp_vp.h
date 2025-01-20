@@ -40,6 +40,7 @@ struct nss_dp_vp_rx_info {
 	uint8_t ip_summed;		/* IP checksum */
 	int32_t flow_idx;		/* Flow index of a packet */
 	struct napi_struct *napi;	/* RX NAPI */
+	bool fake_mac;			/* Fake Mac Present */
 };
 
 /*
