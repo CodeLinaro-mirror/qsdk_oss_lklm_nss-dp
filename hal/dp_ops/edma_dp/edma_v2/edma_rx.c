@@ -1835,6 +1835,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 						skb->protocol = eth_type_trans(skb, ndev);
 						napi_gro_receive(&rxdesc_ring->napi, skb);
 					} else if (test_bit(__NSS_DP_NO_LIST, &dp_dev->flags)) {
+						prefetch(skb_shinfo(skb));
 						skb->protocol = eth_type_trans(skb, skb->dev);
 						netif_receive_skb(skb);
 					} else {
