@@ -123,20 +123,8 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 {
 	uint32_t dst_port;
 	nss_dp_vp_rx_cb_t edma_rx_vp_cb;
-	bool fake_mac;
 
 	rcu_read_lock();
-
-	fake_mac = EDMA_RXDESC_FAKE_MAC_GET(rxdesc_desc);
-	if (unlikely(fake_mac)) {
-		/*
-		 * Packet received with fake mac header.
-		 * Move the skb by size of Ethernet header
-		 * to point to L3 header.
-		 */
-		skb_pull_inline(skb, ETH_HLEN);
-	}
-
 	edma_rx_vp_cb = rcu_dereference(nss_dp_vp_rx_reg_cb);
 	if (unlikely(!edma_rx_vp_cb)) {
 		struct edma_pcpu_stats *pcpu_stats;
