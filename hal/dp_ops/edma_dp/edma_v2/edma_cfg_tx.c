@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -224,7 +224,7 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
 	saddr = (uint32_t)(txdesc_ring->sdma & EDMA_RING_DMA_MASK);
 	edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id), saddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((txdesc_ring->pdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_TXDESC_BA_HIGH(txdesc_ring->id), paddr);
 
@@ -262,7 +262,7 @@ static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring
 	paddr = (uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK);
 	edma_reg_write(EDMA_REG_TXCMPL_BA(txcmpl_ring->id), paddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((txcmpl_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_TXCMPL_BA_HIGH(txcmpl_ring->id), paddr);
 #endif

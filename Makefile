@@ -111,15 +111,14 @@ endif
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
 ccflags-y += -DNSS_DP_IPQ54XX
 ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
-ccflags-y += -DNSS_DP_EDMA_REG_WORD_INDEXING
+ccflags-y += -DNSS_DP_HIGHER_RING_MASK_CONFIG
+ccflags-y += -DNSS_DP_MDIO_HIGHER_VP_PORTS_SUPP
+ccflags-y += -DNSS_DP_HIGHER_FC_CONFIG
+ccflags-y += -DNSS_DP_RING_IDX_CONFIG
 ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES
 ccflags-y += -DNSS_DP_EDMA_MHT_SW_WITH_VP_RING
 ccflags-y += -DNSS_DP_EDMA_RING_RESET
 ccflags-y += -DNSS_DP_EDMA_LOOPBACK_BUF_CONFIG
-endif
-
-ifeq ($(higher-address-support),y)
-ccflags-y += -DEDMA_40BIT_SUPPORT
 endif
 
 ccflags-y += $(NSS_DP_INCLUDE)
