@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -202,6 +202,11 @@ enum edma_cpu_port_mcast_queues {
 #define EDMA_MISC_TX_TIMEOUT_STATUS_GET(x)		(((x) & EDMA_MISC_TX_TIMEOUT_MASK) >> 7)
 
 /*
+ * Default Address mask with 4G Addressing.
+ */
+#define EDMA_DEFAULT_DMA_ADDR_MASK 32
+
+/*
  * EDMA Ring usage stats macro
  */
 enum edma_ring_usage_percentage {
@@ -333,6 +338,8 @@ struct edma_gbl_ctx {
 	struct edma_sawf_sc_stats sawf_sc_stats[PPE_DRV_SAWF_SC_MAX];
 			/* Per service class stats */
 
+	uint64_t mem_size;
+			/* DDR size on Board */
 	uint32_t tx_priority_level;
 			/* Tx priority level per port */
 	uint32_t rx_priority_level;

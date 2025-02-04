@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: ISC
  */
 
@@ -255,17 +255,15 @@ static void edma_cfg_rx_desc_loopback_ring_flow_control(struct edma_gbl_ctx *egc
 static void edma_cfg_rx_desc_loopback_ring_configure(struct edma_rxdesc_ring *rxdesc_ring)
 {
 	uint32_t data;
-#ifdef EDMA_40BIT_SUPPORT
 	uint32_t paddr, saddr;
-#endif
 
-	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id),
-			(uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK));
+	paddr = (uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK);
+	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id), paddr);
 
-	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id),
-			(uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK));
+	saddr = (uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK);
+	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id), saddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
         paddr = (uint32_t)((rxdesc_ring->pdma >> 32) & EDMA_RXDESC_BA_HIGHER_MASK);
         edma_reg_write(EDMA_REG_RXDESC_BA_HIGH(rxdesc_ring->ring_id), paddr);
 
@@ -294,14 +292,12 @@ static void edma_cfg_rx_desc_loopback_ring_configure(struct edma_rxdesc_ring *rx
 static void edma_cfg_rx_fill_loopback_ring_configure(struct edma_rxfill_ring *rxfill_ring)
 {
 	uint32_t ring_sz;
-#ifdef EDMA_40BIT_SUPPORT
 	uint32_t paddr;
-#endif
 
-	edma_reg_write(EDMA_REG_RXFILL_BA(rxfill_ring->ring_id),
-			(uint32_t)(rxfill_ring->dma & EDMA_RING_DMA_MASK));
+	paddr = (uint32_t)(rxfill_ring->dma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_RXFILL_BA(rxfill_ring->ring_id), paddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
         paddr = (uint32_t)((rxfill_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
         edma_reg_write(EDMA_REG_RXFILL_BA_HIGH(rxfill_ring->ring_id), paddr);
 #endif

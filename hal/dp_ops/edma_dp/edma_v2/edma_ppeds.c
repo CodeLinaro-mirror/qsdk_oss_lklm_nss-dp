@@ -325,7 +325,7 @@ static void edma_ppeds_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int
 
 		EDMA_RXFILL_BUFFER_ADDR_SET(rxfill_desc, rx_fill_arr[num_alloc].buff_addr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 		EDMA_RXFILL_BUFFER_ADDR_HI_SET(rxfill_desc, rx_fill_arr[num_alloc].buff_addr);
 #endif
 
@@ -578,7 +578,7 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	saddr = (uint32_t)(txdesc_ring->sdma & EDMA_RING_DMA_MASK);
 	edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id), saddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((txdesc_ring->pdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_TXDESC_BA_HIGH(txdesc_ring->id), paddr);
 
@@ -598,7 +598,7 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	paddr = (uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK);
 	edma_reg_write(EDMA_REG_TXCMPL_BA(txcmpl_ring->id), paddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((txcmpl_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_TXCMPL_BA_HIGH(txcmpl_ring->id), paddr);
 #endif
@@ -723,7 +723,7 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 	/*
 	 * Fill up the higher 8 bits in another register
 	 */
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((rxfill_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_RXFILL_BA_HIGH(rxfill_ring->ring_id), paddr);
 #endif
@@ -739,7 +739,7 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 	saddr = (uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK);
 	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id), saddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((rxdesc_ring->pdma >> 32) & EDMA_RXDESC_BA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_RXDESC_BA_HIGH(rxdesc_ring->ring_id), paddr);
 
