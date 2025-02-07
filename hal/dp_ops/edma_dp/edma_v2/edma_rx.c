@@ -57,6 +57,7 @@ static inline void edma_rx_process_capwap_vp(struct edma_rxdesc_ring *rxdesc_rin
 		struct nss_dp_dev *vp_dev;
 		edma_warn(" Non-vp packet received on capwap ring skb:%px\n", skb);
 		vp_dev = netdev_priv(skb->dev);
+		mem_debug_update_skb(skb);
 		dev_kfree_skb_any(skb);
 		pcpu_stats = &vp_dev->dp_info.pcpu_stats;
 		rx_stats = this_cpu_ptr(pcpu_stats->rx_stats);
@@ -83,6 +84,7 @@ static inline void edma_rx_process_capwap_vp(struct edma_rxdesc_ring *rxdesc_rin
 		vsl->dvp = dvp;
 	}
 
+	mem_debug_update_skb(skb);
 	vsl->len += skb->len;
 	__skb_queue_tail(&vsl->skb_list, skb);
 
@@ -139,6 +141,7 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 		}
 
 		vp_dev = netdev_priv(skb->dev);
+		mem_debug_update_skb(skb);
 		dev_kfree_skb_any(skb);
 
 		pcpu_stats = &vp_dev->dp_info.pcpu_stats;
@@ -165,6 +168,7 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 	/*
 	 * Pass the packet to VP to process
 	 */
+	mem_debug_update_skb(skb);
 	edma_rx_vp_cb(skb, vprxi_p);
 	rcu_read_unlock();
 }
@@ -447,6 +451,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 				u64_stats_update_begin(&rxfill_stats->syncp);
 				++rxfill_stats->page_alloc_failed;
 				u64_stats_update_end(&rxfill_stats->syncp);
+				mem_debug_update_skb(skb);
 				dev_kfree_skb_any(skb);
 				edma_debug("edma_gbl_ctx:%px Unable to allocate page", &edma_gbl_ctx);
 				break;
@@ -921,6 +926,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 	/*
 	 * Free the SKB after we have appended its frag page to the head skb
 	 */
+	mem_debug_update_skb(skb);
 	dev_kfree_skb_any(skb);
 
 process_next_scatter:
@@ -956,6 +962,7 @@ process_next_scatter:
 			 * Discard the SKB that we have been building,
 			 * in addition to the SKB linked to current descriptor.
 			 */
+			mem_debug_update_skb(skb_head);
 			dev_kfree_skb_any(skb_head);
 			rxdesc_ring->head = NULL;
 			rxdesc_ring->last = NULL;
@@ -984,6 +991,7 @@ process_next_scatter:
 		 * Discard the SKB that we have been building,
 		 * in addition to the SKB linked to current descriptor.
 		 */
+		mem_debug_update_skb(skb_head);
 		dev_kfree_skb_any(skb_head);
 		rxdesc_ring->head = NULL;
 		rxdesc_ring->last = NULL;
@@ -1043,6 +1051,7 @@ process_next_scatter:
 	 * Check if packet is meant for VP processing
 	 */
 	if (unlikely(EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK)) {
+		mem_debug_update_skb(skb_head);
 		edma_rx_process_vp(rxdesc_ring->pdesc_head, rxdesc_ring, skb_head, &vprxi);
 		rxdesc_ring->head = NULL;
 		rxdesc_ring->last = NULL;
@@ -1063,6 +1072,7 @@ process_next_scatter:
 	/*
 	 * Send packet up the stack
 	 */
+	mem_debug_update_skb(skb_head);
 #if defined(NSS_DP_ENABLE_NAPI_GRO)
 	napi_gro_receive(&rxdesc_ring->napi, skb_head);
 #else
@@ -1119,6 +1129,7 @@ void edma_rx_handle_capwap_linear_packets(struct edma_gbl_ctx *egc,
 			u64_stats_update_begin(&rx_stats->syncp);
 			rx_stats->rx_nr_frag_headroom_err++;
 			u64_stats_update_end(&rx_stats->syncp);
+			mem_debug_update_skb(skb);
 			dev_kfree_skb_any(skb);
 			return;
 		}
@@ -1178,6 +1189,7 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
 
+	mem_debug_update_skb(skb);
 	/*
 	 * Get stats for the netdevice
 	 */
@@ -1215,6 +1227,7 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 		u64_stats_update_begin(&rx_stats->syncp);
 		rx_stats->rx_nr_frag_headroom_err++;
 		u64_stats_update_end(&rx_stats->syncp);
+		mem_debug_update_skb(skb);
 		dev_kfree_skb_any(skb);
 		return false;
 	}
@@ -1260,6 +1273,7 @@ send_to_stack:
 		 * 2. If the service code/cpu code processing consumes the packet,
 		 *    don't send it to stack otherwise continue with regular processing.
 		 */
+		mem_debug_update_skb(skb);
 		if (edma_rx_handle_sc_cc_packets(egc, rxdesc_ring, rxdesc_desc, skb)) {
 			return false;
 		}
@@ -1279,6 +1293,7 @@ send_to_stack:
 	 * Check if packet is meant for VP processing
 	 */
 	if (EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK) {
+		mem_debug_update_skb(skb);
 		edma_rx_process_vp(rxdesc_desc, rxdesc_ring, skb, &vprxi);
 		return false;
 	}
@@ -1288,6 +1303,7 @@ send_to_stack:
 	 * using the relevant details as configured.
 	 */
 	if (unlikely(edma_dp_extension_en)) {
+		mem_debug_update_skb(skb);
 		edma_rx_dp_extension_process(dp_dev, skb);
 	}
 
@@ -1580,6 +1596,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 		if (likely(!(rxdesc_ring->head))) {
 			ndev = edma_rx_get_src_capwap_dev(egc, rxdesc_stats, rxdesc_desc, skb);
 			if(unlikely(!ndev)) {
+				mem_debug_update_skb(skb);
 				dev_kfree_skb_any(skb);
 
 				/*
@@ -1633,6 +1650,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 		/*
 		 * Handle scatter frame processing for first/middle/last segments
 		 */
+		mem_debug_update_skb(skb);
 		edma_rx_handle_scatter_frames(egc, rxdesc_ring, rxdesc_desc, skb);
 
 next_rx_desc:
@@ -1792,6 +1810,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 		if (likely(!(rxdesc_ring->head))) {
 			ndev = edma_rx_get_src_dev(egc, rxdesc_stats, rxdesc_desc, skb);
 			if(unlikely(!ndev)) {
+				mem_debug_update_skb(skb);
 				dev_kfree_skb_any(skb);
 				goto next_rx_desc;
 			}
@@ -1832,10 +1851,12 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 				if (likely(edma_rx_handle_linear_packets(egc, rxdesc_ring, rxdesc_desc, dp_dev, skb))) {
 					if (unlikely(ndev->features & NETIF_F_GRO)) {
 						skb->protocol = eth_type_trans(skb, ndev);
+						mem_debug_update_skb(skb);
 						napi_gro_receive(&rxdesc_ring->napi, skb);
 					} else if (test_bit(__NSS_DP_NO_LIST, &dp_dev->flags)) {
 						prefetch(skb_shinfo(skb));
 						skb->protocol = eth_type_trans(skb, skb->dev);
+						mem_debug_update_skb(skb);
 						netif_receive_skb(skb);
 					} else {
 						list_add_tail(&skb->list, &rx_list);
@@ -1848,6 +1869,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 		/*
 		 * Handle scatter frame processing for first/middle/last segments
 		 */
+		mem_debug_update_skb(skb);
 		edma_rx_handle_scatter_frames(egc, rxdesc_ring, rxdesc_desc, skb);
 
 next_rx_desc:

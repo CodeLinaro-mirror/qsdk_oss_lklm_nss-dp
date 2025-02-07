@@ -17,6 +17,7 @@
  */
 
 #include <linux/version.h>
+#include <linux/debug_mem_usage.h>
 #include <linux/interrupt.h>
 #include <linux/phy.h>
 #include <linux/netdevice.h>
@@ -194,9 +195,11 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 			 * from recycler and has been fast trasmitted
 			 */
 			if (likely(skb->fast_xmit) && likely(skb->is_from_recycler)) {
+				mem_debug_update_skb(skb);
 				dev_check_skb_fast_recyclable(skb);
 				__skb_queue_head(&h, skb);
 			} else {
+				mem_debug_update_skb(skb);
 				dev_kfree_skb(skb);
 			}
 		}
@@ -726,6 +729,8 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 
 	hw_next_to_use = txdesc_ring->prod_idx;
+
+	mem_debug_update_skb(skb);
 
 	if (unlikely(!(txdesc_ring->avail_desc)))  {
 		txdesc_ring->avail_desc = edma_tx_avail_desc(txdesc_ring, hw_next_to_use);
