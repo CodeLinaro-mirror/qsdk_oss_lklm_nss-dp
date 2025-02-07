@@ -351,7 +351,8 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 		edma_tx_desc_init(txd);
 		buff_addr = (dma_addr_t)virt_to_phys(skb_frag_address(frag));
 		EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
-#if defined(NSS_DP_HIGHMEM_SUPP)
+
+#ifdef EDMA_40BIT_SUPPORT
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
@@ -516,7 +517,8 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	 */
 	buff_addr = (dma_addr_t)virt_to_phys(skb->data);
 	EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
-#if defined(NSS_DP_HIGHMEM_SUPP)
+
+#ifdef EDMA_40BIT_SUPPORT
 	EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
@@ -602,9 +604,11 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 			edma_tx_desc_init(txd);
 			buff_addr = (dma_addr_t)virt_to_phys(iter_skb->data);
 			EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
-#if defined(NSS_DP_HIGHMEM_SUPP)
+
+#ifdef EDMA_40BIT_SUPPORT
 			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
+
 			edma_dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
 

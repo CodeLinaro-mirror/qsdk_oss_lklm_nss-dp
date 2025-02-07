@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -106,13 +106,6 @@
 #define NSS_DP_EDMA_NSSNOC_SNOC_CLK_FREQ		266666666
 #define NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK_FREQ		6000000
 #define NSS_DP_EDMA_NSSNOC_XO_DCD_CLK_FREQ		24000000
-
-/*
- * Set the flag only for 64-bit DMA address.
- */
-#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
-#define NSS_DP_HIGHMEM_SUPP
-#endif
 
 /**
  * nss_dp_hal_gmac_stats

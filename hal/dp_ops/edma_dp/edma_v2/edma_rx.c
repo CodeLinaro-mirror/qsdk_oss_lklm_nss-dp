@@ -310,7 +310,7 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 			 * Map Rx buffer for DMA
 			 */
 			EDMA_RXFILL_BUFFER_ADDR_SET(rxfill_desc, buff_addr);
-#if defined(NSS_DP_HIGHMEM_SUPP)
+#ifdef EDMA_40BIT_SUPPORT
 			EDMA_RXFILL_BUFFER_ADDR_HI_SET(rxfill_desc, buff_addr);
 #endif
 
@@ -477,10 +477,10 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		 * Set up Buffer high address.
 		 */
 		EDMA_RXFILL_BUFFER_ADDR_SET(rxfill_desc, buff_addr);
-#if defined(NSS_DP_HIGHMEM_SUPP)
+
+#ifdef EDMA_40BIT_SUPPORT
 		EDMA_RXFILL_BUFFER_ADDR_HI_SET(rxfill_desc, buff_addr);
 #endif
-
 		/*
 		 * Store skb in opaque
 		 */
