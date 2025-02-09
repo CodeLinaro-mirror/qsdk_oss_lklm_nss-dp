@@ -422,17 +422,40 @@ static bool edma_validate_desc_map(void)
 }
 
 /*
+ * edma_get_ddr_size()
+ *	API to calculate DDR size from device tree.
+ */
+static uint64_t edma_get_ddr_size(void) {
+	struct resource mem;
+	struct device_node *np;
+	resource_size_t mem_size = 0;
+	int i = 0;
+
+	np = of_find_node_by_type(NULL, "memory");
+	if (!np) {
+		edma_err("Failed to read memory node from device tree\n");
+		return 0;
+	}
+
+	while (of_address_to_resource(np, i, &mem) == 0) {
+		mem_size += resource_size(&mem);
+		i++;
+	}
+
+	edma_info("DDR size is %lld\n", mem_size);
+	return (uint64_t)mem_size;
+}
+
+/*
  * edma_of_get_pdata()
  *	Read the device tree details for EDMA
  */
 static int edma_of_get_pdata(struct resource *edma_res)
 {
-	int ret;
-	uint32_t i, j;
-
-#ifdef EDMA_40BIT_SUPPORT
 	struct platform_device *pdev;
-#endif
+	uint64_t mem_size;
+	uint32_t i, j;
+	int ret, mask;
 
 	/*
 	 * Find EDMA node in device tree
@@ -448,7 +471,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	/*
 	 * Get EDMA device node
 	 */
-	edma_gbl_ctx.pdev = of_find_device_by_node(edma_gbl_ctx.device_node);
+	pdev = edma_gbl_ctx.pdev = of_find_device_by_node(edma_gbl_ctx.device_node);
 	if (!edma_gbl_ctx.pdev) {
 		edma_err("Platform device for node %px(%s) not found\n",
 				edma_gbl_ctx.device_node,
@@ -466,16 +489,26 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	}
 
 	/*
-	 * Set the DMA to allocate memory from beyond 4GB
+	 * Check the DDR size. This is populated by the bootloader.
+	 * Starting from IPQ5424 onwards, DDR size beyond 4GB is supported and we need
+	 * to configure EDMA based on the DDR size.
 	 */
-#ifdef EDMA_40BIT_SUPPORT
-	pdev = edma_gbl_ctx.pdev;
-	ret = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
-	if (ret) {
-		edma_err("dma_set_mask_and_coherent failed for mask 64 with ret %d\n", ret);
+	edma_gbl_ctx.mem_size = mem_size = edma_get_ddr_size();
+	if (!mem_size) {
+		edma_err("Failed to get the Memory size\n");
 		return -ENOMEM;
 	}
-#endif
+
+	/*
+	 * Check if the Memory size is a Power of 2.
+	 */
+	BUG_ON(!is_power_of_2(mem_size));
+
+	mask = max((fls64(mem_size) - 1), EDMA_DEFAULT_DMA_ADDR_MASK);
+	if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(mask))) {
+		edma_err("dma_set_mask_and_coherent failed for mask (%d)\n", mask);
+		return -ENOMEM;
+	}
 
 	/*
 	 * Get id of first TXDESC ring

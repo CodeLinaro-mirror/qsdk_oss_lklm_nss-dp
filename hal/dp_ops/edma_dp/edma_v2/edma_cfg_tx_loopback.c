@@ -129,22 +129,18 @@ static int edma_cfg_tx_desc_loopback_ring_setup(struct edma_txdesc_ring *txdesc_
  */
 static void edma_cfg_tx_desc_loopback_ring_configure(struct edma_txdesc_ring *txdesc_ring)
 {
-#ifdef EDMA_40BIT_SUPPORT
 	uint32_t paddr, saddr;
-#endif
 
 	/*
 	 * Configure TXDESC ring
 	 */
-	edma_reg_write(EDMA_REG_TXDESC_BA(txdesc_ring->id),
-			(uint32_t)(txdesc_ring->pdma &
-			EDMA_RING_DMA_MASK));
+	paddr = (uint32_t)(txdesc_ring->pdma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA(txdesc_ring->id), paddr);
 
-	edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id),
-			(uint32_t)(txdesc_ring->sdma &
-			EDMA_RING_DMA_MASK));
+	saddr = (uint32_t)(txdesc_ring->sdma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id), saddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
         paddr = (uint32_t)((txdesc_ring->pdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
         edma_reg_write(EDMA_REG_TXDESC_BA_HIGH(txdesc_ring->id), paddr);
 
@@ -172,18 +168,16 @@ static void edma_cfg_tx_desc_loopback_ring_configure(struct edma_txdesc_ring *tx
  */
 static void edma_cfg_tx_cmpl_loopback_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 {
-#ifdef EDMA_40BIT_SUPPORT
 	uint32_t paddr;
-#endif
 
 	/*
 	 * Configure TxCmpl ring base address
 	 */
+	paddr = (uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_TXCMPL_BA(txcmpl_ring->id), paddr);
 
-	edma_reg_write(EDMA_REG_TXCMPL_BA(txcmpl_ring->id),
-			(uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK));
-#ifdef EDMA_40BIT_SUPPORT
-        paddr = (uint32_t)((txcmpl_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+#if defined(NSS_DP_HIGHMEM_SUPP)
+	paddr = (uint32_t)((txcmpl_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
         edma_reg_write(EDMA_REG_TXCMPL_BA_HIGH(txcmpl_ring->id), paddr);
 #endif
 
