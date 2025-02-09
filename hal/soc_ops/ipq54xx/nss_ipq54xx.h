@@ -107,6 +107,13 @@
 #define NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK_FREQ		6000000
 #define NSS_DP_EDMA_NSSNOC_XO_DCD_CLK_FREQ		24000000
 
+/*
+ * Set the flag only for 64-bit DMA address.
+ */
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+#define NSS_DP_HIGHMEM_SUPP
+#endif
+
 /**
  * nss_dp_hal_gmac_stats
  *	The per-GMAC statistics structure.

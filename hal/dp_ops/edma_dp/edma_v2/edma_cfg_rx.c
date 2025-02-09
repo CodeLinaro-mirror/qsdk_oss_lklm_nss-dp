@@ -655,14 +655,13 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 	saddr = (uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK);
 	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id), saddr);
 
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((rxdesc_ring->pdma >> 32) & EDMA_RXDESC_BA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_RXDESC_BA_HIGH(rxdesc_ring->ring_id), paddr);
 
 	saddr = (uint32_t)((rxdesc_ring->sdma >> 32) & EDMA_RXDESC_PREHEADER_BA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA_HIGH(rxdesc_ring->ring_id), saddr);
 #endif
-
 	data = rxdesc_ring->count & EDMA_RXDESC_RING_SIZE_MASK;
 
 	/*
@@ -737,7 +736,7 @@ static void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring
 	/*
 	 * Fill up the higher 8 bits in another register
 	 */
-#ifdef EDMA_40BIT_SUPPORT
+#if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((rxfill_ring->dma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_RXFILL_BA_HIGH(rxfill_ring->ring_id), paddr);
 #endif
