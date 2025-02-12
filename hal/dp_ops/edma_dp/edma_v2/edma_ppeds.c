@@ -211,9 +211,12 @@ static uint32_t edma_ppeds_tx_complete(uint32_t work_to_do, struct edma_txcmpl_r
 	struct edma_ppeds *ppeds_node = container_of(txcmpl_ring, struct edma_ppeds, txcmpl_ring);
 	nss_dp_ppeds_handle_t *ppeds_handle = &ppeds_node->ppeds_handle;
 	struct edma_txcmpl_desc *txcmpl;
-	uint32_t cons_idx, prod_idx, data, avail;
+	uint32_t cons_idx, prod_idx, data;
 	uint16_t count;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	int16_t avail_cnt, idx;
+	uint32_t avail_in_ring;
+	uint16_t chnk_of_reap;
 
 	cons_idx = txcmpl_ring->cons_idx;
 
@@ -223,32 +226,42 @@ static uint32_t edma_ppeds_tx_complete(uint32_t work_to_do, struct edma_txcmpl_r
 	data = edma_reg_read(EDMA_REG_TXCMPL_PROD_IDX(txcmpl_ring->id));
 	prod_idx = data & EDMA_TXCMPL_PROD_IDX_MASK;
 
-	avail = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, txcmpl_ring->count);
-	if (!avail) {
+	avail_in_ring = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, txcmpl_ring->count);
+	if (!avail_in_ring) {
 		return 0;
 	}
 
 	if (unlikely(egc->enable_ring_util_stats)) {
-		edma_update_ring_stats(avail, ppeds_node->txcmpl_ring.count,
+		edma_update_ring_stats(avail_in_ring, ppeds_node->txcmpl_ring.count,
 				       &ppeds_node->txcmpl_ring.tx_cmpl_stats.ring_stats);
 	}
 
-	avail = min(avail, work_to_do);
-	count = avail;
+	avail_in_ring = min(avail_in_ring, work_to_do);
+	count = avail_in_ring;
 
-	txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
+	do {
+		chnk_of_reap = min(avail_in_ring, ppeds_handle->eth_txcomp_chnk_of_reap);
+		avail_cnt = idx = chnk_of_reap;
 
-	while (likely(avail--)) {
-		ppeds_handle->tx_cmpl_arr[count - avail - 1].cookie = EDMA_TXCMPL_OPAQUE_GET(txcmpl);
-
-		cons_idx = ((cons_idx + 1) & (txcmpl_ring->count - 1));
 		txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
-	}
 
-	txcmpl_ring->cons_idx = cons_idx;
-	edma_reg_write(EDMA_REG_TXCMPL_CONS_IDX(txcmpl_ring->id), cons_idx);
+		while (likely(idx--)) {
+			ppeds_handle->tx_cmpl_arr[avail_cnt - idx - 1].cookie = EDMA_TXCMPL_OPAQUE_GET(txcmpl);
 
-	ppeds_node->ops->tx_cmpl(ppeds_handle, count);
+			cons_idx = ((cons_idx + 1) & (txcmpl_ring->count - 1));
+			txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
+		}
+
+		/* Update Tx comp consumer index. */
+		txcmpl_ring->cons_idx = cons_idx;
+		edma_reg_write(EDMA_REG_TXCMPL_CONS_IDX(txcmpl_ring->id), cons_idx);
+
+		/* Complete/replenish all the buffers. */
+		ppeds_node->ops->tx_cmpl(ppeds_handle, avail_cnt);
+
+		avail_in_ring -= chnk_of_reap;
+	} while(avail_in_ring > 0);
+
 	return count;
 }
 
