@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -241,34 +241,23 @@ extern uint32_t rx_ring_sz_high_mem;
 /*
  * SAWF related macros
  */
-#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
-#define EDMA_RXDESC_SERVICE_CLASS_SHIFT                 0
-#define EDMA_RXDESC_SERVICE_CLASS_MASK                  0x000000FF
-#else
-#define EDMA_RXDESC_SERVICE_CLASS_SHIFT			10
-#define EDMA_RXDESC_SERVICE_CLASS_MASK			0x0003FC00
-#endif
-
-#define EDMA_RXDESC_SERVICE_CLASS_GET(desc)		((EDMA_RXDESC_TREE_ID_GET(desc) & EDMA_RXDESC_SERVICE_CLASS_MASK) \
-								>> EDMA_RXDESC_SERVICE_CLASS_SHIFT)
-#define EDMA_RXDESC_PEER_ID_MASK			0x000003FF
-#define EDMA_RXDESC_PEER_ID_GET(desc)			(EDMA_RXDESC_TREE_ID_GET(desc) & EDMA_RXDESC_PEER_ID_MASK)
+#define EDMA_RXDESC_SAWF_MSDUQ_SHIFT			6
+#define EDMA_RXDESC_SAWF_MARK_MASK			0x0003FFFF
+#define EDMA_RXDESC_SAWF_MARK_GET(desc)			EDMA_RXDESC_TREE_ID_GET(desc) & EDMA_RXDESC_SAWF_MARK_MASK
 
 /*
  * Service class TAG to be added for SAWF metadata.
  */
-#define EDMA_RX_SAWF_SERVICE_CLASS_TAG			0xAA000000
+#define EDMA_RX_SAWF_TAG				0xAA000000
 
 /*
  * Construct the SAWF metadata
- *	----------------------------------------------------------------------------
- *	|TAG (8 bits) | service_class (8 bits) | peerid (10 bits) | MSDUQ (6 bits))|
- *	----------------------------------------------------------------------------
+ *	----------------------------------------------------------------------
+ *	|TAG (8 bits) | Tree-ID (Least significant 18 bits) | MSDUQ (6 bits))|
+ *	----------------------------------------------------------------------
  */
-#define EDMA_RX_SAWF_METADATA_SERVICE_CLASS_SHIFT		16
-#define EDMA_RX_SAWF_METADATA_PEER_ID_SHIFT			6
-#define EDMA_RX_SAWF_METADATA_CONSTRUCT(pi, msduq)		(EDMA_RX_SAWF_SERVICE_CLASS_TAG | \
-								(pi << EDMA_RX_SAWF_METADATA_PEER_ID_SHIFT) | \
+#define EDMA_RX_SAWF_METADATA_CONSTRUCT(mark, msduq)		(EDMA_RX_SAWF_TAG | \
+								(mark << EDMA_RXDESC_SAWF_MSDUQ_SHIFT) | \
 								msduq)
 
 /*
@@ -284,7 +273,7 @@ extern uint32_t rx_ring_sz_high_mem;
  *	|TAG (8 bits) | Tree-ID (Least significant 18 bits) | WiFi-QoS (6 bits) |
  *	-------------------------------------------------------------------------
  */
-#define EDMA_RX_MLO_METADATA_CONSTRUCT(mark, msduq)		(EDMA_RX_SAWF_SERVICE_CLASS_TAG | \
+#define EDMA_RX_MLO_METADATA_CONSTRUCT(mark, msduq)		(EDMA_RX_SAWF_TAG | \
 								(mark << EDMA_RXDESC_MLO_MSDUQ_SHIFT) | \
 								(msduq))
 
