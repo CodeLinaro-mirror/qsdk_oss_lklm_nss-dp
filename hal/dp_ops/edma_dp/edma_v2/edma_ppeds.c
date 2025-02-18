@@ -980,10 +980,10 @@ bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	netif_napi_add(&ppeds_node->napi_ndev, &ppeds_node->rxfill_ring.napi,
-			edma_ppeds_rxfill_napi_poll, EDMA_PPEDS_RXFILL_WEIGHT);
+			edma_ppeds_rxfill_napi_poll, ppeds_handle->eth_rxfill_budget);
 #else
 	netif_napi_add_weight(&ppeds_node->napi_ndev, &ppeds_node->rxfill_ring.napi,
-			edma_ppeds_rxfill_napi_poll, EDMA_PPEDS_RXFILL_WEIGHT);
+			edma_ppeds_rxfill_napi_poll, ppeds_handle->eth_rxfill_budget);
 #endif
 
 	ret = edma_ppeds_rx_secondary_alloc(&ppeds_node->rx_ring);

@@ -49,6 +49,7 @@ typedef struct nss_dp_ppeds_handle {
 	uint32_t reo2ppe_txcmpl_num_desc;	/**< REO2PPE Txcomplete descriptor count */
 	uint32_t eth_rxfill_low_thr;	/**< RxFill ring's low threshold interrupt value */
 	uint32_t eth_txcomp_budget;	/**< Tx complete's budget */
+	uint32_t eth_rxfill_budget;	/**< RxFill ring's budget value */
 	struct nss_dp_ppeds_rx_fill_elem *rx_fill_arr;	/**< RxFill buffer array */
 	struct nss_dp_ppeds_tx_cmpl_elem *tx_cmpl_arr;	/**< TxComplete buffer array */
 	char priv[] __aligned(NETDEV_ALIGN);	/**< Private area */
