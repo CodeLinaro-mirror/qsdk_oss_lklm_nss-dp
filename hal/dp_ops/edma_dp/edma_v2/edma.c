@@ -456,8 +456,10 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	uint64_t mem_size;
 	uint32_t i, j;
 	int ret, mask;
+#if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	bool ddr_ext_upstream;
 	uint32_t loopback_feature_type = 0;
+#endif
 
 	/*
 	 * Find EDMA node in device tree
