@@ -114,6 +114,8 @@
 #define NSS_DP_HIGHMEM_SUPP
 #endif
 
+#define EDMA_MAX_DMA_MASK_BIT_HI 40
+
 /**
  * nss_dp_hal_gmac_stats
  *	The per-GMAC statistics structure.

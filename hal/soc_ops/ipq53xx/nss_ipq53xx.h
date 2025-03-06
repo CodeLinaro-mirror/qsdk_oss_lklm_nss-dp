@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -124,6 +124,8 @@
 #define NSS_DP_EDMA_CC_NSSNOC_CE_AXI_CLK_FREQ		200000000
 #define NSS_DP_EDMA_SNOC_NSSNOC_CLK_FREQ		266666666
 #define NSS_DP_EDMA_SNOC_NSSNOC_1_CLK_FREQ		266666666
+
+#define EDMA_MAX_DMA_MASK_BIT_HI 32
 
 /**
  * nss_dp_hal_gmac_stats

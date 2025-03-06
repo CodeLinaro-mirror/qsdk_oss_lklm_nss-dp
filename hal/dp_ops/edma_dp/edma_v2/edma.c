@@ -447,15 +447,27 @@ static uint64_t edma_get_ddr_size(void) {
 }
 
 /*
+ * edma_get_dma_mask()
+ *	API to calculate DMA mask from DDR size.
+ */
+static uint64_t edma_get_dma_mask(uint64_t ddr_size)
+{
+ 	if (ddr_size <= EDMA_DEFAULT_DDR_SIZE)
+		return (uint64_t)DMA_BIT_MASK(EDMA_DEFAULT_DMA_MASK_BIT_HI);
+
+	return (uint64_t)DMA_BIT_MASK(EDMA_MAX_DMA_MASK_BIT_HI);
+}
+
+/*
  * edma_of_get_pdata()
  *	Read the device tree details for EDMA
  */
 static int edma_of_get_pdata(struct resource *edma_res)
 {
 	struct platform_device *pdev;
-	uint64_t mem_size;
+	uint64_t mem_size, mask;
 	uint32_t i, j;
-	int ret, mask;
+	int ret;
 
 	/*
 	 * Find EDMA node in device tree
@@ -490,7 +502,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 
 	/*
 	 * Check the DDR size. This is populated by the bootloader.
-	 * Starting from IPQ5424 onwards, DDR size beyond 4GB is supported and we need
+	 * Starting from IPQ5424 onwards, DDR size beyond 3GB is supported and we need
 	 * to configure EDMA based on the DDR size.
 	 */
 	edma_gbl_ctx.mem_size = mem_size = edma_get_ddr_size();
@@ -500,13 +512,12 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	}
 
 	/*
-	 * Check if the Memory size is a Power of 2.
+	 * Get the DMA mask to be programmed.
 	 */
-	BUG_ON(!is_power_of_2(mem_size));
-
-	mask = max((fls64(mem_size) - 1), EDMA_DEFAULT_DMA_ADDR_MASK);
-	if (dma_set_mask(&pdev->dev, DMA_BIT_MASK(mask))) {
-		edma_err("dma_set_mask_and_coherent failed for mask (%d)\n", mask);
+	mask = edma_get_dma_mask(mem_size);
+	pr_info("DDR size: %llx, DMA mask is %llx\n", mem_size, mask);
+	if (dma_set_mask(&pdev->dev, mask)) {
+		edma_err("dma_set_mask_and_coherent failed for mask (%llx)\n", mask);
 		return -ENOMEM;
 	}
 
