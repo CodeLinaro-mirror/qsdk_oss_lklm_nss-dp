@@ -201,10 +201,12 @@ enum edma_cpu_port_mcast_queues {
 #define EDMA_MISC_DATA_LEN_ERR_STATUS_GET(x)		(((x) & EDMA_MISC_DATA_LEN_ERR_MASK) >> 6)
 #define EDMA_MISC_TX_TIMEOUT_STATUS_GET(x)		(((x) & EDMA_MISC_TX_TIMEOUT_MASK) >> 7)
 
-/*
- * Default Address mask with 4G Addressing.
- */
-#define EDMA_DEFAULT_DMA_ADDR_MASK 32
+#define __DDR_SIZE_KBYTES(x) ((x) * 1024)
+#define __DDR_SIZE_MBYTES(x) (__DDR_SIZE_KBYTES(x) * 1024)
+#define __DDR_SIZE_GBYTES(x) (__DDR_SIZE_MBYTES(x) * 1024)
+
+#define EDMA_DEFAULT_DDR_SIZE __DDR_SIZE_GBYTES(3UL) /* 3GB */
+#define EDMA_DEFAULT_DMA_MASK_BIT_HI 32
 
 /*
  * EDMA Ring usage stats macro

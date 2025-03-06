@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -109,6 +109,8 @@
 #define NSS_DP_EDMA_TBU_CLK_FREQ			533333333
 #define NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK_FREQ		533333333
 #define NSS_DP_EDMA_NSSNOC_MEMNOC_CLK_FREQ		533333333
+
+#define EDMA_MAX_DMA_MASK_BIT_HI 32
 
 /**
  * nss_dp_hal_gmac_stats
