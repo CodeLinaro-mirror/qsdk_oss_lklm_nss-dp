@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022-2024, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -173,6 +173,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 			rx_desc_stats[i].src_port_inval = stats->src_port_inval;
 			rx_desc_stats[i].src_port_inval_type = stats->src_port_inval_type;
 			rx_desc_stats[i].src_port_inval_netdev = stats->src_port_inval_netdev;
+			rx_desc_stats[i].rx_napi_sched = stats->rx_napi_sched;
 			memcpy(&rx_desc_stats[i].ring_stats, &stats->ring_stats,
 					sizeof(struct edma_ring_util_stats));
 		} while (edma_dp_stats_fetch_retry(&stats->syncp, start));
@@ -187,9 +188,11 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 				i + rx_desc_start_id, rx_desc_stats[i].src_port_inval);
 		seq_printf(m, "\t\t rxdesc[%d]:src_port_inval_type = %llu\n",
 				i + rx_desc_start_id, rx_desc_stats[i].src_port_inval_type);
-		seq_printf(m, "\t\t rxdesc[%d]:src_port_inval_netdev = %llu\n\n",
+		seq_printf(m, "\t\t rxdesc[%d]:src_port_inval_netdev = %llu\n",
 				i + rx_desc_start_id,
 				rx_desc_stats[i].src_port_inval_netdev);
+		seq_printf(m, "\t\t rxdesc[%d]:rx_napi_sched = %llu\n\n",
+				i + rx_desc_start_id, rx_desc_stats[i].rx_napi_sched);
 		seq_printf(m, "\t\t Rx Descriptor ring full utilization stats\n");
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
 			 seq_printf(m, "\t\t %s utilized %d times\n", edma_debugfs_ring_usage_dump[j],
