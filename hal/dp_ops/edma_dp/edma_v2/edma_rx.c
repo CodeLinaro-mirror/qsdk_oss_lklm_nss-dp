@@ -1987,17 +1987,21 @@ int edma_rx_napi_poll(struct napi_struct *napi, int budget)
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx)
 {
 	struct edma_rxdesc_ring *rxdesc_ring = (struct edma_rxdesc_ring *)ctx;
+	struct edma_rx_desc_stats *rxdesc_stats = &rxdesc_ring->rx_desc_stats;
 
 	edma_debug("irq: irq=%d rxdesc_ring_id=%u\n", irq, rxdesc_ring->ring_id);
 
-	if (likely(napi_schedule_prep(&rxdesc_ring->napi))) {
+	/*
+	 * Disable RxDesc interrupt
+	 */
+	edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id), EDMA_MASK_INT_DISABLE);
 
-		/*
-		 * Disable RxDesc interrupt
-		 */
-		edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id),
-							EDMA_MASK_INT_DISABLE);
+	if (likely(napi_schedule_prep(&rxdesc_ring->napi))) {
 		__napi_schedule(&rxdesc_ring->napi);
+
+		u64_stats_update_begin(&rxdesc_stats->syncp);
+		++rxdesc_stats->rx_napi_sched;
+		u64_stats_update_end(&rxdesc_stats->syncp);
 	}
 
 	return IRQ_HANDLED;

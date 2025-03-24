@@ -335,6 +335,7 @@ struct edma_rx_desc_stats {
 	uint64_t src_port_inval;		/* Invalid source port number */
 	uint64_t src_port_inval_type;		/* Source type is not PORT ID */
 	uint64_t src_port_inval_netdev;		/* Invalid net device for the source port */
+	uint64_t rx_napi_sched;			/* Number of times napi is scheduled for RxDesc */
 	struct edma_ring_util_stats ring_stats;	/* Tracking EDMA Rx Desc ring utilization */
 	struct u64_stats_sync syncp;		/* Synchronization pointer */
 };
