@@ -900,6 +900,10 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		loopback_feature_type |= PPE_DRV_LOOPBACK_FEATURE_TYPE_GRETAP_MAPT;
 	}
 
+	if (edma_loopback_feature_type == PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT) {
+		loopback_feature_type |= PPE_DRV_LOOPBACK_FEATURE_TYPE_V6_HAIRPIN_NAT;
+	}
+
 	if (loopback_feature_type == 0) {
 		goto skip_loopback;
 	}
