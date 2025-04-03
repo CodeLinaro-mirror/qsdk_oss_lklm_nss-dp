@@ -1041,6 +1041,14 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 
 	dp_priv->drv_flags |= NSS_DP_PRIV_FLAG(INIT_DONE);
 
+	/* Register the network interface */
+	ret = register_netdev(netdev);
+	if (ret) {
+		netdev_dbg(netdev, "Error registering netdevice %s\n",
+				netdev->name);
+		goto netdev_register_fail;
+	}
+
 	if (dp_priv->link_poll) {
 		dp_priv->miibus = nss_dp_mdio_attach(pdev);
 		if (!dp_priv->miibus) {
@@ -1064,7 +1072,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	port_id = dp_priv->macid;
 	if (ppe_port_vsi_get(0, port_id, &vsi_id)) {
 		netdev_dbg(netdev, "failed to get port's default VSI\n");
-		goto phy_setup_fail;
+		goto vsi_set_fail;
 	}
 
 	dp_priv->vsi = vsi_id;
@@ -1074,19 +1082,11 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	 */
 	if (fal_port_vsi_set(0, port_id, vsi_id) < 0) {
 		netdev_dbg(netdev, "Data plane vsi assign failed\n");
-		goto phy_setup_fail;
+		goto vsi_set_fail;
 	}
 #endif
 
 	/* TODO: Features: CSUM, tx/rx offload... configure */
-
-	/* Register the network interface */
-	ret = register_netdev(netdev);
-	if (ret) {
-		netdev_dbg(netdev, "Error registering netdevice %s\n",
-								netdev->name);
-		goto phy_setup_fail;
-	}
 
 	dp_global_ctx.nss_dp[nss_dp_get_idx_from_macid(dp_priv->macid)] = dp_priv;
 	dp_global_ctx.slowproto_acl_bm = 0;
@@ -1119,7 +1119,17 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 
 	return 0;
 
+#if defined(NSS_DP_PPE_SUPPORT)
+vsi_set_fail:
+	if (dp_priv->phydev) {
+		phy_disconnect(dp_priv->phydev);
+		dp_priv->phydev = NULL;
+	}
+#endif
+
 phy_setup_fail:
+	unregister_netdev(netdev);
+netdev_register_fail:
 	dp_priv->data_plane_ops->deinit(dp_priv->dpc);
 data_plane_init_fail:
 	dp_priv->gmac_hal_ops->exit(dp_priv->gmac_hal_ctx);
