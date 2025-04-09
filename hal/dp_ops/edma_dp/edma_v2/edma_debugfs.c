@@ -17,6 +17,7 @@
 #include "edma.h"
 #include "edma_debug.h"
 #include "edma_debugfs.h"
+#include "nss_dp_dev.h"
 
 /*
  * edma_debugfs_ring_usage_dump
@@ -566,6 +567,61 @@ const struct file_operations edma_debugfs_loopback_file_ops = {
 };
 #endif
 
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+/*
+ * edma_debugfs_mht_tx_fcgrp_show()
+ *	EDMA debugfs tx ring fcgrp on mht ports show API
+ */
+static int edma_debugfs_mht_tx_fcgrp_show(struct seq_file *m, void __attribute__((unused))*p)
+{
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct net_device *netdev = NULL;
+	struct nss_dp_dev *dp_dev = NULL;
+	struct edma_txdesc_ring *tx_ring = NULL;
+	uint32_t i = 0, sw_port = 0;
+
+	seq_printf(m, "\n#EDMA MHT tx ring fc_group info (port_id : group_id):\n\n");
+
+	for (i = 0; i < EDMA_MAX_PORTS; i++) {
+		netdev = egc->netdev_arr[i];
+
+		dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
+		if (!dp_dev->nss_dp_mht_dev)
+			continue;
+
+		for (sw_port = 0; sw_port < NSS_DP_HAL_SW_MAX_TX_PORT; sw_port++) {
+			/* one port's tx rings maps with same fc_grp_id, print once */
+			tx_ring = dp_dev->dp_info.txr_sw_port_map[sw_port][0];
+			seq_printf(m, "\t\t%d:%d", (sw_port + 1), tx_ring->fc_grp_id);
+		}
+
+		seq_printf(m, "\n\n");
+	}
+
+	return 0;
+}
+
+/*
+ * edma_debugs_mht_tx_fcgrp_open()
+ *	EDMA debugfs tx ring fcgrp on mht ports open callback API
+ */
+static int edma_debugs_mht_tx_fcgrp_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_mht_tx_fcgrp_show, inode->i_private);
+}
+
+/*
+ * edma_debugfs_mht_tx_fcgrp_file_ops
+ *	File operations for EDMA tx ring fcgrp on mht ports
+ */
+const struct file_operations edma_debugfs_mht_tx_fcgrp_file_ops = {
+	.open = edma_debugs_mht_tx_fcgrp_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release
+};
+#endif
+
 /*
  * edma_debugs_rx_rings_stats_open()
  *	EDMA debugfs Rx rings open callback API
@@ -702,6 +758,14 @@ int edma_debugfs_init(void)
 		goto debugfs_dir_failed;
 	}
 
+#endif
+
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+	if (!debugfs_create_file("mht_tx_fcgrp", S_IRUGO, edma_gbl_ctx.root_dentry,
+			NULL, &edma_debugfs_mht_tx_fcgrp_file_ops)) {
+		edma_err("Unable to create EDMA tx fcgrp on MHT ports file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
 #endif
 
 	return 0;
