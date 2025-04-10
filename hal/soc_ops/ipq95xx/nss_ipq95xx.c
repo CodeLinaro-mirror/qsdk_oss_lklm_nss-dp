@@ -255,7 +255,7 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
  	 *
  	 * TODO: Revisit if this global storage is actually required.
  	 */
-	edma_gbl_ctx.hw_rst = edma_hw_rst;
+	edma_gbl_ctx->hw_rst = edma_hw_rst;
 
 	reset_control_assert(edma_hw_rst);
 	udelay(100);
