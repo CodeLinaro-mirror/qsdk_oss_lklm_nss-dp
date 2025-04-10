@@ -245,7 +245,7 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 int edma_tx_napi_poll(struct napi_struct *napi, int budget)
 {
 	struct edma_txcmpl_ring *txcmpl_ring = (struct edma_txcmpl_ring *)napi;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t txcmpl_intr_status;
 	int work_done = 0;
 	uint32_t reg_data;
@@ -726,7 +726,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	uint32_t hw_next_to_use = 0, cons_idx = 0, work_to_do = 0;
 	uint32_t num_tx_desc_needed = 0, num_desc_filled = 0;
 	struct edma_pri_txdesc *txdesc = NULL;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 
 	hw_next_to_use = txdesc_ring->prod_idx;
 

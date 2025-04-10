@@ -26,6 +26,7 @@ static void edma_cfg_tx_cmpl_loopback_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free TxCmpl ring descriptors
 	 */
+	nss_dp_minidump_free(txcmpl_ring->desc, "edma_txcmpl_desc");
 	dma_free_coherent(&egc->pdev->dev,
 		(sizeof(struct edma_txcmpl_desc) * txcmpl_ring->count),
 		txcmpl_ring->desc, txcmpl_ring->dma);
@@ -39,7 +40,7 @@ static void edma_cfg_tx_cmpl_loopback_ring_cleanup(struct edma_gbl_ctx *egc,
  */
 static int edma_cfg_tx_cmpl_loopback_ring_setup(struct edma_txcmpl_ring *txcmpl_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct platform_device *pdev = egc->pdev;
 
 	txcmpl_ring->desc = dma_alloc_coherent(&pdev->dev, (sizeof(struct edma_txcmpl_desc) * txcmpl_ring->count),
@@ -49,6 +50,9 @@ static int edma_cfg_tx_cmpl_loopback_ring_setup(struct edma_txcmpl_ring *txcmpl_
 				txcmpl_ring->id);
 		return -ENOMEM;
 	}
+
+	nss_dp_minidump_log(txcmpl_ring->desc, sizeof(struct edma_txcmpl_desc) * txcmpl_ring->count,
+						"edma_txcmpl_desc");
 
 	return 0;
 }
@@ -76,10 +80,12 @@ static void edma_cfg_tx_desc_loopback_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free Tx ring descriptors
 	 */
+	nss_dp_minidump_free(txdesc_ring->pdesc, "edma_pri_txdesc");
 	kfree(txdesc_ring->pdesc);
 	txdesc_ring->pdesc = NULL;
 	txdesc_ring->pdma = (dma_addr_t)0;
 
+	nss_dp_minidump_free(txdesc_ring->sdesc, "edma_sec_txdesc");
 	kfree(txdesc_ring->sdesc);
 	txdesc_ring->sdesc = NULL;
 	txdesc_ring->sdma = (dma_addr_t)0;
@@ -102,6 +108,9 @@ static int edma_cfg_tx_desc_loopback_ring_setup(struct edma_txdesc_ring *txdesc_
 		return -ENOMEM;
 	}
 
+	nss_dp_minidump_log(txdesc_ring->pdesc, roundup((sizeof(struct edma_pri_txdesc) * txdesc_ring->count),
+						SMP_CACHE_BYTES), "edma_pri_txdesc");
+
 	txdesc_ring->pdma = (dma_addr_t)virt_to_phys(txdesc_ring->pdesc);
 
 	/*
@@ -112,11 +121,15 @@ static int edma_cfg_tx_desc_loopback_ring_setup(struct edma_txdesc_ring *txdesc_
 	if (!txdesc_ring->sdesc) {
 		edma_err("Descriptor alloc for secondary TXDESC ring %u failed\n",
 				txdesc_ring->id);
+		nss_dp_minidump_free(txdesc_ring->pdesc, "edma_pri_txdesc");
 		kfree(txdesc_ring->pdesc);
 		txdesc_ring->pdesc = NULL;
 		txdesc_ring->pdma = (dma_addr_t)0;
 		return -ENOMEM;
 	}
+
+	nss_dp_minidump_log(txdesc_ring->sdesc, roundup((sizeof(struct edma_sec_txdesc) * txdesc_ring->count),
+						SMP_CACHE_BYTES), "edma_sec_txdesc");
 
 	txdesc_ring->sdma = (dma_addr_t)virt_to_phys(txdesc_ring->sdesc);
 
@@ -348,11 +361,17 @@ int32_t edma_cfg_tx_loopback_rings_alloc(struct edma_gbl_ctx *egc)
 		return -ENOMEM;
 	}
 
+	nss_dp_minidump_log(egc->txdesc_loopback_rings, sizeof(struct edma_txdesc_ring) * egc->num_loopback_rings,
+						"edma_txdesc_ring");
+
 	egc->txcmpl_loopback_rings = kzalloc(sizeof(struct edma_txcmpl_ring) * egc->num_loopback_rings, GFP_KERNEL);
 	if (!egc->txcmpl_loopback_rings) {
 		edma_err("Error in allocating txcmpl loopback ring\n");
 		goto txcmpl_ring_alloc_fail;
 	}
+
+	nss_dp_minidump_log(egc->txcmpl_loopback_rings, sizeof(struct edma_txcmpl_ring) * egc->num_loopback_rings,
+						"edma_txcmpl_ring");
 
 	if (edma_cfg_tx_loopback_rings_setup(egc)) {
 		edma_err("Error in setting up tx rings\n");
@@ -362,9 +381,11 @@ int32_t edma_cfg_tx_loopback_rings_alloc(struct edma_gbl_ctx *egc)
 	return 0;
 
 tx_rings_setup_fail:
+	nss_dp_minidump_free(egc->txcmpl_loopback_rings, "edma_txcmpl_ring");
 	kfree(egc->txcmpl_loopback_rings);
 	egc->txcmpl_loopback_rings = NULL;
 txcmpl_ring_alloc_fail:
+	nss_dp_minidump_free(egc->txdesc_loopback_rings, "edma_txdesc_ring");
 	kfree(egc->txdesc_loopback_rings);
 	egc->txdesc_loopback_rings = NULL;
 	return -ENOMEM;
@@ -385,6 +406,9 @@ void edma_cfg_tx_loopback_rings_cleanup(struct edma_gbl_ctx *egc)
 		edma_cfg_tx_desc_loopback_ring_cleanup(egc, &egc->txdesc_loopback_rings[i]);
 		edma_cfg_tx_cmpl_loopback_ring_cleanup(egc, &egc->txcmpl_loopback_rings[i]);
 	}
+
+	nss_dp_minidump_free(egc->txdesc_loopback_rings, "edma_txdesc_ring");
+	nss_dp_minidump_free(egc->txcmpl_loopback_rings, "edma_txcmpl_ring");
 
 	kfree(egc->txdesc_loopback_rings);
 	kfree(egc->txcmpl_loopback_rings);

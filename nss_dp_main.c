@@ -1105,10 +1105,10 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		phys_addr_t sec_addr = NSS_DP_GMAC_TS_ADDR_SEC(netdev->base_addr);
 		phys_addr_t nsec_addr = NSS_DP_GMAC_TS_ADDR_NSEC(netdev->base_addr);
 
-		edma_gbl_ctx.tstamp_sec = ioremap_nocache(sec_addr, sizeof(uint32_t));
-		edma_gbl_ctx.tstamp_nsec = ioremap_nocache(nsec_addr, sizeof(uint32_t));
+		edma_gbl_ctx->tstamp_sec = ioremap_nocache(sec_addr, sizeof(uint32_t));
+		edma_gbl_ctx->tstamp_nsec = ioremap_nocache(nsec_addr, sizeof(uint32_t));
 
-		if (unlikely(!edma_gbl_ctx.tstamp_sec || !edma_gbl_ctx.tstamp_nsec)) {
+		if (unlikely(!edma_gbl_ctx->tstamp_sec || !edma_gbl_ctx->tstamp_nsec)) {
 			pr_err("Unable to map the timestamp registers, sec addr:0x%llx,"
 					" nsec addr: 0x%llx\n", sec_addr, nsec_addr);
 			return 0;

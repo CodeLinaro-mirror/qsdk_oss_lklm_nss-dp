@@ -469,7 +469,7 @@ struct edma_gbl_ctx {
 #endif
 };
 
-extern struct edma_gbl_ctx edma_gbl_ctx;
+extern struct edma_gbl_ctx *edma_gbl_ctx;
 extern uint32_t edma_hang_recover;
 extern int edma_dp_extension_en;
 
@@ -489,7 +489,7 @@ int edma_vlan_append_handler(struct ctl_table *table, int write, void __user *bu
  */
 static inline uint32_t edma_reg_read(uint32_t reg_off)
 {
-	return hal_read_reg(edma_gbl_ctx.reg_base, reg_off);
+	return hal_read_reg(edma_gbl_ctx->reg_base, reg_off);
 }
 
 /*
@@ -498,7 +498,7 @@ static inline uint32_t edma_reg_read(uint32_t reg_off)
  */
 static inline void edma_reg_write(uint32_t reg_off, uint32_t val)
 {
-	hal_write_reg(edma_gbl_ctx.reg_base, reg_off, val);
+	hal_write_reg(edma_gbl_ctx->reg_base, reg_off, val);
 }
 
 /*
