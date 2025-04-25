@@ -45,6 +45,7 @@ MODULE_PARM_DESC(edma_dp_extension_en, "Enable VLAN Insert Functionality (1 for 
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40
 
 uint32_t edma_hang_recover = 0;
+uint32_t edma_force_crash = 0;
 
 /*
  * EDMA hardware instance
@@ -339,7 +340,7 @@ void edma_cleanup(bool is_dp_override)
 	edma_gbl_ctx->edma_initialized = false;
 
 	/*
-	 * Free edma global structure 
+	 * Free edma global structure
 	 * also remove from minidump tlv
 	 */
 	nss_dp_minidump_free(edma_gbl_ctx, "edma_gbl_ctx");
@@ -1525,6 +1526,13 @@ static struct ctl_table edma_sub[] = {
 		.mode           =       0644,
 		.proc_handler   =       edma_vlan_append_handler
 	},
+	{
+		.procname       =       "edma_force_crash",
+		.data           =       &edma_force_crash,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_force_crash_handler
+	},
 	{}
 };
 
@@ -2441,5 +2449,27 @@ int edma_vlan_append_handler(struct ctl_table *table, int write,
 
 	dev_put(dev);
 	memset(edma_vlan_append_info, 0, sizeof(edma_vlan_append_info));
+	return ret;
+}
+
+/*
+ * edma_force_crash_handler()
+ *	Function to trigger crash from EDMA module
+ */
+int edma_force_crash_handler(struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if(edma_force_crash) {
+		BUG_ON(A_TRUE);
+	}
+
 	return ret;
 }
