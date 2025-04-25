@@ -480,6 +480,7 @@ void edma_disable_interrupts(struct edma_gbl_ctx *egc);
 void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc);
 int edma_hang_recovery_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_vlan_append_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
+int edma_force_crash_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 
 /*
  * edma_reg_read()
