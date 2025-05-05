@@ -191,12 +191,12 @@ void edma_rx_free_buffer_loopback(void)
  */
 bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int alloc_count)
 {
+	uint32_t i, j = 0, loop_count, tot_memory, rem_tot_memory;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-	struct edma_rxfill_desc *rxfill_desc;
 	uint32_t buf_len = rxfill_ring->buf_len;
-	int i = 0, j = 0, loop_count = 0, alloc_new_count = 0, tot_memory = 0, rem;
-        unsigned int order;
-	unsigned char *data[EDMA_MAX_LOOPBACK_BUF];
+	struct edma_rxfill_desc *rxfill_desc;
+	uint32_t order, count;
+	unsigned char *data;
 	uint16_t prod_idx;
 
 	/*
@@ -211,76 +211,44 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 	 * which indicates 1024 pages i.e 4MB of data
 	 */
 	tot_memory = buf_len * alloc_count;
-	order = get_order(tot_memory);
 
 	/*
-	 * If order is less than equal to 10 then this indicates our allocation needs less than 4MB of data
+	 * calculate the total loop of 4MB that will be required to fulfill this request
+	 * The below might leave some delta memory in case total memory is not a multiple of 4MB
 	 */
-	if (order <= EDMA_MAX_ORDER) {
-		data[i] = (unsigned char *)__get_free_pages(__GFP_NOWARN, order);
-		if (!data[i]) {
-			edma_warn("Unable to allocate free pages for order: %d and alloc_count:%d\n", order, alloc_count);
+	loop_count = tot_memory / EDMA_MAX_BULK_PAGE_ALLOC_SZ;
+
+	for (i = 0; i < loop_count; i++) {
+		data = (unsigned char *)__get_free_pages(__GFP_NOWARN, EDMA_MAX_ORDER);
+		if (!data) {
+			edma_warn("Unable to allocate free pages for order: %d and alloc_count:%d\n", EDMA_MAX_ORDER, alloc_count);
 			return false;
 		}
-
-		alloc_new_count = alloc_count;
-
-		/*
-		 * one loop of refill below is enough to satisfy the request
-		 */
-		loop_count = 1;
 
 		/*
 		 * Store the order for free
 		 */
-		egc->buf_info[i].loopback_buf = (unsigned long)data[i];
-		egc->buf_info[i].loopback_order = order;
-	} else {
-		/*
-		 * calculate the total loop of 4MB that will be required to fulfill this request
-		 * The below might leave some delta memory in case total memory is not a multiple of 4MB
-		 */
-		loop_count = tot_memory / EDMA_MAX_BULK_PAGE_ALLOC_SZ;
-
-		for (i = 0; i < loop_count; i++) {
-			data[i] = (unsigned char *)__get_free_pages(__GFP_NOWARN, EDMA_MAX_ORDER);
-			if (!data[i]) {
-				edma_warn("Unable to allocate free pages for order: %d and alloc_count:%d\n", EDMA_MAX_ORDER, alloc_count);
-				return false;
-			}
-
-			/*
-			 * Store the order for free
-			 */
-			egc->buf_info[i].loopback_buf = (unsigned long)data[i];
-			egc->buf_info[i].loopback_order = EDMA_MAX_ORDER;
-		}
-
-		/*
-		 * New allocation count per loop
-		 */
-		alloc_new_count = alloc_count / loop_count;
-
-		/*
-		 * Total memory requirement might not be an exact multiple of 4MB; hence calculate the remaining
-		 * memory required
-		 */
-		rem = alloc_count - (alloc_new_count * loop_count);
-		if (rem) {
-			order = get_order(rem * buf_len);
-			data[i] = (unsigned char *)__get_free_pages(__GFP_NOWARN, order);
-			if (!data[i]) {
-				edma_warn("Unable to allocate free pages for order: %d and alloc_count:%d\n", order, alloc_count);
-				return false;
-			}
-
-			egc->buf_info[i].loopback_buf = (unsigned long)data[i];
-			egc->buf_info[i].loopback_order = get_order(rem * buf_len);
-			loop_count++;
-		}
+		egc->buf_info[i].loopback_buf = (unsigned long)data;
+		egc->buf_info[i].loopback_order = EDMA_MAX_ORDER;
 	}
 
+	/* If the tot_memory is less than EDMA_MAX_BULK_PAGE_ALLOC_SZ or remaining memroy after above allocation,
+	 * then allocate here.
+	 */
+	rem_tot_memory = tot_memory - (loop_count * ((EDMA_MAX_BULK_PAGE_ALLOC_SZ / buf_len) * buf_len));
+	if (rem_tot_memory) {
+		order = get_order(rem_tot_memory);
+		data = (unsigned char *)__get_free_pages(__GFP_NOWARN, order);
+		if (!data) {
+			edma_warn("Unable to allocate free pages for order: %d and alloc_count:%d\n", order, alloc_count);
+			edma_rx_free_buffer_loopback();
+			return false;
+		}
 
+		egc->buf_info[i].loopback_buf = (unsigned long)data;
+		egc->buf_info[i].loopback_order = order;
+		loop_count++;
+	}
 
 	/*
 	 * Get RXFILL ring producer index
@@ -292,8 +260,12 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 	 */
 	for (i = 0; i < loop_count; i++) {
 		dma_addr_t buff_addr;
-		buff_addr = (dma_addr_t)virt_to_phys(data[i]);
-		for (j = 0; j < alloc_new_count; j++) {
+		data = (unsigned char *)egc->buf_info[i].loopback_buf;
+		order = egc->buf_info[i].loopback_order;
+
+		count = ((1 << order) * PAGE_SIZE) / buf_len;
+		buff_addr = (dma_addr_t)virt_to_phys(data);
+		for (j = 0; j < count; j++) {
 			/*
 			 * Last loop_count might not have to fill the entire alloc_new_count buffers; hence relying on
 			 * prod_idx to break from the loop
@@ -315,11 +287,11 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 #endif
 
 			/*
-			 * Store skb in opaque
+			 * there is no SKB to fill.
 			 */
-			EDMA_RXFILL_OPAQUE_LO_SET(rxfill_desc, data);
+			EDMA_RXFILL_OPAQUE_LO_SET(rxfill_desc, NULL);
 		#ifdef __LP64__
-			EDMA_RXFILL_OPAQUE_HI_SET(rxfill_desc, data);
+			EDMA_RXFILL_OPAQUE_HI_SET(rxfill_desc, NULL);
 		#endif
 
 			/*
@@ -336,6 +308,8 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 			buff_addr = buff_addr + buf_len;
 		}
 	}
+
+	edma_info("loopback ring total memory %u loop_count %u alloc_count %u total alloc %u\n", tot_memory, loop_count, alloc_count, prod_idx);
 
 	if (likely(j)) {
 		/*
