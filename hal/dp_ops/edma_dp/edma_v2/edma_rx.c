@@ -1092,7 +1092,7 @@ void edma_rx_handle_capwap_linear_packets(struct edma_gbl_ctx *egc,
 		 * Handle linear packet in page mode
 		 */
 		frag = &skb_shinfo(skb)->frags[0];
-		dmac_inv_range((void *)skb_frag_page(frag),
+		edma_dmac_inv_range((void *)skb_frag_page(frag),
 				(void *)(skb_frag_page(frag) + pkt_length));
 		skb_add_rx_frag(skb, 0, skb_frag_page(frag), 0, pkt_length, PAGE_SIZE);
 
@@ -1114,7 +1114,7 @@ void edma_rx_handle_capwap_linear_packets(struct edma_gbl_ctx *egc,
 	/*
 	 * Invalidate the buffer received from the HW
 	 */
-	dmac_inv_range_no_dsb((void *)skb->data,
+	edma_dmac_inv_range_no_dsb((void *)skb->data,
 			(void *)(skb->data + pkt_length));
 	skb_put(skb, pkt_length);
 
@@ -1530,12 +1530,12 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 	 * that'll be processed.
 	 */
 	if (end_idx > cons_idx) {
-		dmac_inv_range_no_dsb((void *)rxdesc_desc,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
 			(void *)(rxdesc_desc + work_to_do));
 	} else {
-		dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
 			(void *)(rxdesc_ring->pdesc + end_idx));
-		dmac_inv_range_no_dsb((void *)rxdesc_desc,
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
 			(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
 	}
 
@@ -1644,7 +1644,7 @@ next_rx_desc:
 		rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
 	}
 
-	dsb(st);
+	edma_dsb();
 
 	if (likely(rxdesc_ring->vp_head)) {
 		BUG_ON(!nss_dp_vp_list_rx_reg_cb);
