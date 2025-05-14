@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -41,6 +41,7 @@ struct nss_dp_vp_rx_info {
 	int32_t flow_idx;		/* Flow index of a packet */
 	struct napi_struct *napi;	/* RX NAPI */
 	bool fake_mac;			/* Fake Mac Present */
+	bool qdisc_valid;		/* Qdisc valid */
 };
 
 /*
