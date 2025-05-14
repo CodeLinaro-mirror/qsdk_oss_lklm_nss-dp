@@ -556,14 +556,16 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 	tree_id_type = EDMA_RXDESC_TREE_ID_TYPE_GET(rxdesc_sec);
 
 	/*
-	 * Fetch the flow index of the packet if Qdisc valid bit
-	 * is set in the tree-id field
+	 * Fetch the flow index of the packet if it is valid
 	 */
-	vprxi_p->flow_idx = EDMA_RX_SDESC_FLOW_IDX_INVALID;
-	if (EDMA_RXDESC_HOST_QDISC_VALID_GET(rxdesc_sec) &&
-			(EDMA_RX_SDESC_FLOW_IDX_VALID_GET(rxdesc_sec))) {
+	if (EDMA_RX_SDESC_FLOW_IDX_VALID_GET(rxdesc_sec)) {
 		vprxi_p->flow_idx = EDMA_RX_SDESC_FLOW_IDX_GET(rxdesc_sec);
 	}
+
+	/*
+	 * Set the flag if Qdisc valid bit is set in the tree-id field
+	 */
+	vprxi_p->qdisc_valid = !!EDMA_RXDESC_HOST_QDISC_VALID_GET(rxdesc_sec);
 
 	switch (tree_id_type) {
 	case PPE_DRV_TREE_ID_TYPE_NONE:
@@ -814,7 +816,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 	struct edma_rx_stats *rx_stats;
 	struct sk_buff *skb_head;
 	struct net_device *dev;
-	struct nss_dp_vp_rx_info vprxi;
+	struct nss_dp_vp_rx_info vprxi = {0};
 	uint32_t pkt_length;
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
@@ -1002,14 +1004,14 @@ process_next_scatter:
 			return;
 		}
 
+		vprxi.flow_idx = EDMA_RX_SDESC_FLOW_IDX_INVALID;
+
 		/*
 		 * See if this packet is tagged with valid wifi qos.
 		 * WiFi-QoS flag needs to be set for tree_id processing.
 		 */
 		if (unlikely(EDMA_RXDESC_WIFI_QOS_FLAG_VALID_GET(rxdesc_ring->pdesc_head))) {
 			edma_rx_handle_wifi_qos_packets(egc, rxdesc_ring, pdesc_head, skb_head, &vprxi);
-		} else {
-			vprxi.flow_idx = EDMA_RX_SDESC_FLOW_IDX_INVALID;
 		}
 	}
 
@@ -1147,7 +1149,7 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 {
 	struct edma_pcpu_stats *pcpu_stats;
 	struct edma_rx_stats *rx_stats;
-	struct nss_dp_vp_rx_info vprxi;
+	struct nss_dp_vp_rx_info vprxi = {0};
 	uint32_t pkt_length;
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
@@ -1239,14 +1241,14 @@ send_to_stack:
 		}
 	}
 
+	vprxi.flow_idx = EDMA_RX_SDESC_FLOW_IDX_INVALID;
+
 	/*
 	 * See if this packet is tagged with valid wifi qos.
 	 * WiFi-QoS flag needs to be set for tree_id processing.
 	 */
 	if (unlikely(EDMA_RXDESC_WIFI_QOS_FLAG_VALID_GET(rxdesc_desc))) {
 		edma_rx_handle_wifi_qos_packets(egc, rxdesc_ring, rxdesc_desc, skb, &vprxi);
-	} else {
-		vprxi.flow_idx = EDMA_RX_SDESC_FLOW_IDX_INVALID;
 	}
 
 	/*
