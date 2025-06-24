@@ -453,6 +453,8 @@ struct edma_gbl_ctx {
 			/* Max MHT Tx ports */
 	uint32_t mht_txcmpl_ports;
 			/* Max MHT Txcmpl ports */
+	bool is_ath_hdr_initialized;
+			/* Flag to check if ATHEROS header is initialized */
 #endif
 	struct work_struct work;
                         /* Creating work struct */
