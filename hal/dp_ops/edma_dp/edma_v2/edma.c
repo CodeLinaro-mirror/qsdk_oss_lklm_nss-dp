@@ -1301,10 +1301,6 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 {
 	int ret = 0;
 	uint32_t data;
-#ifdef NSS_DP_MHT_SW_PORT_MAP
-	fal_athtag_tx_cfg_t tx_cfg = {0};
-	sw_error_t fal_ret;
-#endif
 
 	data = edma_reg_read(EDMA_REG_MAS_CTRL);
 	edma_info("EDMA ver %d hw init\n", data);
@@ -1426,32 +1422,6 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	 * Initialize RPS hash map table
 	 */
 	edma_configure_rps_hash_map(egc);
-
-#ifdef NSS_DP_MHT_SW_PORT_MAP
-	if (dp_global_ctx.is_mht_dev) {
-
-		/*
-		 * Mapping of MHT MDIO SLV pause ID to VP_PORTS.
-		 */
-		edma_cfg_tx_set_mht_mdio_slv_pause(egc);
-
-		/*
-		 * Set the atheros header for MHT switch.
-		 */
-		tx_cfg.athtag_en = A_TRUE;
-		tx_cfg.athtag_type = MHT_ATHTAG_TYPE;
-		tx_cfg.version = FAL_ATHTAG_VER3;
-		tx_cfg.action = FAL_ATHTAG_ACTION_NORMAL;
-		tx_cfg.bypass_fwd_en = A_FALSE;
-		tx_cfg.field_disable = A_FALSE;
-		fal_ret = fal_port_athtag_tx_set(EDMA_SWITCH_DEV_ID,
-						EDMA_MHT_SWITCH_PORT_ID,
-						&tx_cfg);
-		if (fal_ret != SW_OK)
-			edma_err("\nMHT SW atheros header set fail:%d\n",
-					fal_ret);
-	}
-#endif
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	if (edma_gbl_ctx.loopback_en) {

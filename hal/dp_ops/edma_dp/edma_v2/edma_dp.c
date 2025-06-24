@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -19,6 +19,7 @@
 #include <linux/debug_mem_usage.h>
 #include <fal/fal_vsi.h>
 #include <ppe_drv_public.h>
+#include <fal/fal_servcode.h>
 #include "edma.h"
 #include "edma_cfg_tx.h"
 #include "edma_cfg_rx.h"
@@ -473,6 +474,8 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 	struct ppe_drv_iface *iface = NULL;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	bool is_mht_dev = dp_dev->nss_dp_mht_dev;
+	fal_athtag_tx_cfg_t tx_cfg = {0};
+	sw_error_t fal_ret;
 #else
 	bool is_mht_dev = false;
 #endif
@@ -546,6 +549,36 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 			return NSS_DP_FAILURE;
 		}
 	}
+
+#ifdef NSS_DP_MHT_SW_PORT_MAP
+	if (!edma_gbl_ctx.is_ath_hdr_initialized && is_mht_dev) {
+		/*
+		 * Mapping of MHT MDIO SLV pause ID to VP_PORTS.
+		 */
+		edma_cfg_tx_set_mht_mdio_slv_pause(&edma_gbl_ctx);
+
+		/*
+		 * Set the atheros header for MHT switch.
+		 */
+		tx_cfg.athtag_en = A_TRUE;
+		tx_cfg.athtag_type = MHT_ATHTAG_TYPE;
+		tx_cfg.version = FAL_ATHTAG_VER3;
+		tx_cfg.action = FAL_ATHTAG_ACTION_NORMAL;
+		tx_cfg.bypass_fwd_en = A_FALSE;
+		tx_cfg.field_disable = A_FALSE;
+		fal_ret = fal_port_athtag_tx_set(EDMA_SWITCH_DEV_ID,
+				dp_dev->macid,
+				&tx_cfg);
+		if (fal_ret != SW_OK)
+			edma_err("\nMHT SW atheros header set fail:%d\n",
+					fal_ret);
+
+		/*
+		 * Mark Atheros header as initialized.
+		 */
+		edma_gbl_ctx.is_ath_hdr_initialized = A_TRUE;
+	}
+#endif
 
 	return NSS_DP_SUCCESS;
 }
