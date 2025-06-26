@@ -115,7 +115,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 {
 	struct edma_rx_fill_stats *rx_fill_stats;
 	struct edma_rx_desc_stats *rx_desc_stats;
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	uint32_t rx_fill_start_id = egc->rxfill_ring_start;
 	uint32_t rx_desc_start_id = egc->rxdesc_ring_start;
 	uint32_t i, j;
@@ -123,7 +123,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 #ifdef NSS_DP_PPEDS_SUPPORT
 	struct edma_rxfill_ring *rxfill_ring;
 	struct edma_rxdesc_ring *rxdesc_ring;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node;
 #endif
 
@@ -163,7 +163,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	/*
 	 * Get stats for Rx Desc rings
 	 */
-	for (i = 0; i < edma_gbl_ctx->num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 		struct edma_rx_desc_stats *stats;
 
@@ -183,7 +183,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	edma_debugfs_print_banner(m, EDMA_RX_RING_STATS_NODE_NAME);
 
 	seq_printf(m, "\n#EDMA RX descriptor rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx->num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
 		seq_printf(m, "\t\tEDMA RX descriptor %d ring stats:\n", i + rx_desc_start_id);
 		seq_printf(m, "\t\t rxdesc[%d]:src_port_inval = %llu\n",
 				i + rx_desc_start_id, rx_desc_stats[i].src_port_inval);
@@ -203,7 +203,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	}
 
 	seq_printf(m, "\n#EDMA RX fill rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx->num_rxfill_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.num_rxfill_rings; i++) {
 		seq_printf(m, "\t\tEDMA RX fill %d ring stats:\n", i + rx_fill_start_id);
 		seq_printf(m, "\t\t rxfill[%d]:alloc_failed = %llu\n",
 				i + rx_fill_start_id, rx_fill_stats[i].alloc_failed);
@@ -267,7 +267,7 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 {
 	struct edma_tx_cmpl_stats *tx_cmpl_stats;
 	struct edma_tx_desc_stats *tx_desc_stats;
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	uint32_t tx_cmpl_start_id = egc->txcmpl_ring_start;
 	uint32_t tx_desc_start_id = egc->txdesc_ring_start;
 	uint32_t i, j;
@@ -275,7 +275,7 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 #ifdef NSS_DP_PPEDS_SUPPORT
 	struct edma_txdesc_ring *tx_ring;
 	struct edma_txcmpl_ring *txcmpl_ring;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node;
 #endif
 
@@ -331,7 +331,7 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	edma_debugfs_print_banner(m, EDMA_TX_RING_STATS_NODE_NAME);
 
 	seq_printf(m, "\n#EDMA TX complete rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx->num_txcmpl_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.num_txcmpl_rings; i++) {
 		seq_printf(m, "\t\tEDMA TX complete %d ring stats:\n", i + tx_cmpl_start_id);
 		seq_printf(m, "\t\t txcmpl[%d]:invalid_buffer = %llu\n",
 				i + tx_cmpl_start_id, tx_cmpl_stats[i].invalid_buffer);
@@ -350,7 +350,7 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	}
 
 	seq_printf(m, "\n#EDMA TX descriptor rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx->num_txdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.num_txdesc_rings; i++) {
 		seq_printf(m, "\t\tEDMA TX descriptor %d ring stats:\n", i + tx_desc_start_id);
 		seq_printf(m, "\t\t txdesc[%d]:no_desc_avail = %llu\n",
 				i + tx_desc_start_id, tx_desc_stats[i].no_desc_avail);
@@ -427,7 +427,7 @@ static int edma_debugfs_misc_stats_show(struct seq_file *m, void __attribute__((
 	 * Get percpu EDMA miscellaneous stats
 	 */
 	for_each_possible_cpu(cpu) {
-		pcpu_misc_stats = per_cpu_ptr(edma_gbl_ctx->misc_stats, cpu);
+		pcpu_misc_stats = per_cpu_ptr(edma_gbl_ctx.misc_stats, cpu);
 		do {
 			start = edma_dp_stats_fetch_begin(&pcpu_misc_stats->syncp);
 			misc_stats->edma_misc_axi_read_err +=
@@ -479,10 +479,10 @@ static int edma_debugfs_misc_stats_show(struct seq_file *m, void __attribute__((
  */
 static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__((unused))*p)
 {
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	uint32_t i;
 #ifdef NSS_DP_PPEDS_SUPPORT
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node;
 #endif
 
@@ -490,7 +490,7 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
 		memset(&egc->rxfill_rings[i].rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
 	}
 
-	for (i = 0; i < edma_gbl_ctx->num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
 		memset(&egc->rxdesc_rings[i].rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
 	}
 
@@ -524,7 +524,7 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
  */
 static int edma_debugfs_loopback_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 {
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	int i = 0;
 
 	seq_printf(m, "\n#EDMA loopback configuration stats:\n\n");
@@ -574,7 +574,7 @@ const struct file_operations edma_debugfs_loopback_file_ops = {
  */
 static int edma_debugfs_mht_tx_fcgrp_show(struct seq_file *m, void __attribute__((unused))*p)
 {
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	struct net_device *netdev = NULL;
 	struct nss_dp_dev *dp_dev = NULL;
 	struct edma_txdesc_ring *tx_ring = NULL;
@@ -707,31 +707,31 @@ const struct file_operations edma_debugfs_clear_ring_stats_ops = {
  */
 int edma_debugfs_init(void)
 {
-	edma_gbl_ctx->root_dentry = debugfs_create_dir("qca-nss-dp", NULL);
-	if (!edma_gbl_ctx->root_dentry) {
+	edma_gbl_ctx.root_dentry = debugfs_create_dir("qca-nss-dp", NULL);
+	if (!edma_gbl_ctx.root_dentry) {
 		edma_err("Unable to create debugfs qca-nss-dp directory in debugfs\n");
 		return -1;
 	}
 
-	edma_gbl_ctx->stats_dentry = debugfs_create_dir("stats", edma_gbl_ctx->root_dentry);
-	if (!edma_gbl_ctx->stats_dentry) {
+	edma_gbl_ctx.stats_dentry = debugfs_create_dir("stats", edma_gbl_ctx.root_dentry);
+	if (!edma_gbl_ctx.stats_dentry) {
 		edma_err("Unable to create debugfs stats directory in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("rx_ring_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
+	if (!debugfs_create_file("rx_ring_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
 			NULL, &edma_debugfs_rx_rings_file_ops)) {
 		edma_err("Unable to create Rx rings statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("tx_ring_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
+	if (!debugfs_create_file("tx_ring_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
 			NULL, &edma_debugfs_tx_rings_file_ops)) {
 		edma_err("Unable to create Tx rings statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("clear_ring_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
+	if (!debugfs_create_file("clear_ring_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
 			NULL, &edma_debugfs_clear_ring_stats_ops)) {
 		edma_err("Unable to create clear rings statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -745,14 +745,14 @@ int edma_debugfs_init(void)
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("misc_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
+	if (!debugfs_create_file("misc_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
 			NULL, &edma_debugfs_misc_file_ops)) {
 		edma_err("Unable to create EDMA miscellaneous statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (!debugfs_create_file("loopback_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
+	if (!debugfs_create_file("loopback_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
 			NULL, &edma_debugfs_loopback_file_ops)) {
 		edma_err("Unable to create EDMA loopback statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -761,7 +761,7 @@ int edma_debugfs_init(void)
 #endif
 
 #ifdef NSS_DP_MHT_SW_PORT_MAP
-	if (!debugfs_create_file("mht_tx_fcgrp", S_IRUGO, edma_gbl_ctx->root_dentry,
+	if (!debugfs_create_file("mht_tx_fcgrp", S_IRUGO, edma_gbl_ctx.root_dentry,
 			NULL, &edma_debugfs_mht_tx_fcgrp_file_ops)) {
 		edma_err("Unable to create EDMA tx fcgrp on MHT ports file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -771,9 +771,9 @@ int edma_debugfs_init(void)
 	return 0;
 
 debugfs_dir_failed:
-	debugfs_remove_recursive(edma_gbl_ctx->root_dentry);
-	edma_gbl_ctx->root_dentry = NULL;
-	edma_gbl_ctx->stats_dentry = NULL;
+	debugfs_remove_recursive(edma_gbl_ctx.root_dentry);
+	edma_gbl_ctx.root_dentry = NULL;
+	edma_gbl_ctx.stats_dentry = NULL;
 	return -1;
 }
 
@@ -788,9 +788,9 @@ void edma_debugfs_exit(void)
 	 */
 	edma_misc_stats_free();
 
-	if (edma_gbl_ctx->root_dentry) {
-		debugfs_remove_recursive(edma_gbl_ctx->root_dentry);
-		edma_gbl_ctx->root_dentry = NULL;
-		edma_gbl_ctx->stats_dentry = NULL;
+	if (edma_gbl_ctx.root_dentry) {
+		debugfs_remove_recursive(edma_gbl_ctx.root_dentry);
+		edma_gbl_ctx.root_dentry = NULL;
+		edma_gbl_ctx.stats_dentry = NULL;
 	}
 }
