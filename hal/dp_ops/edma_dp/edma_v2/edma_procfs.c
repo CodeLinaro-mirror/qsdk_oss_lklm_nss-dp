@@ -26,7 +26,7 @@ static struct proc_dir_entry *edma_procfs;
  */
 static int edma_procfs_ring_stats_show(struct seq_file *seq, void *v)
 {
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 
 	seq_printf(seq, "EDMA ring stats debug is %s\n", egc->enable_ring_util_stats? "enabled" : "disabled");
 	return 0;
@@ -54,7 +54,7 @@ static ssize_t edma_procfs_ring_stats_write(struct file *file, const char __user
 	int ret;
 	int enable_stats;
 	char buffer[13];
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 
 	memset(buffer, 0, sizeof(buffer));
 	if (count > sizeof(buffer) - 1)

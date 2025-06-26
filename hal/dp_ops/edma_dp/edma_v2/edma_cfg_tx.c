@@ -94,7 +94,6 @@ static void edma_cfg_tx_cmpl_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free TxCmpl ring descriptors
 	 */
-	nss_dp_minidump_free(txcmpl_ring->desc, "edma_txcmpl_desc");
 	kfree(txcmpl_ring->desc);
 	txcmpl_ring->desc = NULL;
 	txcmpl_ring->dma = (dma_addr_t)0;
@@ -113,9 +112,6 @@ static int edma_cfg_tx_cmpl_ring_setup(struct edma_txcmpl_ring *txcmpl_ring)
 				txcmpl_ring->id);
 		return -ENOMEM;
 	}
-
-	nss_dp_minidump_log(txcmpl_ring->desc, roundup((sizeof(struct edma_txcmpl_desc) * txcmpl_ring->count),
-						SMP_CACHE_BYTES), "edma_txcmpl_desc");
 
 	txcmpl_ring->dma = (dma_addr_t)virt_to_phys(txcmpl_ring->desc);
 
@@ -160,7 +156,6 @@ static void edma_cfg_tx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free Tx ring descriptors
 	 */
-	nss_dp_minidump_free(txdesc_ring->pdesc, "edma_pri_txdesc");
 	kfree(txdesc_ring->pdesc);
 	txdesc_ring->pdesc = NULL;
 	txdesc_ring->pdma = (dma_addr_t)0;
@@ -169,7 +164,6 @@ static void edma_cfg_tx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 	 * TODO:
 	 * Free any buffers assigned to any secondary descriptors
 	 */
-	nss_dp_minidump_free(txdesc_ring->sdesc, "edma_sec_txdesc");
 	kfree(txdesc_ring->sdesc);
 	txdesc_ring->sdesc = NULL;
 	txdesc_ring->sdma = (dma_addr_t)0;
@@ -192,9 +186,6 @@ static int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
 		return -ENOMEM;
 	}
 
-	nss_dp_minidump_log(txdesc_ring->pdesc, roundup((sizeof(struct edma_pri_txdesc) * txdesc_ring->count),
-						SMP_CACHE_BYTES), "edma_pri_txdesc");
-
 	txdesc_ring->pdma = (dma_addr_t)virt_to_phys(txdesc_ring->pdesc);
 
 	/*
@@ -205,15 +196,11 @@ static int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
 	if (!txdesc_ring->sdesc) {
 		edma_err("Descriptor alloc for secondary TXDESC ring %u failed\n",
 				txdesc_ring->id);
-		nss_dp_minidump_free(txdesc_ring->pdesc, "edma_pri_txdesc");
 		kfree(txdesc_ring->pdesc);
 		txdesc_ring->pdesc = NULL;
 		txdesc_ring->pdma = (dma_addr_t)0;
 		return -ENOMEM;
 	}
-
-	nss_dp_minidump_log(txdesc_ring->sdesc, roundup((sizeof(struct edma_sec_txdesc) * txdesc_ring->count),
-						SMP_CACHE_BYTES), "edma_sec_txdesc");
 
 	txdesc_ring->sdma = (dma_addr_t)virt_to_phys(txdesc_ring->sdesc);
 
@@ -265,7 +252,7 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
  */
 static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 {
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	uint32_t data;
 	uint32_t paddr;
 
@@ -368,14 +355,14 @@ void edma_cfg_tx_fill_per_port_tx_map(struct net_device *netdev, uint32_t macid)
 	uint32_t sw_port, j;
 #endif
 	struct nss_dp_dev *dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
-	uint32_t txdesc_start = edma_gbl_ctx->txdesc_ring_start;
+	uint32_t txdesc_start = edma_gbl_ctx.txdesc_ring_start;
 	struct edma_txdesc_ring *txdesc_ring;
 	uint32_t txdesc_ring_id;
 
 	for_each_possible_cpu(i) {
 
-		txdesc_ring_id = edma_gbl_ctx->tx_map[nss_dp_get_idx_from_macid(macid)][i];
-		txdesc_ring = &edma_gbl_ctx->txdesc_rings[txdesc_ring_id - txdesc_start];
+		txdesc_ring_id = edma_gbl_ctx.tx_map[nss_dp_get_idx_from_macid(macid)][i];
+		txdesc_ring = &edma_gbl_ctx.txdesc_rings[txdesc_ring_id - txdesc_start];
 		dp_dev->dp_info.txr_map[0][i] = txdesc_ring;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 		if (dp_dev->nss_dp_mht_dev)
@@ -388,10 +375,10 @@ void edma_cfg_tx_fill_per_port_tx_map(struct net_device *netdev, uint32_t macid)
 		return;
 
 	sw_port = 1;
-	for (i = NSS_DP_HAL_MAX_PORTS; i < edma_gbl_ctx->max_tx_ports; i++) {
+	for (i = NSS_DP_HAL_MAX_PORTS; i < edma_gbl_ctx.max_tx_ports; i++) {
 		for_each_possible_cpu(j) {
-			txdesc_ring_id = edma_gbl_ctx->tx_map[i][j];
-			txdesc_ring = &edma_gbl_ctx->txdesc_rings[txdesc_ring_id - txdesc_start];
+			txdesc_ring_id = edma_gbl_ctx.tx_map[i][j];
+			txdesc_ring = &edma_gbl_ctx.txdesc_rings[txdesc_ring_id - txdesc_start];
 			dp_dev->dp_info.txr_sw_port_map[sw_port][j] = txdesc_ring;
 		}
 		sw_port++;
@@ -697,18 +684,12 @@ int32_t edma_cfg_tx_rings_alloc(struct edma_gbl_ctx *egc)
 		return -ENOMEM;
 	}
 
-	nss_dp_minidump_log(egc->txdesc_rings, (sizeof(struct edma_txdesc_ring) * egc->num_txdesc_rings),
-						"edma_txdesc_ring");
-
 	egc->txcmpl_rings = kzalloc((sizeof(struct edma_txcmpl_ring) *
 				egc->num_txcmpl_rings), GFP_KERNEL);
 	if (!egc->txcmpl_rings) {
 		edma_err("Error in allocating txcmpl ring\n");
 		goto txcmpl_ring_alloc_fail;
 	}
-
-	nss_dp_minidump_log(egc->txcmpl_rings, (sizeof(struct edma_txcmpl_ring) * egc->num_txcmpl_rings),
-						"edma_txcmpl_ring");
 
 	edma_info("Num rings - TxDesc:%u (%u-%u) TxCmpl:%u (%u-%u)\n",
 			egc->num_txdesc_rings, egc->txdesc_ring_start,
@@ -724,11 +705,9 @@ int32_t edma_cfg_tx_rings_alloc(struct edma_gbl_ctx *egc)
 	return 0;
 
 tx_rings_setup_fail:
-	nss_dp_minidump_free(egc->txcmpl_rings, "edma_txcmpl_ring");
 	kfree(egc->txcmpl_rings);
 	egc->txcmpl_rings = NULL;
 txcmpl_ring_alloc_fail:
-	nss_dp_minidump_free(egc->txdesc_rings, "edma_txdesc_ring");
 	kfree(egc->txdesc_rings);
 	egc->txdesc_rings = NULL;
 	return -ENOMEM;
@@ -755,9 +734,6 @@ void edma_cfg_tx_rings_cleanup(struct edma_gbl_ctx *egc)
 	for (i = 0; i < egc->num_txcmpl_rings; i++) {
 		edma_cfg_tx_cmpl_ring_cleanup(egc, &egc->txcmpl_rings[i]);
 	}
-
-	nss_dp_minidump_free(egc->txdesc_rings, "edma_txdesc_ring");
-	nss_dp_minidump_free(egc->txcmpl_rings, "edma_txcmpl_ring");
 
 	kfree(egc->txdesc_rings);
 	kfree(egc->txcmpl_rings);

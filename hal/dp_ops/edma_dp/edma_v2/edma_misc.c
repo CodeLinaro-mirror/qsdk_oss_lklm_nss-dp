@@ -32,8 +32,8 @@ int32_t edma_misc_stats_alloc()
 {
 	uint32_t i;
 
-	edma_gbl_ctx->misc_stats = alloc_percpu(struct edma_misc_stats);
-	if (!edma_gbl_ctx->misc_stats) {
+	edma_gbl_ctx.misc_stats = alloc_percpu(struct edma_misc_stats);
+	if (!edma_gbl_ctx.misc_stats) {
 		edma_err("Unable to allocate miscellaneous percpu stats\n");
 		return -ENOMEM;
 	}
@@ -41,7 +41,7 @@ int32_t edma_misc_stats_alloc()
 	for_each_possible_cpu(i) {
 		struct edma_misc_stats *stats;
 
-		stats = per_cpu_ptr(edma_gbl_ctx->misc_stats, i);
+		stats = per_cpu_ptr(edma_gbl_ctx.misc_stats, i);
 		u64_stats_init(&stats->syncp);
 	}
 
@@ -54,9 +54,9 @@ int32_t edma_misc_stats_alloc()
  */
 void edma_misc_stats_free()
 {
-	if (edma_gbl_ctx->misc_stats) {
-		free_percpu(edma_gbl_ctx->misc_stats);
-		edma_gbl_ctx->misc_stats = NULL;
+	if (edma_gbl_ctx.misc_stats) {
+		free_percpu(edma_gbl_ctx.misc_stats);
+		edma_gbl_ctx.misc_stats = NULL;
 	}
 }
 
@@ -67,8 +67,8 @@ void edma_misc_stats_free()
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx)
 {
 	uint32_t misc_intr_status, reg_data;
-	struct edma_gbl_ctx *egc = edma_gbl_ctx;
-	struct edma_misc_stats *stats = this_cpu_ptr(edma_gbl_ctx->misc_stats);
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_misc_stats *stats = this_cpu_ptr(edma_gbl_ctx.misc_stats);
 
 	/*
 	 * Read Misc intr status
@@ -155,7 +155,7 @@ irqreturn_t edma_misc_handle_irq(int irq, void *ctx)
 	 * in userspace via a helper function if nss_dp_recovery_en module param is set to 1.
 	 */
 	if(nss_dp_recovery_en)
-		schedule_work(&edma_gbl_ctx->work);
+		schedule_work(&edma_gbl_ctx.work);
 	else
 		edma_reg_write(EDMA_REG_MISC_INT_MASK, 0xFF);
 
