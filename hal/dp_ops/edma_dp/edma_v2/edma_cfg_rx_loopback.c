@@ -39,7 +39,7 @@ static void edma_cfg_rx_fill_loopback_ring_cleanup(struct edma_gbl_ctx *egc,
  */
 static int edma_cfg_rx_fill_loopback_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txcmpl_ring *txcmpl_ring = &egc->txcmpl_loopback_rings[rxfill_ring->ring_id];
 
 	/*
@@ -56,7 +56,7 @@ static int edma_cfg_rx_fill_loopback_ring_setup(struct edma_rxfill_ring *rxfill_
  */
 static int edma_cfg_rx_desc_loopback_ring_setup(struct edma_rxdesc_ring *rxdesc_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txdesc_ring *txdesc_ring = &egc->txdesc_loopback_rings[rxdesc_ring->ring_id];
 
 	/*
@@ -552,11 +552,17 @@ int32_t edma_cfg_rx_loopback_rings_alloc(struct edma_gbl_ctx *egc)
 		return -ENOMEM;
 	}
 
+	nss_dp_minidump_log(egc->rxfill_loopback_rings, sizeof(struct edma_rxfill_ring) * egc->num_loopback_rings,
+						"edma_rxfill_ring");
+
 	egc->rxdesc_loopback_rings = kzalloc(sizeof(struct edma_rxdesc_ring) * egc->num_loopback_rings, GFP_KERNEL);
 	if (!egc->rxdesc_loopback_rings) {
 		edma_warn("Error in allocating rxdesc ring\n");
 		goto rxdesc_ring_alloc_fail;
 	}
+
+	nss_dp_minidump_log(egc->rxdesc_loopback_rings, sizeof(struct edma_rxdesc_ring) * egc->num_loopback_rings,
+						"edma_rxdesc_ring");
 
 	if (edma_cfg_rx_loopback_rings_setup(egc)) {
 		edma_warn("Error in setting up rx rings\n");
@@ -575,9 +581,11 @@ int32_t edma_cfg_rx_loopback_rings_alloc(struct edma_gbl_ctx *egc)
 	return 0;
 
 rx_rings_setup_fail:
+	nss_dp_minidump_free(egc->rxdesc_loopback_rings, "edma_rxdesc_ring");
 	kfree(egc->rxdesc_loopback_rings);
 	egc->rxdesc_loopback_rings = NULL;
 rxdesc_ring_alloc_fail:
+	nss_dp_minidump_free(egc->rxfill_loopback_rings, "edma_rxfill_ring");
 	kfree(egc->rxfill_loopback_rings);
 	egc->rxfill_loopback_rings = NULL;
 	return -ENOMEM;
@@ -608,6 +616,9 @@ void edma_cfg_rx_loopback_rings_cleanup(struct edma_gbl_ctx *egc)
 		rxdesc_ring = &egc->rxdesc_loopback_rings[i];
 		edma_cfg_rx_desc_loopback_ring_cleanup(egc, rxdesc_ring);
 	}
+
+	nss_dp_minidump_free(egc->rxfill_loopback_rings, "edma_rxfill_ring");
+	nss_dp_minidump_free(egc->rxdesc_loopback_rings, "edma_rxdesc_ring");
 
 	kfree(egc->rxfill_loopback_rings);
 	kfree(egc->rxdesc_loopback_rings);

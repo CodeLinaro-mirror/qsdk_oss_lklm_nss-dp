@@ -96,6 +96,7 @@ static void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free RXFILL ring descriptors
 	 */
+	nss_dp_minidump_free(rxfill_ring->desc, "edma_rxfill_desc");
 #ifdef CONFIG_IO_COHERENCY
 	kfree(rxfill_ring->desc);
 #else
@@ -117,19 +118,23 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 
 #ifdef CONFIG_IO_COHERENCY
 	/*
-         * Allocate RxFill ring descriptors
-         */
-        rxfill_ring->desc = kmalloc(roundup((sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
-                                    SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
-        if (!rxfill_ring->desc) {
-                edma_err("Descriptor alloc for RXFILL ring %u failed\n",
-                                rxfill_ring->ring_id);
+	* Allocate RxFill ring descriptors
+	*/
+	rxfill_ring->desc = kmalloc(roundup((sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+								SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
+	if (!rxfill_ring->desc) {
+			edma_err("Descriptor alloc for RXFILL ring %u failed\n",
+							rxfill_ring->ring_id);
 
-                return -ENOMEM;
-        }
-        rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
+			return -ENOMEM;
+	}
+
+	nss_dp_minidump_log(rxfill_ring->desc, roundup((sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+						SMP_CACHE_BYTES), "edma_rxfill_desc");
+
+	rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
 #else
-	struct platform_device *pdev = edma_gbl_ctx.pdev;
+	struct platform_device *pdev = edma_gbl_ctx->pdev;
 
 	/*
 	 * Allocate RxFill ring descriptors
@@ -138,6 +143,9 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 				(sizeof(struct edma_rxfill_desc)
 				* rxfill_ring->count),
 				&rxfill_ring->dma, GFP_KERNEL | __GFP_ZERO);
+
+	nss_dp_minidump_log(rxfill_ring->desc, (sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+						"edma_rxfill_desc");
 #endif
 
 	return 0;
@@ -160,6 +168,9 @@ static int edma_cfg_rx_desc_ring_setup(struct edma_rxdesc_ring *rxdesc_ring)
 		return -ENOMEM;
 	}
 
+	nss_dp_minidump_log(rxdesc_ring->pdesc, roundup((sizeof(struct edma_rxdesc_desc) * rxdesc_ring->count),
+						SMP_CACHE_BYTES), "edma_rxdesc_desc");
+
 	rxdesc_ring->pdma = (dma_addr_t)virt_to_phys(rxdesc_ring->pdesc);
 
 	/*
@@ -170,11 +181,15 @@ static int edma_cfg_rx_desc_ring_setup(struct edma_rxdesc_ring *rxdesc_ring)
 	if (!rxdesc_ring->sdesc) {
 		edma_err("Descriptor alloc for secondary RX ring %u failed\n",
 							rxdesc_ring->ring_id);
+		nss_dp_minidump_free(rxdesc_ring->pdesc, "edma_rxdesc_desc");
 		kfree(rxdesc_ring->pdesc);
 		rxdesc_ring->pdesc = NULL;
 		rxdesc_ring->pdma = (dma_addr_t)0;
 		return -ENOMEM;
 	}
+
+	nss_dp_minidump_log(rxdesc_ring->sdesc, roundup((sizeof(struct edma_rxdesc_sec_desc) * rxdesc_ring->count),
+						SMP_CACHE_BYTES), "edma_rxdesc_sec_desc");
 
 	rxdesc_ring->sdma = (dma_addr_t)virt_to_phys(rxdesc_ring->sdesc);
 
@@ -233,6 +248,7 @@ static void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free RXDESC ring descriptors
 	 */
+	nss_dp_minidump_free(rxdesc_ring->pdesc, "edma_rxdesc_desc");
 	kfree(rxdesc_ring->pdesc);
 	rxdesc_ring->pdesc = NULL;
 	rxdesc_ring->pdma = (dma_addr_t)0;
@@ -241,6 +257,7 @@ static void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 	 * TODO:
 	 * Free any buffers assigned to any secondary ring descriptors
 	 */
+	nss_dp_minidump_free(rxdesc_ring->sdesc, "edma_rxdesc_sec_desc");
 	kfree(rxdesc_ring->sdesc);
 	rxdesc_ring->sdesc = NULL;
 	rxdesc_ring->sdma = (dma_addr_t)0;
@@ -347,12 +364,12 @@ static void edma_cfg_rx_desc_ring_to_queue_mapping(uint32_t enable)
 	/*
 	 * Rxdesc ring to PPE queue mapping
 	 */
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx->num_rxdesc_rings; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &edma_gbl_ctx.rxdesc_rings[i];
+		rxdesc_ring = &edma_gbl_ctx->rxdesc_rings[i];
 		if (enable) {
-			memcpy(queue_bmp.bmp, edma_gbl_ctx.rxdesc_ring_to_queue_bm[i],
+			memcpy(queue_bmp.bmp, edma_gbl_ctx->rxdesc_ring_to_queue_bm[i],
 					sizeof(uint32_t) * EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT);
 		}
 
@@ -539,10 +556,10 @@ static void edma_cfg_rx_fill_ring_flow_control(uint32_t threshold_xoff, uint32_t
 	data = (threshold_xoff & EDMA_RXFILL_FC_XOFF_THRE_MASK) << EDMA_RXFILL_FC_XOFF_THRE_SHIFT;
 	data |= ((threshold_xon & EDMA_RXFILL_FC_XON_THRE_MASK) << EDMA_RXFILL_FC_XON_THRE_SHIFT);
 
-	for (i = 0; i < edma_gbl_ctx.num_rxfill_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx->num_rxfill_rings; i++) {
 		struct edma_rxfill_ring *rxfill_ring;
 
-		rxfill_ring = &edma_gbl_ctx.rxfill_rings[i];
+		rxfill_ring = &edma_gbl_ctx->rxfill_rings[i];
 		edma_reg_write(EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id), data);
 	}
 }
@@ -557,10 +574,10 @@ static void edma_cfg_rx_desc_ring_flow_control(uint32_t threshold_xoff, uint32_t
 
 	data = (threshold_xoff & EDMA_RXDESC_FC_XOFF_THRE_MASK) << EDMA_RXDESC_FC_XOFF_THRE_SHIFT;
 	data |= ((threshold_xon & EDMA_RXDESC_FC_XON_THRE_MASK) << EDMA_RXDESC_FC_XON_THRE_SHIFT);
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx->num_rxdesc_rings; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &edma_gbl_ctx.rxdesc_rings[i];
+		rxdesc_ring = &edma_gbl_ctx->rxdesc_rings[i];
 		edma_reg_write(EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id), data);
 	}
 }
@@ -580,13 +597,13 @@ static int32_t edma_cfg_rx_mapped_queue_ac_fc_configure(uint16_t threshold,
 	fal_ac_ctrl_t ac_ctrl;
 	bool is_enable = (enable ? true: false);
 
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx->num_rxdesc_rings; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &edma_gbl_ctx.rxdesc_rings[i];
+		rxdesc_ring = &edma_gbl_ctx->rxdesc_rings[i];
 
 		for (j = 0; j < EDMA_MAX_PRI_PER_CORE; j++) {
-			queue_id = edma_gbl_ctx.rx_ring_queue_map[j][i];
+			queue_id = edma_gbl_ctx->rx_ring_queue_map[j][i];
 
 			/*
 			 * Configure the mapped queues AC FC configuration threshold
@@ -645,7 +662,7 @@ static int32_t edma_cfg_rx_mapped_queue_ac_fc_configure(uint16_t threshold,
  */
 static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t data;
 	uint32_t paddr, saddr;
 
@@ -758,7 +775,7 @@ static void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring
  */
 uint16_t edma_cfg_rx_point_offload_ring_queue_get(void)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	return egc->point_offload_queue;
 }
 EXPORT_SYMBOL(edma_cfg_rx_point_offload_ring_queue_get);
@@ -1275,12 +1292,18 @@ int32_t edma_cfg_rx_rings_alloc(struct edma_gbl_ctx *egc)
 		return -ENOMEM;
 	}
 
+	nss_dp_minidump_log(egc->rxfill_rings, (sizeof(struct edma_rxfill_ring) *
+						egc->num_rxfill_rings), "edma_rxfill_ring");
+
 	egc->rxdesc_rings = kzalloc((sizeof(struct edma_rxdesc_ring) *
 				egc->num_rxdesc_rings), GFP_KERNEL);
 	if (!egc->rxdesc_rings) {
 		edma_err("Error in allocating rxdesc ring\n");
 		goto rxdesc_ring_alloc_fail;
 	}
+
+	nss_dp_minidump_log(egc->rxdesc_rings, (sizeof(struct edma_rxdesc_ring) * egc->num_rxdesc_rings),
+						"edma_rxdesc_ring");
 
 	edma_info("RxDesc:%u (%u-%u) RxFill:%u (%u-%u)\n",
 		egc->num_rxdesc_rings, egc->rxdesc_ring_start,
@@ -1315,9 +1338,11 @@ rx_rings_setup_fail:
 	kfree(egc->rxdesc_ring_to_queue_bm);
 	egc->rxdesc_ring_to_queue_bm = NULL;
 rx_rings_mapped_queue_alloc_failed:
+	nss_dp_minidump_free(egc->rxdesc_rings, "edma_rxdesc_ring");
 	kfree(egc->rxdesc_rings);
 	egc->rxdesc_rings = NULL;
 rxdesc_ring_alloc_fail:
+	nss_dp_minidump_free(egc->rxfill_rings, "edma_rxfill_ring");
 	kfree(egc->rxfill_rings);
 	egc->rxfill_rings = NULL;
 	return -ENOMEM;
@@ -1344,6 +1369,9 @@ void edma_cfg_rx_rings_cleanup(struct edma_gbl_ctx *egc)
 	for (i = 0; i < egc->num_rxdesc_rings; i++) {
 		edma_cfg_rx_desc_ring_cleanup(egc, &egc->rxdesc_rings[i]);
 	}
+
+	nss_dp_minidump_free(egc->rxfill_rings, "edma_rxfill_ring");
+	nss_dp_minidump_free(egc->rxdesc_rings, "edma_rxdesc_ring");
 
 	kfree(egc->rxfill_rings);
 	kfree(egc->rxdesc_rings);
@@ -1748,7 +1776,7 @@ int edma_cfg_rx_rps(struct ctl_table *table, int write,
 	 * Set bitmap based on given number of cores.
 	 */
 	edma_cfg_rx_rps_bitmap_cores = (1 << edma_cfg_rx_rps_num_cores) - 1;
-	edma_configure_rps_hash_map(&edma_gbl_ctx);
+	edma_configure_rps_hash_map(edma_gbl_ctx);
 
 	edma_warn("EDMA RPS configured to use %d cores\n", edma_cfg_rx_rps_num_cores);
 	return ret;
@@ -1785,7 +1813,7 @@ int edma_cfg_rx_rps_bitmap(struct ctl_table *table, int write,
 		edma_cfg_rx_rps_bitmap_cores = EDMA_RX_DEFAULT_BITMAP;
 	}
 
-	edma_configure_rps_hash_map(&edma_gbl_ctx);
+	edma_configure_rps_hash_map(edma_gbl_ctx);
 
 	edma_warn("EDMA RPS bitmap value: %d\n", edma_cfg_rx_rps_bitmap_cores);
 	return ret;
