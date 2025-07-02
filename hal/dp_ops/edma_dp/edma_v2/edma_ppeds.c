@@ -49,12 +49,16 @@ static int edma_ppeds_rx_fill_ring_alloc(struct edma_rxfill_ring *rxfill_ring)
 							rxfill_ring->ring_id);
 		return -ENOMEM;
 	}
+
+	nss_dp_minidump_log(rxfill_ring->desc, roundup((sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
+						SMP_CACHE_BYTES), "edma_rxfill_desc");
+
 	rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
 #else
 	/*
 	 * Allocate RxFill ring descriptors
 	 */
-	rxfill_ring->desc = dma_alloc_coherent(&edma_gbl_ctx.pdev->dev,
+	rxfill_ring->desc = dma_alloc_coherent(&edma_gbl_ctx->pdev->dev,
 				(sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
 				&rxfill_ring->dma, GFP_KERNEL | __GFP_ZERO);
 	if (!rxfill_ring->desc) {
@@ -62,6 +66,9 @@ static int edma_ppeds_rx_fill_ring_alloc(struct edma_rxfill_ring *rxfill_ring)
 							rxfill_ring->ring_id);
 		return -ENOMEM;
 	}
+
+	nss_dp_minidump_log(rxfill_ring->desc, sizeof(struct edma_rxfill_desc) * rxfill_ring->count,
+						"edma_rxfill_desc");
 #endif
 
 	return 0;
@@ -76,10 +83,11 @@ static void edma_ppeds_rx_fill_ring_free(struct edma_rxfill_ring *rxfill_ring)
 	/*
 	 * Free RXFILL ring descriptors
 	 */
+	nss_dp_minidump_free(rxfill_ring->desc, "edma_rxfill_desc");
 #ifdef CONFIG_IO_COHERENCY
-        kfree(rxfill_ring->desc);
+	kfree(rxfill_ring->desc);
 #else
-	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
+	dma_free_coherent(&edma_gbl_ctx->pdev->dev,
 			(sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
 			rxfill_ring->desc, rxfill_ring->dma);
 #endif
@@ -106,6 +114,12 @@ static int edma_ppeds_rx_secondary_alloc(struct edma_rxdesc_ring *rxdesc_ring)
 		 */
 		rxdesc_ring->sdesc = kmalloc(roundup((sizeof(struct edma_rxdesc_sec_desc) *  rxdesc_ring->count),
 					SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
+
+		/*
+		 * TODO: Add free() and minidump_free() for rxdesc_ring->sdesc
+		 */
+		nss_dp_minidump_log(rxdesc_ring->sdesc, roundup((sizeof(struct edma_rxdesc_sec_desc) *  rxdesc_ring->count),
+							SMP_CACHE_BYTES), "edma_rxdesc_sec_desc");
 
 		edma_ppeds_rx_ring_sec_mem = rxdesc_ring->sdesc;
 		edma_ppeds_rx_ring_entries = rxdesc_ring->count;
@@ -136,9 +150,13 @@ static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
 				txcmpl_ring->id);
 		return -ENOMEM;
 	}
+
+	nss_dp_minidump_log(txcmpl_ring->desc, roundup((sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
+							SMP_CACHE_BYTES), "edma_txcmpl_desc");
+
 	txcmpl_ring->dma = (dma_addr_t)virt_to_phys(txcmpl_ring->desc);
 #else
-	txcmpl_ring->desc = dma_alloc_coherent(&edma_gbl_ctx.pdev->dev,
+	txcmpl_ring->desc = dma_alloc_coherent(&edma_gbl_ctx->pdev->dev,
 				(sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
 				&txcmpl_ring->dma, GFP_KERNEL | __GFP_ZERO);
 	if (!txcmpl_ring->desc) {
@@ -146,6 +164,9 @@ static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
 				txcmpl_ring->id);
 		return -ENOMEM;
 	}
+
+	nss_dp_minidump_log(txcmpl_ring->desc, roundup((sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
+							SMP_CACHE_BYTES), "edma_txcmpl_desc");
 #endif
 
 	return 0;
@@ -157,10 +178,11 @@ static int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring)
  */
 static void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring)
 {
+	nss_dp_minidump_free(txcmpl_ring->desc, "edma_txcmpl_desc");
 #ifdef CONFIG_IO_COHERENCY
 	kfree(txcmpl_ring->desc);
 #else
-	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
+	dma_free_coherent(&edma_gbl_ctx->pdev->dev,
 			(sizeof(struct edma_txcmpl_desc) *  txcmpl_ring->count),
 			txcmpl_ring->desc, txcmpl_ring->dma);
 #endif
@@ -197,6 +219,12 @@ static int edma_ppeds_tx_secondary_alloc(struct edma_txdesc_ring *txdesc_ring)
 		return -1;
 	}
 
+	/*
+	 * TODO: Add free() and minidump_free() for txdesc_ring->sdesc
+	 */
+	nss_dp_minidump_log(txdesc_ring->sdesc, roundup((sizeof(struct edma_sec_txdesc) *  txdesc_ring->count),
+					SMP_CACHE_BYTES), "edma_sec_txdesc");
+
 	txdesc_ring->sdma = (dma_addr_t)virt_to_phys(txdesc_ring->sdesc);
 	edma_debug("tx sec desc got allocated for Tx ring %d\n", txdesc_ring->id);
 	return 0;
@@ -213,7 +241,7 @@ static uint32_t edma_ppeds_tx_complete(uint32_t work_to_do, struct edma_txcmpl_r
 	struct edma_txcmpl_desc *txcmpl;
 	uint32_t cons_idx, prod_idx, data, avail;
 	uint16_t count;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 
 	cons_idx = txcmpl_ring->cons_idx;
 
@@ -260,7 +288,7 @@ static int edma_ppeds_txcomp_napi_poll(struct napi_struct *napi, int budget)
 {
 	struct edma_txcmpl_ring *txcmpl_ring = (struct edma_txcmpl_ring *)napi;
 	struct edma_ppeds *ppeds_node = container_of(txcmpl_ring, struct edma_ppeds, txcmpl_ring);
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t txcmpl_intr_status;
 	int work_done = 0;
 	uint32_t reg_data;
@@ -358,7 +386,7 @@ static int edma_ppeds_rxfill_napi_poll(struct napi_struct *napi, int budget)
 	struct edma_rxfill_ring *rxfill_ring = (struct edma_rxfill_ring *)napi;
 	struct edma_ppeds *ppeds_node = container_of(rxfill_ring, struct edma_ppeds, rxfill_ring);
 	uint32_t alloc_size = rxfill_ring->alloc_size;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t headroom = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
 
 	cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) &
@@ -835,8 +863,8 @@ bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 {
 	int ret;
 	uint32_t alloc_size;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	uint32_t rx_ring_size = ppeds_handle->ppe2tcl_num_desc;
@@ -1064,7 +1092,7 @@ void edma_ppeds_inst_refill(nss_dp_ppeds_handle_t *ppeds_handle, int count)
 {
 	uint32_t num_avail;
 	uint32_t headroom = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	struct edma_rxfill_ring *rxfill_ring = &ppeds_node->rxfill_ring;
@@ -1095,7 +1123,7 @@ void edma_ppeds_inst_refill(nss_dp_ppeds_handle_t *ppeds_handle, int count)
  */
 bool edma_ppeds_get_ppe_queues(nss_dp_ppeds_handle_t *ppeds_handle, uint32_t *ppe_queue_start)
 {
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 
@@ -1121,7 +1149,7 @@ void edma_ppeds_set_tx_prod_idx(nss_dp_ppeds_handle_t *ppeds_handle, uint16_t tx
 {
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	uint32_t cons_idx;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t work_to_do = 0;
 
 	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(ppeds_node->tx_ring.id), tx_prod_idx);
@@ -1142,7 +1170,7 @@ void edma_ppeds_set_rx_cons_idx(nss_dp_ppeds_handle_t *ppeds_handle, uint16_t rx
 {
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	uint32_t prod_idx;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t work_to_do = 0;
 
 	edma_reg_write(EDMA_REG_RXDESC_CONS_IDX(ppeds_node->rx_ring.ring_id), rx_cons_idx);
@@ -1221,7 +1249,7 @@ int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 				struct nss_ppe_ds_ctx_info_handle *info_hdl)
 {
 	uint32_t data;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_ppeds_drv *drv = &egc->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
@@ -1322,7 +1350,7 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
 				struct nss_ppe_ds_ctx_info_handle *info_hdl)
 {
 	uint32_t data;
-	struct edma_gbl_ctx *gbl_ctx = &edma_gbl_ctx;
+	struct edma_gbl_ctx *gbl_ctx = edma_gbl_ctx;
 	struct edma_ppeds_drv *drv = &gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
@@ -1437,7 +1465,7 @@ void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t intr_enab
  */
 void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 {
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 
@@ -1494,7 +1522,7 @@ nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb *ops, 
 {
 	struct edma_ppeds *ppeds_node;
 	uint32_t i;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	int size = priv_size + sizeof(struct edma_ppeds);
 
 	if (!ops || !ops->rx || !ops->rx_fill || !ops->rx_release
@@ -1595,7 +1623,7 @@ int edma_ppeds_init(struct edma_ppeds_drv *drv)
 			int j;
 			for (j = 0; j < EDMA_PPEDS_NUM_ENTRY; j++) {
 				drv->ppeds_node_cfg[i].node_map[j] =
-					 edma_gbl_ctx.ppeds_node_map[i][j];
+					 edma_gbl_ctx->ppeds_node_map[i][j];
 			}
 
 			drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_AVAIL;
