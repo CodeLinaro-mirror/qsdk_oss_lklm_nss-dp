@@ -100,7 +100,7 @@ module_param(nss_dp_mht_multi_txring, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_mht_multi_txring, "MHT SW ports to Tx rings map");
 #endif
 
-#if defined(NSS_DP_EDMA_V2)
+#if defined(NSS_DP_EDMA_V2) || defined(NSS_DP_EDMA_V3)
 int nss_dp_rx_fc_xoff = NSS_DP_RX_FC_XOFF_DEF;
 module_param(nss_dp_rx_fc_xoff, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_rx_fc_xoff, "Rx ring's flow control XOFF threshold value");
