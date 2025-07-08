@@ -441,9 +441,7 @@ struct edma_rxdesc_ring {
 };
 
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);
-#ifdef NSS_DP_PPEDS_SUPPORT
 irqreturn_t edma_rxfill_handle_irq(int irq, void *ctx);
-#endif
 void edma_rx_free_buffer_loopback(void);
 bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
