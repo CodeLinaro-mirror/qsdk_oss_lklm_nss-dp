@@ -62,7 +62,7 @@
 #define NSS_DP_RX_BUFFER_SIZE		1984
 #endif
 
-#if defined(NSS_DP_EDMA_V2)
+#if defined(NSS_DP_EDMA_V2) || defined(NSS_DP_EDMA_V3)
 /*
  * Rx rings flow control threshold values
  *
@@ -309,7 +309,7 @@ extern int nss_dp_rxfill_napi_budget;
 extern uint32_t edma_loopback_feature_type;
 #endif
 
-#if defined(NSS_DP_EDMA_V2)
+#if defined(NSS_DP_EDMA_V2) || defined(NSS_DP_EDMA_V3)
 extern int nss_dp_rx_fc_xon;
 extern int nss_dp_rx_fc_xoff;
 extern int nss_dp_rx_ac_fc_threshold;
@@ -375,7 +375,7 @@ bool nss_dp_is_phy_dev(struct net_device *dev);
  *
  * Note: We are not using MACID 7 for indexing.
  */
-#if defined(NSS_DP_EDMA_V2)
+#if defined(NSS_DP_EDMA_V2) || defined(NSS_DP_EDMA_V3)
 static inline uint32_t nss_dp_get_idx_from_macid(uint32_t macid)
 {
 	if (likely(macid < NSS_DP_VP_MAC_ID)) {
