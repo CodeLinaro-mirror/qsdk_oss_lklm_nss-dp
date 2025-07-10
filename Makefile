@@ -100,6 +100,38 @@ NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/edma_dp/edma_v2/include
 ccflags-y += -DNSS_DP_ENABLE_NAPI_GRO -DNSS_DP_VP_SUPPORT -DNSS_DP_EDMA_V2 -DNSS_DP_MAC_POLL_SUPPORT -DNSS_DP_SW_BR_OPS -DNSS_DP_ETHTOOL_MRR_OPS
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ccflags-y += -DNSS_DP_MAX_TXCOMP_TIMEOUT
+qca-nss-dp-objs += nss_dp_vp_main.o \
+		   nss_dp_ethtool_priv.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_cfg_rx.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_cfg_tx.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_debugfs.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_dp.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_dp_vp.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_misc.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_procfs.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_rx.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_tx.o \
+		   hal/gmac_ops/qcom/qcom_if.o \
+		   hal/gmac_ops/syn/xgmac/syn_if.o
+ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
+ifeq ($(dp-ppe-ds),y)
+qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds.o
+ccflags-y += -DNSS_DP_PPEDS_SUPPORT
+endif
+
+ifeq ($(dp-loopback),y)
+qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_cfg_rx_loopback.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_cfg_tx_loopback.o
+ccflags-y += -DNSS_DP_EDMA_LOOPBACK_SUPPORT
+endif
+NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/edma_dp/edma_v3
+NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/edma_dp/edma_v3/include
+ccflags-y += -DNSS_DP_ENABLE_NAPI_GRO -DNSS_DP_VP_SUPPORT -DNSS_DP_EDMA_V3 -DNSS_DP_MAC_POLL_SUPPORT -DNSS_DP_SW_BR_OPS -DNSS_DP_ETHTOOL_MRR_OPS
+endif
+
 ifeq ($(SoC),$(filter $(SoC),ipq53xx))
 ccflags-y += -DNSS_DP_IPQ53XX
 endif
@@ -110,6 +142,10 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq96xx))
 ccflags-y += -DNSS_DP_IPQ96XX
+endif
+
+ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ccflags-y += -DNSS_DP_IPQ52XX
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
