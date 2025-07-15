@@ -64,7 +64,7 @@ NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/syn_gmac_dp/include
 ccflags-y += -DNSS_DP_IPQ50XX -DNSS_DP_ENABLE_NAPI_GRO
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx ipq96xx))
+ifeq ($(SoC),$(filter $(SoC),ipq95xx ipq53xx ipq54xx))
 ccflags-y += -DNSS_DP_MAX_TXCOMP_TIMEOUT
 qca-nss-dp-objs += nss_dp_vp_main.o \
 		   nss_dp_ethtool_priv.o \
@@ -100,7 +100,7 @@ NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/edma_dp/edma_v2/include
 ccflags-y += -DNSS_DP_ENABLE_NAPI_GRO -DNSS_DP_VP_SUPPORT -DNSS_DP_EDMA_V2 -DNSS_DP_MAC_POLL_SUPPORT -DNSS_DP_SW_BR_OPS -DNSS_DP_ETHTOOL_MRR_OPS
 endif
 
-ifeq ($(SoC),$(filter $(SoC),ipq52xx))
+ifeq ($(SoC),$(filter $(SoC),ipq52xx ipq96xx))
 ccflags-y += -DNSS_DP_MAX_TXCOMP_TIMEOUT
 qca-nss-dp-objs += nss_dp_vp_main.o \
 		   nss_dp_ethtool_priv.o \
