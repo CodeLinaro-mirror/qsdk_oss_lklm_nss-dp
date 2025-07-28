@@ -909,7 +909,7 @@ process_next_scatter:
 	 * Check Rx checksum offload status.
 	 */
 	if (likely(dev->features & NETIF_F_RXCSUM)) {
-		skb->ip_summed = edma_rx_checksum_verify(rxdesc_desc, skb_head);
+		skb_head->ip_summed = edma_rx_checksum_verify(rxdesc_desc, skb_head);
 	}
 
 	/*
