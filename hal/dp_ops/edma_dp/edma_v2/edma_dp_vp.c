@@ -32,6 +32,7 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 	struct edma_pcpu_stats *pcpu_stats;
 	struct edma_tx_stats *stats;
 	struct sk_buff *segs;
+	struct nss_dp_dev *egress_dev = NULL;
 	enum edma_tx_gso result;
 	int ret;
 
@@ -52,9 +53,15 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 #endif
 
 	/*
+	 * If egress_macid is valid map pkts to the egress netdevice txdesc_ring
 	 * Select a TX ring based on current core
 	 */
-	txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[0][smp_processor_id()];
+	if (dptxi->egress_macid >= EDMA_START_GMACS && dptxi->egress_macid <= NSS_DP_VP_MAC_ID) {
+		egress_dev = dp_global_ctx.nss_dp[nss_dp_get_idx_from_macid(dptxi->egress_macid)];
+		txdesc_ring = (struct edma_txdesc_ring *)egress_dev->dp_info.txr_map[0][smp_processor_id()];
+	} else {
+		txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[0][smp_processor_id()];
+	}
 
 	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
 	stats = this_cpu_ptr(pcpu_stats->tx_stats);
