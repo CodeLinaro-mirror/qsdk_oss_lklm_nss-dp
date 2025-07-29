@@ -63,6 +63,8 @@ static char edma_vlan_append_info[EDMA_VLAN_APPEND_INFO_STR_LEN];
 
 char *argv[] = {"/usr/bin/edma_recover.sh", NULL };
 
+const char edma_cfg_ini_filepath[] = "/etc/config/nss_cfg.ini";
+
 /*
  * edma_recovery_work()
  *      Call usermodehelper function to execute edma_recovery user script.
@@ -1041,6 +1043,14 @@ skip_loopback:
 		}
 	}
 #endif
+	/*
+	 * Store user defined txdesc-ring to fc-group mapping
+	 */
+	if (edma_parse_ring_fc_mapping(edma_cfg_ini_filepath) != 0) {
+		edma_warn("Error in reading user-defined fc group mapping from %s..\n", edma_cfg_ini_filepath);
+		edma_warn("Taking default config.\n");
+	}
+
 	return 0;
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT) || defined(NSS_DP_PPEDS_SUPPORT)
@@ -2472,4 +2482,113 @@ int edma_force_crash_handler(struct ctl_table *table, int write,
 	}
 
 	return ret;
+}
+
+/*
+ * edma_parse_ring_fc_mapping()
+ * 		Function to parse txdesc_ring_id to fc_group mapping
+ * Starts parsing from "[txdesc_fc_mapping]" and stops after an empty line
+ * Handles whitespaces for each entry
+ * Saves the mapping into edma_gbl_ctx->user_fc_grp_map
+ * Also handles comments starting from '#'
+*/
+int edma_parse_ring_fc_mapping(const char *filepath) {
+	struct file *file;
+	loff_t pos = 0;
+	char *linebuf, *line, *txdesc_ring_id_str, *fc_grp_str;
+	int txdesc_ring_id, fc_grp;
+	ssize_t bytes_read;
+	bool fc_mapping_found = false;
+
+	/*
+	 * Max line size = 128 bytes
+	 */
+	linebuf = kzalloc(EDMA_CONFIG_LINE_MAX_LEN, GFP_KERNEL);
+	if (!linebuf) {
+		edma_warn("Not enough memory for file buffer.\n");
+		return -ENOMEM;
+	}
+
+	file = filp_open(filepath, O_RDONLY, 0);
+	if (IS_ERR(file)) {
+		edma_warn("Error in reading config file.\n");
+		kfree(linebuf);
+		return -ENOENT;
+	}
+
+	/*
+	 * bytes_read initialized to enter while loop
+	 */
+	bytes_read = 1;
+	while(bytes_read > 0) {
+		char ch;
+		size_t linelen = 0;
+
+		/*
+		 * Reading each line of the file char-by-char
+		 * linebuf stores the entire string
+		 * line stores the string after handling whitespaces
+		 */
+		while (linelen < EDMA_CONFIG_LINE_MAX_LEN - 1) {
+			bytes_read = kernel_read(file, &ch, 1, &pos);
+			if (bytes_read <= 0 || ch == '\n')
+				break;
+			linebuf[linelen++] = ch;
+		}
+
+		if (fc_mapping_found && (linelen == 0) && (bytes_read <= 0))
+			break;
+
+		linebuf[linelen] = '\0';
+		line = strstrip(linebuf);
+
+		/*
+		 * [txdesc_fc_mapping] found in the file, start reading
+		 * Skip line otherwise
+		 */
+		if (!fc_mapping_found) {
+			if (!strcmp(line, "[txdesc_fc_mapping]\0"))
+				fc_mapping_found = true;
+			continue;
+		}
+
+		if (line[0] == '#')
+			continue;
+		if (line[0] == '\0')
+			break;
+
+		/*
+		 * Extract LHS and RHS strings after stripping whitespaces
+		 * Check if LHS/RHS strings can be converted to valid integers
+		 */
+		txdesc_ring_id_str = strstrip(strsep(&line, "="));
+		fc_grp_str = strstrip(line);
+
+		if (!txdesc_ring_id_str || !fc_grp_str || kstrtoint(txdesc_ring_id_str, 10, &txdesc_ring_id) || kstrtoint(fc_grp_str, 10, &fc_grp))
+			goto fail;
+
+		/*
+		 * Check for unique mapping for each txdesc ring ID
+		 * Also check if the LHS and RHS values are under constraints
+		 */
+		if ((edma_gbl_ctx->user_fc_grp_map[txdesc_ring_id].fc_grp_valid)
+				|| (txdesc_ring_id < 0) || (txdesc_ring_id > edma_gbl_ctx->txdesc_ring_end)
+				|| (fc_grp < 0) || (fc_grp >= EDMA_MAX_FC_GRP))
+			goto fail;
+
+		edma_gbl_ctx->user_fc_grp_map[txdesc_ring_id].fc_grp = (uint8_t)fc_grp;
+		edma_gbl_ctx->user_fc_grp_map[txdesc_ring_id].fc_grp_valid = true;
+	}
+
+	edma_info("Mapping config parsed successfully.\n");
+	filp_close(file, NULL);
+	kfree(linebuf);
+	return 0;
+
+fail:
+	edma_warn("Parsing error, ignoring user-defined mapping.\n");
+	filp_close(file, NULL);
+	kfree(linebuf);
+	memset(&edma_gbl_ctx->user_fc_grp_map, 0, sizeof(edma_gbl_ctx->user_fc_grp_map));
+	return -EINVAL;
 }

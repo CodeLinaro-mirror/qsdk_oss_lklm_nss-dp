@@ -635,6 +635,14 @@ static int edma_cfg_tx_rings_setup(struct edma_gbl_ctx *egc)
 		txdesc_ring->count = EDMA_TX_RING_SIZE;
 		txdesc_ring->id = egc->txdesc_ring_start + i;
 
+		/*
+		* If fc group id mapping is defined by user, overwrite with that
+		*/
+		if(egc->user_fc_grp_map[txdesc_ring->id].fc_grp_valid) {
+			txdesc_ring->fc_grp_id = egc->user_fc_grp_map[txdesc_ring->id].fc_grp;
+			edma_info("Remapped txdesc_ring %d to fc group %d.\n",txdesc_ring->id, txdesc_ring->fc_grp_id);
+		}
+
 		ret = edma_cfg_tx_desc_ring_setup(txdesc_ring);
 		if (ret != 0) {
 			edma_err("Error in setting up %d txdesc ring. ret: %d",

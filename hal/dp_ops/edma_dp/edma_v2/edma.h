@@ -139,6 +139,11 @@
 #define EDMA_MAX_LOOPBACK_BUF 32
 
 /*
+ * Maximum possible line length while parsing nss_cfg.ini
+ */
+#define EDMA_CONFIG_LINE_MAX_LEN 128
+
+/*
  * edma_port_ucast_queues
  * 	EDMA unicast queue number
  * To-do: read queue start from dtsi
@@ -269,6 +274,17 @@ struct edma_dp_loopback_buf_info {
 #endif
 
 /*
+ * Used to store user-defined fc group mappings
+ * For edma txdesc and ppeds rings
+ * fc_grp = FC group ID set by user for a given ring
+ * fc_grp_valid = true if fc_grp is user defined
+ */
+struct edma_user_fc_grp_map {
+	uint8_t fc_grp;
+	bool fc_grp_valid;
+};
+
+/*
  * EDMA private data structure
  */
 struct edma_gbl_ctx {
@@ -329,6 +345,8 @@ struct edma_gbl_ctx {
 			/* Per core Tx ring to core mapping */
 	int32_t tx_fc_grp_map[EDMA_MAX_FC_GRP];
 			/* Per GMAC TxDesc ring to flow control group mapping */
+	struct edma_user_fc_grp_map user_fc_grp_map[EDMA_MAX_TXDESC_RINGS];
+			/* Per Txdesc-ring fc-group mapping provided by user */
 	int32_t txcmpl_map[EDMA_TXCMPL_RING_PER_CORE_MAX][NR_CPUS];
 			/* Tx complete ring to core mapping */
 
@@ -483,6 +501,7 @@ void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc);
 int edma_hang_recovery_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_vlan_append_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_force_crash_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
+int edma_parse_ring_fc_mapping(const char *filepath);
 
 /*
  * edma_reg_read()

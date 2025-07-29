@@ -634,6 +634,15 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id), EDMA_TX_INITIAL_PROD_IDX);
 
 	/*
+	 * Overwrite fc group id for ppeds rings
+	 */
+	if (edma_gbl_ctx->user_fc_grp_map[txdesc_ring->id].fc_grp_valid) {
+		txdesc_ring->fc_grp_id = edma_gbl_ctx->user_fc_grp_map[txdesc_ring->id].fc_grp;
+		edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id),
+						EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id));
+	}
+
+	/*
 	 * Configure TxCmpl ring base address
 	 */
 	paddr = (uint32_t)(txcmpl_ring->dma & EDMA_RING_DMA_MASK);
