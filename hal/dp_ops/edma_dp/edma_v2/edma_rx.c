@@ -11,6 +11,7 @@
 #include <ppe_drv_public.h>
 #include <ppe_drv_sc.h>
 #include <nss_dp_vp.h>
+#include <nss_dp_udp_st.h>
 #include <linux/phy.h>
 #include <linux/if_vlan.h>
 #include <net/page_pool/helpers.h>
@@ -34,6 +35,79 @@ extern struct nss_dp_vp_ctx g_vp_ctx;
 extern unsigned long __wrap___get_free_pages(gfp_t gfp_mask, unsigned int order);
 extern void __wrap_free_pages(unsigned long addr, unsigned int order);
 #endif
+/*
+ * Callback for udp st rx processing.
+ */
+nss_dp_udp_st_rx_cb_t nss_dp_udp_st_rx_cb = NULL;
+
+/*
+ * edma_rx_wifi_qos_none()
+ *	Get the remaining 20-bit tree_id and process
+ */
+static void edma_rx_wifi_qos_none(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				  struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				  struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+
+/*
+ * edma_rx_wifi_qos_sawf()
+ *	In case of SAWF, fetch the SAWF metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_sawf(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				  struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				  struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+
+/*
+ * edma_rx_wifi_qos_scs()
+ *	In case of SCS, fetch the wifi_qos from Tree ID.
+ */
+static void edma_rx_wifi_qos_scs(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				 struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				 struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+
+/*
+ * edma_rx_wifi_qos_wifi_tid()
+ *	In case of HLOS TID OVERRIDE MODE, fetch the metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_wifi_tid(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				      struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				      struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+
+/*
+ * edma_rx_wifi_qos_mlo_assist()
+ *	In case of MLO, fetch the MLO metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_mlo_assist(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+					struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+					struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+
+/*
+ * edma_rx_wifi_qos_udp_st()
+ *	In case of UDP-ST, fetch the UDP-ST metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_udp_st(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				    struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				    struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+
+static edma_rx_wifi_qos_handler_t edma_rx_wifi_qos_handlers[] = {
+	edma_rx_wifi_qos_none,        /**< PPE_DRV_TREE_ID_TYPE_NONE */
+	edma_rx_wifi_qos_sawf,        /**< PPE_DRV_TREE_ID_TYPE_SAWF */
+	edma_rx_wifi_qos_scs,         /**< PPE_DRV_TREE_ID_TYPE_SCS */
+	edma_rx_wifi_qos_wifi_tid,    /**< PPE_DRV_TREE_ID_TYPE_WIFI_TID */
+	edma_rx_wifi_qos_mlo_assist,  /**< PPE_DRV_TREE_ID_TYPE_MLO_ASSIST */
+	edma_rx_wifi_qos_udp_st       /**< PPE_DRV_TREE_ID_TYPE_UDP_ST */
+};
+
+/*
+ * nss_dp_udp_st_rx_register_cb()
+ *	Register handler for udp st rx processing.
+ */
+void nss_dp_udp_st_rx_register_cb(nss_dp_udp_st_rx_cb_t cb)
+{
+	nss_dp_udp_st_rx_cb = cb;
+	return;
+}
+EXPORT_SYMBOL(nss_dp_udp_st_rx_register_cb);
+
 /*
  * edma_rx_process_capwap_vp()
  *	Forward capwap packet to VP module for processing.
@@ -631,16 +705,135 @@ static inline void edma_rx_sawf_sc_stats_update(uint64_t pkt_length, struct edma
 }
 
 /*
+ * edma_rx_wifi_qos_none()
+ *	Get the remaining 20-bit tree_id and process
+ */
+static void edma_rx_wifi_qos_none(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				  struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				  struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec)
+{
+	/*
+	 * TODO: Get the remaining 20-bit tree_id and process.
+	 */
+}
+
+/*
+ * edma_rx_wifi_qos_sawf()
+ *	In case of SAWF, fetch the SAWF metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_sawf(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				  struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				  struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec)
+{
+	uint32_t sawf_mark;
+	uint8_t wifi_qos;
+#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+	/*
+	 * Lower 16 bit is obtained from primary desc and
+	 * upper 2 bits from secondary desc
+	 */
+	sawf_mark = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
+	sawf_mark |= (EDMA_RXDESC_TREE_ID_GET(rxdesc_sec) & 0x3) << 16;
+#else
+	sawf_mark = EDMA_RXDESC_SAWF_MARK_GET(rxdesc_sec);
+#endif
+	wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
+
+	/*
+	 * Configure skb->mark with SAWF metadata.
+	 */
+	skb->mark = EDMA_RX_SAWF_METADATA_CONSTRUCT(sawf_mark, wifi_qos);
+	edma_debug("%px : SAWF mark configured = 0x%x\n", egc, skb->mark);
+}
+
+/*
+ * edma_rx_wifi_qos_scs()
+ *	In case of SCS, fetch the wifi_qos from Tree ID.
+ */
+static void edma_rx_wifi_qos_scs(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				 struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				 struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec)
+{
+	uint8_t wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
+
+	/*
+	 * Configure skb->mark with wifi_qos metadata.
+	 */
+	skb->mark = wifi_qos;
+	edma_debug("%px : SCS mark configured = 0x%x\n", egc, skb->mark);
+}
+
+/*
+ * edma_rx_wifi_qos_wifi_tid()
+ *	In case of HLOS TID OVERRIDE MODE, fetch the metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_wifi_tid(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				      struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				      struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec)
+{
+	uint8_t wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
+
+	/*
+	 * Configure skb->skb_priority with metadata.
+	 */
+	skb->priority = wifi_qos;
+	edma_debug("%px : HLOS TID OVERRIDE priority configured = 0x%d\n", egc, skb->priority);
+}
+
+/*
+ * edma_rx_wifi_qos_mlo_assist()
+ *	In case of MLO, fetch the MLO metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_mlo_assist(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+					struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+					struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec)
+{
+	uint32_t mlo_mark;
+	uint8_t wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
+#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
+	/*
+	 * Lower 16 bit is obtained from primary desc and
+	 * upper 2 bits from secondary desc
+	 */
+	mlo_mark = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
+	mlo_mark |= (EDMA_RXDESC_TREE_ID_GET(rxdesc_sec) & 0x3) << 16;
+#else
+	mlo_mark = EDMA_RXDESC_MLO_MARK_GET(rxdesc_sec);
+#endif
+
+	/*
+	 * Configure skb->mark with MLO metadata.
+	 */
+	skb->mark = EDMA_RX_MLO_METADATA_CONSTRUCT(mlo_mark, wifi_qos);
+	edma_debug("%px : mlo mark configured = 0x%x\n", egc, skb->mark);
+}
+
+/*
+ * edma_rx_wifi_qos_udp_st()
+ *	In case of UDP-ST, fetch the UDP-ST metadata from Tree ID.
+ */
+static void edma_rx_wifi_qos_udp_st(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				    struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				    struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec)
+{
+	uint32_t udp_st_mark = EDMA_RXDESC_UDP_ST_MARK_GET(rxdesc_sec);
+
+	/*
+	 * Configure skb->mark with UDP-ST metadata.
+	 */
+	skb->mark = EDMA_RX_UDP_ST_METADATA_CONSTRUCT(udp_st_mark);
+	edma_debug("%px : udp-st mark configured = 0x%x\n", egc, skb->mark);
+}
+
+/*
  * edma_rx_handle_wifi_qos_packets()
  *	Handle packets with wifi qos enabled.
  */
 static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring, struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb, struct nss_dp_vp_rx_info *vprxi_p)
 {
 	uint16_t desc_index, next_desc_index;
-	uint8_t wifi_qos;
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
 	ppe_drv_tree_id_type_t tree_id_type;
-	uint32_t mlo_mark, sawf_mark;
 
 	desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
 	rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
@@ -668,91 +861,10 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 	 */
 	vprxi_p->qdisc_valid = !!EDMA_RXDESC_HOST_QDISC_VALID_GET(rxdesc_sec);
 
-	switch (tree_id_type) {
-	case PPE_DRV_TREE_ID_TYPE_NONE:
-		/*
-		 * TODO: Get the remaining 20-bit tree_id and process.
-		 */
-		break;
-	case PPE_DRV_TREE_ID_TYPE_SAWF:
-		/*
-		 * In case of SAWF, fetch the SAWF metadata from Tree ID.
-		 */
-#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
-		/*
-		 * Lower 16 bit is obtained from primary desc and
-		 * upper 2 bits from secondary desc
-		 */
-		sawf_mark = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
-		sawf_mark |= (EDMA_RXDESC_TREE_ID_GET(rxdesc_sec) & 0x3) << 16;
-#else
-		sawf_mark = EDMA_RXDESC_SAWF_MARK_GET(rxdesc_sec);
-#endif
-		wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
-
-		/*
-		 * Configure skb->mark with SAWF metadata.
-		 */
-		skb->mark = EDMA_RX_SAWF_METADATA_CONSTRUCT(sawf_mark, wifi_qos);
-
-		edma_debug("%px : SAWF mark configured = 0x%x\n", egc, skb->mark);
-		break;
-
-	case PPE_DRV_TREE_ID_TYPE_SCS:
-		/*
-		 * In case of SCS, fetch the wifi_qos from Tree ID.
-		 */
-		wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
-
-		/*
-		 * Configure skb->mark with wifi_qos metadata.
-		 */
-		skb->mark = wifi_qos;
-
-		edma_debug("%px : SCS mark configured = 0x%x\n", egc, skb->mark);
-		break;
-
-	case PPE_DRV_TREE_ID_TYPE_WIFI_TID:
-		/*
-		 * In case of HLOS TID OVERRIDE MODE, fetch the metadata from Tree ID.
-		 */
-		wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
-
-		/*
-		 * Configure skb->skb_priority with metadata.
-		 */
-		skb->priority = wifi_qos;
-		edma_debug("%px : HLOS TID OVERRIDE priority configured = 0x%d\n", egc, skb->priority);
-		break;
-
-	case PPE_DRV_TREE_ID_TYPE_MLO_ASSIST:
-		/*
-		 * In case of MLO, fetch the MLO metadata from Tree ID.
-		 */
-		wifi_qos = EDMA_RXDESC_WIFI_QOS_GET(rxdesc_head);
-
-#ifdef NSS_DP_EDMA_FLOW_COOKIE_SUPPORT
-		/*
-		 * Lower 16 bit is obtained from primary desc and
-		 * upper 2 bits from secondary desc
-		 */
-		mlo_mark = EDMA_RXDESC_FLOW_COOKIE_GET(rxdesc_head);
-		mlo_mark |= (EDMA_RXDESC_TREE_ID_GET(rxdesc_sec) & 0x3) << 16;
-#else
-		mlo_mark = EDMA_RXDESC_MLO_MARK_GET(rxdesc_sec);
-#endif
-
-		/*
-		 * Configure skb->mark with MLO metadata.
-		 */
-		skb->mark = EDMA_RX_MLO_METADATA_CONSTRUCT(mlo_mark, wifi_qos);
-
-		edma_debug("%px : mlo mark configured = 0x%x\n", egc, skb->mark);
-		break;
-
-	default:
+	if (tree_id_type < ARRAY_SIZE(edma_rx_wifi_qos_handlers)) {
+		edma_rx_wifi_qos_handlers[tree_id_type](egc, rxdesc_ring, rxdesc_head, skb, vprxi_p, rxdesc_sec);
+	} else {
 		edma_debug("%p : Invalid tree-id type = %u\n", egc, tree_id_type);
-		break;
 	}
 }
 
@@ -1052,6 +1164,8 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 		struct edma_rxdesc_desc *rxdesc_desc,
 		struct sk_buff *skb)
 {
+	uint16_t desc_index;
+        struct edma_rxdesc_sec_desc *rxdesc_sec;
 	struct nss_dp_dev *dp_dev;
 	struct edma_pcpu_stats *pcpu_stats;
 	struct edma_rx_stats *rx_stats;
@@ -1061,6 +1175,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 	uint32_t pkt_length;
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
+	ppe_drv_tree_id_type_t tree_id_type;
 
 	/*
 	 * Get packet length
@@ -1285,11 +1400,18 @@ process_next_scatter:
 	 * Send packet up the stack
 	 */
 	mem_debug_update_skb(skb_head);
+        desc_index = ((uint8_t *)rxdesc_ring->pdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
+        rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
+	tree_id_type = EDMA_RXDESC_TREE_ID_TYPE_GET(rxdesc_sec);
+	if (tree_id_type == PPE_DRV_TREE_ID_TYPE_UDP_ST && likely(nss_dp_udp_st_rx_cb)) {
+		nss_dp_udp_st_rx_cb(skb_head);
+	} else {
 #if defined(NSS_DP_ENABLE_NAPI_GRO)
-	napi_gro_receive(&rxdesc_ring->napi, skb_head);
+		napi_gro_receive(&rxdesc_ring->napi, skb_head);
 #else
-	netif_receive_skb(skb_head);
+		netif_receive_skb(skb_head);
 #endif
+	}
 
 	rxdesc_ring->head = NULL;
 	rxdesc_ring->last = NULL;
@@ -2079,6 +2201,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 	struct sk_buff *cur_skb = NULL, *next_skb = NULL;
 	struct edma_rxfill_ring *rxfill_ring;
 	struct list_head rx_list;
+	ppe_drv_tree_id_type_t tree_id_type;
 	INIT_LIST_HEAD(&rx_list);
 
 	/*
@@ -2228,7 +2351,10 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 				struct nss_dp_dev *dp_dev = netdev_priv(skb->dev);
 
 				if (likely(edma_rx_handle_linear_packets(egc, rxdesc_ring, rxdesc_desc, dp_dev, skb))) {
-					if (unlikely(ndev->features & NETIF_F_GRO)) {
+					tree_id_type = EDMA_RXDESC_TREE_ID_TYPE_GET(rxdesc_sec);
+					if (tree_id_type == PPE_DRV_TREE_ID_TYPE_UDP_ST && likely(nss_dp_udp_st_rx_cb)) {
+						nss_dp_udp_st_rx_cb(skb);
+					} else if (unlikely(ndev->features & NETIF_F_GRO)) {
 						skb->protocol = eth_type_trans(skb, ndev);
 						mem_debug_update_skb(skb);
 						napi_gro_receive(&rxdesc_ring->napi, skb);
