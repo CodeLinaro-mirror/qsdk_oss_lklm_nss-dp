@@ -52,7 +52,7 @@ struct nss_dp_vp_rx_info {
 struct nss_dp_vp_skb_list{
 	struct nss_dp_vp_skb_list *next;
 	struct sk_buff_head skb_list;	/* skb list*/
-	uint16_t len;			/* Total data length carried by these skb*/
+	uint32_t len;			/* Total data length carried by these skb*/
 	uint8_t dvp;			/* Destination VP */
 };
 
