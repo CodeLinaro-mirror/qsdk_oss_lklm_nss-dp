@@ -32,7 +32,7 @@
 
 extern nss_dp_vp_rx_cb_t nss_dp_vp_rx_reg_cb;
 extern nss_dp_vp_list_rx_cb_t nss_dp_vp_list_rx_reg_cb;
-extern struct nss_dp_vp_skb_list gvp_skb_list[];
+extern struct nss_dp_vp_ctx g_vp_ctx;
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 #define EDMA_MAX_ORDER 10
@@ -43,50 +43,21 @@ extern struct nss_dp_vp_skb_list gvp_skb_list[];
  * edma_rx_process_capwap_vp()
  *	Forward capwap packet to VP module for processing.
  */
-static inline void edma_rx_process_capwap_vp(struct edma_rxdesc_ring *rxdesc_ring, struct edma_rxdesc_desc *rxdesc_desc, struct sk_buff *skb)
+static inline void edma_rx_process_capwap_vp(struct nss_dp_vp_ctx *ctx, uint16_t dvp, struct sk_buff *skb)
 {
-	uint32_t dst_port;
-	struct nss_dp_vp_skb_list *vsl;
-	uint8_t dvp, vpi;
+	struct nss_dp_vp_node *node;
+	uint16_t vpi;
 
-	dst_port = EDMA_RXDESC_DST_INFO_GET(rxdesc_desc);
-	if (unlikely((dst_port & ~EDMA_RXDESC_DST_PORT_ID_MASK) != EDMA_RXDESC_DST_PORT)) {
+	vpi = PPE_DRV_GET_VP_IDX(dvp);
+	set_bit(vpi, ctx->active_vps);
+	node = &ctx->nodes[vpi];
 
-		struct edma_pcpu_stats *pcpu_stats;
-		struct edma_rx_stats *rx_stats;
-		struct nss_dp_dev *vp_dev;
-		edma_warn(" Non-vp packet received on capwap ring skb:%px\n", skb);
-		vp_dev = netdev_priv(skb->dev);
-		mem_debug_update_skb(skb);
-		dev_kfree_skb_any(skb);
-		pcpu_stats = &vp_dev->dp_info.pcpu_stats;
-		rx_stats = this_cpu_ptr(pcpu_stats->rx_stats);
-		u64_stats_update_begin(&rx_stats->syncp);
-		rx_stats->rx_vp_uninitialized++;
-		u64_stats_update_end(&rx_stats->syncp);
-		return;
-	}
+	node->info.bytes += skb->len;
+	node->info.dvp = dvp;
 
-	dvp = EDMA_RXDESC_DST_PORT_ID_GET(rxdesc_desc);
 	skb->ip_summed = CHECKSUM_COMPLETE;
-
-	vpi = dvp - PPE_DRV_VIRTUAL_START;
-	vsl = &gvp_skb_list[vpi];
-
-	/*
-	 * First packet seen for this VP in this iteration.
-	 * Add the list to rxdesc_ring->vp_head
-	 */
-	if (unlikely(!vsl->len)) {
-		skb_queue_head_init(&vsl->skb_list);
-		vsl->next = rxdesc_ring->vp_head;
-		rxdesc_ring->vp_head = vsl;
-		vsl->dvp = dvp;
-	}
-
 	mem_debug_update_skb(skb);
-	vsl->len += skb->len;
-	__skb_queue_tail(&vsl->skb_list, skb);
+	__skb_queue_tail(&node->head, skb);
 
 	return;
 }
@@ -1069,12 +1040,14 @@ void edma_rx_handle_capwap_linear_packets(struct edma_gbl_ctx *egc,
 		struct edma_rxdesc_desc *rxdesc_desc,
 		struct sk_buff *skb, struct net_device *dev)
 {
-	struct nss_dp_dev *dp_dev;
 	struct edma_pcpu_stats *pcpu_stats;
 	struct edma_rx_stats *rx_stats;
-	uint32_t pkt_length;
+	uint32_t pkt_length, dst_port;
+	struct nss_dp_vp_ctx *ctx;
+	struct nss_dp_dev *dp_dev;
 	skb_frag_t *frag = NULL;
-	bool page_mode = rxdesc_ring->rxfill->page_mode;
+	bool page_mode;
+	uint16_t dvp;
 
 	/*
 	 * Get stats for the netdevice
@@ -1088,6 +1061,7 @@ void edma_rx_handle_capwap_linear_packets(struct edma_gbl_ctx *egc,
 	 */
 	pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_desc);
 
+	page_mode = rxdesc_ring->rxfill->page_mode;
 	if (unlikely(page_mode)) {
 
 		/*
@@ -1142,7 +1116,29 @@ send_to_vp:
 	edma_debug("edma_gbl_ctx:%px, skb:%px pkt_length:%u\n",
 			egc, skb, skb->len);
 
-	edma_rx_process_capwap_vp(rxdesc_ring, rxdesc_desc, skb);
+	dst_port = EDMA_RXDESC_DST_INFO_GET(rxdesc_desc);
+	if (unlikely((dst_port & ~EDMA_RXDESC_DST_PORT_ID_MASK) != EDMA_RXDESC_DST_PORT)) {
+		goto send_to_linux;
+	}
+
+	/*
+	 * FIXME: Check for valid dvp
+	 * Check for virtual max
+	 */
+	dvp = EDMA_RXDESC_DST_PORT_ID_GET(rxdesc_desc);
+	if ((dvp < PPE_DRV_VIRTUAL_START) || (dvp >= PPE_DRV_PORTS_MAX)) {
+		goto send_to_linux;
+	}
+
+	ctx = this_cpu_ptr(&g_vp_ctx);
+	edma_rx_process_capwap_vp(ctx, dvp, skb);
+	return;
+
+send_to_linux:
+	skb->protocol = eth_type_trans(skb, dev);
+	mem_debug_update_skb(skb);
+	netif_receive_skb(skb);
+	return;
 }
 
 /*
@@ -1495,11 +1491,14 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 {
 	struct edma_rxdesc_desc *rxdesc_desc, *pf_desc = NULL;
 	struct edma_rx_desc_stats *rxdesc_stats = &rxdesc_ring->rx_desc_stats;
+	struct nss_dp_vp_ctx *ctx = this_cpu_ptr(&g_vp_ctx);
 	uint32_t work_to_do, work_done = 0;
 	uint16_t prod_idx, cons_idx, end_idx;
 	uint16_t cons_idx_1 = 0;
 	uint16_t cons_idx_2 = 0;
 	struct list_head rx_list;
+	uint16_t bit;
+
 	INIT_LIST_HEAD(&rx_list);
 
 	/*
@@ -1659,10 +1658,27 @@ next_rx_desc:
 
 	edma_dsb();
 
-	if (likely(rxdesc_ring->vp_head)) {
-		BUG_ON(!nss_dp_vp_list_rx_reg_cb);
-		nss_dp_vp_list_rx_reg_cb(rxdesc_ring->vp_head);
-		rxdesc_ring->vp_head = NULL;
+	for_each_set_bit(bit, ctx->active_vps, PPE_DRV_VIRTUAL_MAX) {
+		struct nss_dp_vp_node *node = &ctx->nodes[bit];
+		struct nss_dp_vp_rx_info rx_info = {0};
+		struct sk_buff_head tmp;
+
+		rx_info.dvp = node->info.dvp;
+		rx_info.napi = &rxdesc_ring->napi;
+		rx_info.batch_bytes = node->info.bytes;
+
+		skb_queue_head_init(&tmp);
+		skb_queue_splice_init(&node->head, &tmp);
+
+		clear_bit(bit, ctx->active_vps);
+		memset(&node->info, 0, sizeof(node->info));
+
+		if (unlikely(!ctx->ops.list_cb)) {
+			dev_kfree_skb_list_fast(&tmp);
+			continue;
+		}
+
+		ctx->ops.list_cb(&tmp, &rx_info);
 	}
 
 	edma_reg_write(EDMA_REG_RXDESC_CONS_IDX(rxdesc_ring->ring_id), cons_idx);
