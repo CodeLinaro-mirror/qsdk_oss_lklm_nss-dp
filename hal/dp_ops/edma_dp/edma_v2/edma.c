@@ -45,6 +45,7 @@
 #include "edma_debugfs.h"
 #include "edma_procfs.h"
 #include "nss_dp_dev.h"
+#include "nss_dp_vp.h"
 
 int edma_dp_extension_en = 0;
 module_param(edma_dp_extension_en, int, 0640);
@@ -55,6 +56,7 @@ MODULE_PARM_DESC(edma_dp_extension_en, "Enable VLAN Insert Functionality (1 for 
  */
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40
 
+DEFINE_PER_CPU(struct nss_dp_vp_ctx, g_vp_ctx);
 uint32_t edma_hang_recover = 0;
 uint32_t edma_force_crash = 0;
 
@@ -1613,6 +1615,7 @@ int edma_init(void)
 	int ret = 0, i;
 	struct resource res_edma;
 	uint8_t queue_start = 0;
+	int cpu, idx;
 
 	edma_gbl_ctx = kzalloc(sizeof(struct edma_gbl_ctx), GFP_KERNEL);
 	if(!edma_gbl_ctx) {
@@ -1761,6 +1764,19 @@ int edma_init(void)
         }
 
 	nss_dp_minidump_log(edma_gbl_ctx, sizeof(struct edma_gbl_ctx), "edma_gbl_ctx");
+
+	for_each_online_cpu(cpu) {
+		struct nss_dp_vp_ctx *ctx = per_cpu_ptr(&g_vp_ctx, cpu);
+
+		memset(&ctx->ops, 0, sizeof(ctx->ops));
+
+		for (idx = 0; idx < PPE_DRV_VIRTUAL_MAX; idx++) {
+			struct nss_dp_vp_node *node = &ctx->nodes[idx];
+
+			skb_queue_head_init(&node->head);
+			memset(&node->info, 0, sizeof(node->info));
+		}
+	}
 
 	return 0;
 
