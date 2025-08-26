@@ -17,6 +17,11 @@
 #define NSS_DP_HAL_START_IFNUM		1
 
 /*
+ * Max FC Groups (VQs) supported for this SOC
+ */
+#define NSS_DP_HW_MAX_FC_GRP		32
+
+/*
  * Maximum supported GSO segments
  */
 #define NSS_DP_HAL_GSO_MAX_SEGS		GSO_MAX_SEGS
