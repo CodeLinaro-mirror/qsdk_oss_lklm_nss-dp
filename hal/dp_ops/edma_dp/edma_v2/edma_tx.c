@@ -759,6 +759,12 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		edma_tx_phy_tstamp_buf(netdev, skb);
 	}
 
+#if defined(CONFIG_SKB_FAST_RECYCLABLE_DEBUG_ENABLE)
+	if (likely(skb->fast_xmit) && likely(skb->is_from_recycler)) {
+		dev_check_skb_fast_recyclable(skb);
+	}
+#endif
+
 	/*
 	 * Process head skb for linear skb
 	 * Process head skb + nr_frags + fraglist for non linear skb
