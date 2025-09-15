@@ -399,8 +399,6 @@ struct edma_rxfill_ring {
 					/* Rx fill ring statistics */
 };
 
-struct nss_dp_vp_skb_list;
-
 /*
  * RxDesc ring
  */
@@ -425,8 +423,6 @@ struct edma_rxdesc_ring {
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	struct sk_buff *head;		/* Head of the skb list in case of scatter-gather frame */
 	struct sk_buff *last;		/* Last skb of the skb list in case of scatter-gather frame */
-	struct nss_dp_vp_skb_list *vp_head;
-					/* Last skb of the skb list in case of scatter-gather frame */
 };
 
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);

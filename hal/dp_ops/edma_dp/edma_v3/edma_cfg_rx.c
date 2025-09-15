@@ -21,6 +21,7 @@ uint32_t edma_cfg_rx_rps_num_cores = NR_CPUS;
 uint32_t edma_cfg_rx_sec_desc_inval = 0;
 uint32_t edma_cfg_rx_rps_bitmap_cores = EDMA_RX_DEFAULT_BITMAP;
 extern uint32_t nss_dp_capwap_vp_rx_core;
+extern struct nss_dp_vp_ctx g_vp_ctx;
 
 /*
  * Rx ring queue offset
@@ -1804,3 +1805,41 @@ int edma_cfg_rx_rps_bitmap(struct ctl_table *table, int write,
 	edma_warn("EDMA RPS bitmap value: %d\n", edma_cfg_rx_rps_bitmap_cores);
 	return ret;
 }
+
+/*
+ * nss_dp_vp_rx_register_ops()
+ *      Register PPE-VP rx ops
+ */
+void nss_dp_vp_rx_register_ops(struct nss_dp_vp_rx_ops *ops)
+{
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		struct nss_dp_vp_ctx *ctx = per_cpu_ptr(&g_vp_ctx, cpu);
+
+		/*
+		 * TODO: Use rcu for ops elements
+		 */
+		ctx->ops = *ops;
+	}
+}
+EXPORT_SYMBOL(nss_dp_vp_rx_register_ops);
+
+/*
+ * nss_dp_vp_rx_unregister_ops()
+ *      Unregister PPE-VP rx ops
+ */
+void nss_dp_vp_rx_unregister_ops()
+{
+	int cpu;
+
+	for_each_online_cpu(cpu) {
+		struct nss_dp_vp_ctx *ctx = per_cpu_ptr(&g_vp_ctx, cpu);
+
+		/*
+		 * TODO: Use rcu for ops elements
+		 */
+		memset(&ctx->ops, 0, sizeof(ctx->ops));
+	}
+}
+EXPORT_SYMBOL(nss_dp_vp_rx_unregister_ops);
