@@ -489,7 +489,7 @@ no_vp:
  */
 static int edma_of_get_pdata(struct resource *edma_res)
 {
-	uint32_t i, j, tmp_sz, tmp_idx;
+	uint32_t i, j, num_entries, tmp_sz, tmp_idx;
 	struct platform_device *pdev;
 	uint64_t mem_size, mask;
 	uint32_t *tmp_arr;
@@ -840,7 +840,9 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	 * for VP ring and DP driver allocates extra memory for ring and queue
 	 * map arrays, then we might populate the arrays incorrectly.
 	 */
-	tmp_sz = max(EDMA_RXDESC_RING_PER_CORE_MAX, EDMA_MAX_PRI_PER_CORE) * edma_gbl_ctx->num_rxdesc_rings;
+	num_entries = max(EDMA_RXDESC_RING_PER_CORE_MAX, EDMA_MAX_PRI_PER_CORE);
+	num_entries = num_entries * edma_gbl_ctx->num_rxdesc_rings;
+	tmp_sz = num_entries * sizeof(*tmp_arr);
 	tmp_arr = vzalloc(tmp_sz);
 	if (!tmp_arr) {
 		edma_err("Unable to allocate memory for DTSI parsing\n");
