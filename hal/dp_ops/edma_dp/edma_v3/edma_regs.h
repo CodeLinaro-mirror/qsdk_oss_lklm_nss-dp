@@ -145,19 +145,19 @@
 #define EDMA_REG_RX_INT_CTRL(n)		(0x6200C + (0x100 * (n)))
 
 #if defined(NSS_DP_HIGHMEM_SUPP)
-#define EDMA_REG_RXDESC_BA_HIGH(n)	(0x3902C + (0x1000 * (n)))
-#define EDMA_REG_RXDESC_PREHEADER_BA_HIGH(n)		(0x39030 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_BA_HIGH(n)	(0x4a02C + (0x100 * (n)))
+#define EDMA_REG_RXDESC_PREHEADER_BA_HIGH(n)		(0x4a030 + (0x100 * (n)))
 #endif
 
 #if defined(NSS_DP_RING_IDX_CONFIG)
-#define EDMA_REG_RXDESC_INDEX_RESET(n)	(0x39034 + (0x1000 * (n)))
-#define EDMA_REG_RXDESC_UPLOAD_IDX_TRIG(n)	(0x39038 + (0x1000 * (n)))
-#define EDMA_REG_RXDESC_UPLOAD_IDX_ADDR_L(n)	(0x3903C + (0x1000 * (n)))
-#define EDMA_REG_RXDESC_UPLOAD_IDX_ADDR_H(n)	(0x39040 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_INDEX_RESET(n)	(0x4a034 + (0x100 * (n)))
+#define EDMA_REG_RXDESC_UPLOAD_IDX_TRIG(n)	(0x4a038 + (0x100 * (n)))
+#define EDMA_REG_RXDESC_UPLOAD_IDX_ADDR_L(n)	(0x4a03C + (0x100 * (n)))
+#define EDMA_REG_RXDESC_UPLOAD_IDX_ADDR_H(n)	(0x4a040 + (0x100 * (n)))
 #endif
 
 #if defined(CONFIG_IO_COHERENCY)
-#define EDMA_REG_RXDESC_CACHE(n)		(0x39044 + (0x1000 * (n)))
+#define EDMA_REG_RXDESC_CACHE(n)		(0x4a044 + (0x100 * (n)))
 #endif
 
 #define EDMA_REG_TXCMPL_BA(n)		(0x79000 + (0x1000 * (n)))
