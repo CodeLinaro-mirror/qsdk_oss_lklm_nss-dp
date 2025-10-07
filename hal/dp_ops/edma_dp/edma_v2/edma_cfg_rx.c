@@ -492,7 +492,7 @@ static void edma_cfg_rx_desc_point_offload_ring_to_queue_mapping(struct edma_gbl
 	sw_error_t ret;
 	fal_queue_bmp_t queue_bmp = {0};
 	unsigned int pri_idx = 0;
-	uint32_t word_idx = 0;
+	uint32_t word_idx = 0, bit_idx = 0;
 	uint32_t local_bmp[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT] = {0};
 	unsigned int queue_id = egc->point_offload_queue;
 
@@ -501,7 +501,8 @@ static void edma_cfg_rx_desc_point_offload_ring_to_queue_mapping(struct edma_gbl
 	 */
 	for (pri_idx = 0; pri_idx < EDMA_MAX_PRI_PER_CORE; pri_idx++, queue_id++) {
 		word_idx = (queue_id / EDMA_BITS_IN_WORD);
-		local_bmp[word_idx] |= 1 << queue_id;
+		bit_idx = (queue_id % EDMA_BITS_IN_WORD);
+		local_bmp[word_idx] |= 1 << bit_idx;
 		edma_debug("Queue_id: %d, word_idx: %d\n", queue_id, word_idx);
 	}
 
@@ -1169,7 +1170,7 @@ void edma_cfg_rx_point_offload_mapping(struct edma_gbl_ctx *egc)
 	 * In future, we can support this by getting the Rx descriptor
 	 * ring to queue mapping from the dtsi.
 	 */
-	word_idx = (queue_id / (EDMA_BITS_IN_WORD - 1));
+	word_idx = (queue_id / EDMA_BITS_IN_WORD);
 	bit_idx = (queue_id % EDMA_BITS_IN_WORD);
 	egc->rxdesc_point_offload_ring_to_queue_bm[word_idx] = 1 << bit_idx;
 
@@ -1237,7 +1238,7 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 	 * Allocate RxDesc ring descriptors
 	 */
 	for (ring_idx = 0; ring_idx < egc->num_rxdesc_rings; ring_idx++) {
-		uint32_t index, word_idx, queue_id = egc->rx_queue_start;
+		uint32_t index, word_idx, bit_idx, queue_id = egc->rx_queue_start;
 		int32_t ret;
 		struct edma_rxdesc_ring *rxdesc_ring = NULL;
 
@@ -1263,11 +1264,12 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		for (pri_idx = 0; pri_idx < EDMA_MAX_PRI_PER_CORE; pri_idx++) {
 			queue_id = egc->rx_ring_queue_map[pri_idx][ring_idx];
 			word_idx = (queue_id / EDMA_BITS_IN_WORD);
+			bit_idx = (queue_id % EDMA_BITS_IN_WORD);
 
 			/*
 			 * To-do: Use ring queue map from dtsi to build a bitmap
 			 */
-			egc->rxdesc_ring_to_queue_bm[ring_idx][word_idx] |= 1 << queue_id;
+			egc->rxdesc_ring_to_queue_bm[ring_idx][word_idx] |= 1 << bit_idx;
 			edma_debug("Queue_id: %d, ring_id: %d\n", queue_id, ring_idx);
 		}
 
