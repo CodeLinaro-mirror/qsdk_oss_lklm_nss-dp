@@ -13,7 +13,6 @@
 #define NSS_DP_VP_HAL_MAX_PORTS		1
 #define NSS_DP_HAL_MAX_PORTS		6
 #define NSS_DP_MAX_PORTS		(NSS_DP_HAL_MAX_PORTS + NSS_DP_VP_HAL_MAX_PORTS)
-#define NSS_DP_HAL_CPU_NUM		4
 #define NSS_DP_HAL_START_IFNUM		1
 
 /*
@@ -24,7 +23,7 @@
 /*
  * Number of TX/RX queue supported
  */
-#define NSS_DP_QUEUE_NUM		4
+#define NSS_DP_QUEUE_NUM		NR_CPUS
 
 /*
  * Number of Max Tx/Rx Rings supported
