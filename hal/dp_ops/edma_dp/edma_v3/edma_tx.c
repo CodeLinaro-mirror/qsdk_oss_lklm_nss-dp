@@ -765,6 +765,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		EDMA_TXDESC_ENDIAN_SET(txdesc);
 		num_desc_filled++;
 
+		EDMA_TXDESC_OPAQUE_SET(txdesc, skb);
 		/*
 		 * We set fast_recycled flag if packet has taken the
 		 * SFE fast transmit path, so that any Rx DMA driver
@@ -809,6 +810,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		}
 
 		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+		EDMA_TXDESC_OPAQUE_SET(txdesc, skb);
 		num_desc_filled = edma_tx_skb_sg_fill_desc(dp_dev, txdesc_ring, &txdesc, skb, &hw_next_to_use, stats);
 	}
 
@@ -816,7 +818,6 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	 * Set the skb pointer to the descriptor's opaque field/s
 	 * on the last descriptor of the packet/SG packet.
 	 */
-	EDMA_TXDESC_OPAQUE_SET(txdesc, skb);
 
 	/*
 	 * Flush the last descriptor.

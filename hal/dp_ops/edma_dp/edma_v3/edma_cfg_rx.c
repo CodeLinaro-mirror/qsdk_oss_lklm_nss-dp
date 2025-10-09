@@ -859,6 +859,7 @@ static void edma_cfg_rx_qid_to_rx_desc_ring_mapping(struct edma_gbl_ctx *egc)
 	uint32_t desc_index, q_id;
 	uint32_t reg_index, data;
 	uint32_t ring_index;
+	uint32_t q;
 
 	/*
 	 * Set PPE QID to EDMA Rx ring mapping.
@@ -870,11 +871,13 @@ static void edma_cfg_rx_qid_to_rx_desc_ring_mapping(struct edma_gbl_ctx *egc)
 	/*
 	 * Here map all the queues to ring.
 	 */
+
 	for (q_id = egc->rx_queue_start;
 		q_id <= EDMA_CPU_PORT_QUEUE_MAX(egc->rx_queue_start);
 			q_id += EDMA_QID2RID_NUM_PER_REG) {
 		reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
-		ring_index = desc_index + EDMA_QUEUE_OFFSET(q_id);
+		q = q_id - egc->rx_queue_start;
+		ring_index = (desc_index + EDMA_QUEUE_OFFSET(q));
 
 		data = EDMA_RX_RING_ID_QUEUE0_SET(ring_index) |
 			EDMA_RX_RING_ID_QUEUE1_SET(ring_index) |
@@ -884,8 +887,10 @@ static void edma_cfg_rx_qid_to_rx_desc_ring_mapping(struct edma_gbl_ctx *egc)
 		edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
 		edma_info("Configure QID2RID(%d) reg:0x%x to 0x%x, desc_index: %d, reg_index: %d\n",
 				q_id, EDMA_QID2RID_TABLE_MEM(reg_index), data, desc_index, reg_index);
+
 	}
 
+#ifdef NSS_DP_IPQ9679
 	/*
 	 * Map PPE multicast queues to the first Rx ring.
 	 */
@@ -904,6 +909,8 @@ static void edma_cfg_rx_qid_to_rx_desc_ring_mapping(struct edma_gbl_ctx *egc)
 		edma_debug("Configure QID2RID(%d) reg:0x%x to 0x%x\n",
 				q_id, EDMA_QID2RID_TABLE_MEM(reg_index), data);
 	}
+
+#endif
 }
 
 /*

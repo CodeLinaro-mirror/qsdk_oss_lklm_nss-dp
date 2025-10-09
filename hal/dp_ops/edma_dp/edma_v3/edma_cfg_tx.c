@@ -844,6 +844,10 @@ void edma_cfg_tx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev, u
 		}
 #endif
 
+		if (txcmpl_ring->napi_added) {
+			continue;
+		}
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		netif_napi_add(netdev, &txcmpl_ring->napi,
 				edma_tx_napi_poll, nss_dp_tx_napi_budget);
