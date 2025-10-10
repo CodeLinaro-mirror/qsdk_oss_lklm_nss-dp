@@ -641,7 +641,7 @@ static void edma_ppeds_rx_desc_ring_to_queue_mapping(struct edma_ppeds *ppeds_no
 	sw_error_t ret;
 
 	while (num_queues) {
-		word_idx = (queue_id / (EDMA_BITS_IN_WORD - 1));
+		word_idx = (queue_id / EDMA_BITS_IN_WORD);
 		if (word_idx >= EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT) {
 			edma_err("Invalid word index (%d) for %d queue\n", word_idx, queue_id);
 			return;
