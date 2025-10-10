@@ -194,7 +194,7 @@ static void edma_cfg_rx_desc_loopback_ring_to_queue_mapping(struct edma_gbl_ctx 
 {
 	sw_error_t ret;
 	fal_queue_bmp_t queue_bmp = {0};
-	uint32_t word_idx = 0;
+	uint32_t word_idx = 0, bit_idx = 0;
 	uint32_t local_bmp[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT] = {0};
 	unsigned int queue_base = egc->loopback_queue_base;
 	unsigned int num_queues = egc->loopback_num_queues;
@@ -206,7 +206,8 @@ static void edma_cfg_rx_desc_loopback_ring_to_queue_mapping(struct edma_gbl_ctx 
 	for (id = 0; id  < num_queues; id++) {
 		queue_id = queue_base + id;
 		word_idx = (queue_id / EDMA_BITS_IN_WORD);
-		local_bmp[word_idx] |= 1 << queue_id;
+		bit_idx = (queue_id % EDMA_BITS_IN_WORD);
+		local_bmp[word_idx] |= 1 << bit_idx;
 		edma_debug("Queue_id: %d, word_idx: %d\n", queue_id, word_idx);
 	}
 
@@ -466,7 +467,7 @@ void edma_cfg_rx_loopback_mapping(struct edma_gbl_ctx *egc)
 	for (i = 0; i < num_queues; i++) {
 		queue_id = queue_base + i;
 
-		word_idx = (queue_id / (EDMA_BITS_IN_WORD - 1));
+		word_idx = (queue_id / EDMA_BITS_IN_WORD);
 		bit_idx = (queue_id % EDMA_BITS_IN_WORD);
 		egc->rxdesc_loopback_ring_to_queue_bm[word_idx] = 1 << bit_idx;
 	}
