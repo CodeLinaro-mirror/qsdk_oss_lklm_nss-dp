@@ -341,7 +341,7 @@ struct edma_gbl_ctx {
 			/* Tx ring to Tx complete ring mapping */
 	int32_t tx_map[EDMA_MAX_TX_PORTS][NR_CPUS];
 			/* Per core Tx ring to core mapping */
-	int32_t tx_fc_grp_map[EDMA_MAX_FC_GRP];
+	int32_t tx_fc_grp_map[NSS_DP_HW_MAX_FC_GRP];
 			/* Per GMAC TxDesc ring to flow control group mapping */
 	struct edma_user_fc_grp_map user_fc_grp_map[EDMA_MAX_TXDESC_RINGS];
 			/* Per Txdesc-ring fc-group mapping provided by user */

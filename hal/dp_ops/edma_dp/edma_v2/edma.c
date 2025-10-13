@@ -2652,7 +2652,7 @@ int edma_parse_ring_fc_mapping(const char *filepath) {
 		 */
 		if ((edma_gbl_ctx->user_fc_grp_map[txdesc_ring_id].fc_grp_valid)
 				|| (txdesc_ring_id < 0) || (txdesc_ring_id > edma_gbl_ctx->txdesc_ring_end)
-				|| (fc_grp < 0) || (fc_grp >= EDMA_MAX_FC_GRP))
+				|| (fc_grp < 0) || (fc_grp >= NSS_DP_HW_MAX_FC_GRP))
 			goto fail;
 
 		edma_gbl_ctx->user_fc_grp_map[txdesc_ring_id].fc_grp = (uint8_t)fc_grp;
