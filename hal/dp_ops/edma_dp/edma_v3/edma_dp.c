@@ -152,8 +152,9 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 
 	/*
 	 * Select a TX ring
+	 * TO-DO: Remove the hardcoded value based on number of CPUS
 	 */
-	skbq = (skb_get_queue_mapping(skb) & (NR_CPUS - 1));
+	skbq = (skb_get_queue_mapping(skb) & 7);
 
 	dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
 #ifdef NSS_DP_MHT_SW_PORT_MAP

@@ -736,6 +736,12 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 #endif
 
 	dp_priv->link_poll = of_property_read_bool(np, "qcom,link-poll");
+
+	/*
+	 * TO-DO: Remove this WAR
+	 */
+	dp_priv->link_poll = 0;
+
 	if (of_property_read_u32(np, "qcom,phy-mdio-addr",
 		&dp_priv->phy_mdio_addr) && dp_priv->link_poll) {
 #ifdef NSS_DP_EDMA_I2C_BUS_ENABLE
@@ -839,6 +845,7 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	return 0;
 }
 
+#ifdef NSS_DP_IPQ9679
 /*
  * nss_dp_mdio_attach()
  */
@@ -902,6 +909,8 @@ static struct mii_bus *nss_dp_mdio_attach(struct platform_device *pdev)
 #endif
 }
 
+#endif
+
 #ifdef CONFIG_NET_SWITCHDEV
 /*
  * nss_dp_is_phy_dev()
@@ -960,7 +969,9 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	struct nss_gmac_hal_platform_data gmac_hal_pdata;
 	int32_t ret = 0;
+#ifdef NSS_DP_IPQ9679
 	uint8_t phy_id[MII_BUS_ID_SIZE + 3];
+#endif
 #if defined(NSS_DP_PPE_SUPPORT)
 	uint32_t vsi_id;
 	fal_port_t port_id;
@@ -1049,6 +1060,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		goto netdev_register_fail;
 	}
 
+#ifdef NSS_DP_IPQ9679
 	if (dp_priv->link_poll) {
 		dp_priv->miibus = nss_dp_mdio_attach(pdev);
 		if (!dp_priv->miibus) {
@@ -1057,7 +1069,6 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		}
 		snprintf(phy_id, MII_BUS_ID_SIZE + 3, PHY_ID_FMT,
 				dp_priv->miibus->id, dp_priv->phy_mdio_addr);
-
 		dp_priv->phydev = phy_connect(netdev, phy_id,
 				&nss_dp_adjust_link,
 				dp_priv->phy_mii_type);
@@ -1066,6 +1077,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 			goto phy_setup_fail;
 		}
 	}
+#endif
 
 #if defined(NSS_DP_PPE_SUPPORT)
 	/* Get port's default VSI */
@@ -1107,7 +1119,6 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 
 		edma_gbl_ctx->tstamp_sec = ioremap_nocache(sec_addr, sizeof(uint32_t));
 		edma_gbl_ctx->tstamp_nsec = ioremap_nocache(nsec_addr, sizeof(uint32_t));
-
 		if (unlikely(!edma_gbl_ctx->tstamp_sec || !edma_gbl_ctx->tstamp_nsec)) {
 			pr_err("Unable to map the timestamp registers, sec addr:0x%llx,"
 					" nsec addr: 0x%llx\n", sec_addr, nsec_addr);
@@ -1127,7 +1138,9 @@ vsi_set_fail:
 	}
 #endif
 
+#ifdef NSS_DP_IPQ9679
 phy_setup_fail:
+#endif
 	unregister_netdev(netdev);
 netdev_register_fail:
 	dp_priv->data_plane_ops->deinit(dp_priv->dpc);

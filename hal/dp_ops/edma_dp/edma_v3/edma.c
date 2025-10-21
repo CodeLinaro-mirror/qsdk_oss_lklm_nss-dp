@@ -39,6 +39,58 @@ module_param(edma_dp_extension_en, int, 0640);
 MODULE_PARM_DESC(edma_dp_extension_en, "Enable VLAN Insert Functionality (1 for enable, 0 for disable)");
 
 /*
+ * Module parameters for the host mode config.
+ */
+int edma_dp_num_cores = 5;
+module_param(edma_dp_num_cores, int, 0640);
+MODULE_PARM_DESC(edma_dp_num_cores, "Number of cores to be used : default 5");
+
+int edma_dp_host_num_rxfill_rings = 4;
+module_param(edma_dp_host_num_rxfill_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_host_num_rxfill_rings, "Number of Host RX fill rings");
+
+int edma_dp_host_num_rx_rings = 4;
+module_param(edma_dp_host_num_rx_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_host_num_rx_rings, "Number of Host RX rings");
+
+int edma_dp_host_queues_per_ring = 8;
+module_param(edma_dp_host_queues_per_ring, int, 0640);
+MODULE_PARM_DESC(edma_dp_host_queues_per_ring, "Number of queues per rx rings");
+
+int edma_dp_host_rx_rings[8] = {1,2,3,4,-1,-1,-1,-1};
+module_param_array(edma_dp_host_rx_rings, int, NULL, 0);
+MODULE_PARM_DESC(edma_dp_host_rx_rings, "RX rings for host");
+
+//int edma_dp_host_rx_queue_map[8] = {96,104,112,120,-1,-1,-1,-1};
+int edma_dp_host_rx_queue_map[8] = {0,8,16,24,-1,-1,-1,-1};
+module_param_array(edma_dp_host_rx_queue_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_host_rx_queue_map, "Queue base for each RX ring");
+
+int edma_dp_host_rxfill_map[8] = {2,3,4,5,-1,-1,-1,-1};
+module_param_array(edma_dp_host_rxfill_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_host_rxfill_map, "RX ring to RX fill ring mapping");
+
+int edma_dp_host_num_tx_rings = 5;
+module_param(edma_dp_host_num_tx_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_host_num_tx_rings, "Number of Host TX rings");
+
+int edma_dp_host_num_txcmpl_rings = 5;
+module_param(edma_dp_host_num_txcmpl_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_host_num_txcmpl_rings, "Number of Host TX cmpl rings");
+
+int edma_dp_host_tx_rings[8] = {1,2,3,4,5,-1,-1,-1};
+module_param_array(edma_dp_host_tx_rings, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_host_tx_rings, "TX rings for host");
+
+int edma_dp_host_txcmpl_rings[8] = {2,3,4,5,6,-1,-1,-1};
+module_param_array(edma_dp_host_txcmpl_rings, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_host_txcmpl_rings, "TX cmpl rings for host");
+
+int edma_dp_host_txcmpl_map[8] = {2,3,4,5,6,-1,-1,-1};
+module_param_array(edma_dp_host_txcmpl_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_host_txcmpl_map, "TX to txcmpl map rings for host");
+
+/*
  * Input String length for VLAN insertion.
  */
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40
@@ -340,6 +392,139 @@ void edma_cleanup(bool is_dp_override)
 }
 
 /*
+ * edma_fill_tx_config()
+ *	Fill the TX rings, configuration as per the current data structures.
+ */
+void edma_fill_tx_config(void) {
+	uint32_t j;
+	struct edma_tx_rings_config *tx_config = &edma_gbl_ctx.edma_init.host_ctx.host_info.host_tx_config;
+
+	edma_gbl_ctx.txdesc_ring_start = tx_config->tx_ring_map[0];
+	edma_gbl_ctx.num_txdesc_rings = tx_config->num_of_tx_rings;
+	edma_gbl_ctx.txdesc_ring_end = edma_gbl_ctx.txdesc_ring_start + edma_gbl_ctx.num_txdesc_rings;
+
+	edma_gbl_ctx.txcmpl_ring_start = tx_config->tx_ring_to_txcomp_map[0];
+	edma_gbl_ctx.num_txcmpl_rings = tx_config->num_of_txcmpl_rings;
+	edma_gbl_ctx.txcmpl_ring_end = edma_gbl_ctx.txcmpl_ring_start + edma_gbl_ctx.num_txcmpl_rings;
+
+	for (int i = 0; i < EDMA_TX_RING_PER_CORE_MAX; i++) {
+		for_each_possible_cpu(j) {
+			edma_gbl_ctx.tx_map[i][j] = tx_config->tx_ring_map[j];
+		}
+	}
+
+	for (int i = 0; i < EDMA_TX_RING_PER_CORE_MAX; i++) {
+		for_each_possible_cpu(j) {
+			edma_debug("txmap_in juhu[%d][%d] = %d\n", i, j,
+					edma_gbl_ctx.tx_map[i][j]);
+		}
+	}
+}
+
+/*
+ * edma_fill_rx_config()
+ *	Fill the RX rings, queue configuration as per the current data structures.
+ */
+void edma_fill_rx_config(void)
+{
+	uint32_t j;
+	struct edma_rx_rings_config *rx_config = &edma_gbl_ctx.edma_init.host_ctx.host_info.host_rx_config;
+	fal_portscheduler_resource_t cfg = {0};
+
+	/* RX rings and queues mapping */
+
+	edma_gbl_ctx.num_rxdesc_rings = rx_config->num_of_rx_rings;
+	edma_gbl_ctx.rxdesc_ring_start = rx_config->rx_ring_map[0];
+
+	edma_gbl_ctx.rxdesc_ring_end = edma_gbl_ctx.num_rxdesc_rings + edma_gbl_ctx.rxdesc_ring_start;
+
+	for (int i = 0; i < rx_config->num_of_rx_rings; i++) {
+		edma_gbl_ctx.rxdesc_ring_map[0][i] = rx_config->rx_ring_map[i];
+       }
+
+       for_each_possible_cpu(j) {
+		edma_debug(" this is in fill rx config function rxdesc_ring_map[%d] = %d\n", j,
+                                edma_gbl_ctx.rxdesc_ring_map[0][j]);
+        }
+
+	fal_port_scheduler_resource_get(0, 0, &cfg);
+	edma_gbl_ctx.rx_queue_start = cfg.ucastq_start;
+
+	for (int i = 0; i < rx_config->num_queues_per_ring; i++) {
+               for_each_possible_cpu(j) {
+                       edma_gbl_ctx.rx_ring_queue_map[i][j] = edma_gbl_ctx.rx_queue_start + rx_config->rx_ring_to_queue_map[j] + i;
+               }
+       }
+
+       for (int i = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
+               for_each_possible_cpu(j) {
+                       edma_debug("Rx ring to queue map [%d][%d] = %d\n", i, j,
+                                       edma_gbl_ctx.rx_ring_queue_map[i][j]);
+               }
+       }
+
+       /* RX fill rings mappings */
+
+       edma_gbl_ctx.rxfill_ring_start = rx_config->rx_ring_to_rxfill_map[0];
+       edma_gbl_ctx.num_rxfill_rings = rx_config->num_of_rx_rings;
+       edma_gbl_ctx.rxfill_ring_end = edma_gbl_ctx.rxfill_ring_start + edma_gbl_ctx.num_rxfill_rings;
+
+       edma_info("edma_gbl_ctx.rxfill_ring_start %d num rings %d rings end %d\n", edma_gbl_ctx.rxfill_ring_start, edma_gbl_ctx.num_rxfill_rings, edma_gbl_ctx.rxfill_ring_end);
+}
+
+/*
+ * edma_parse_ini()
+ *	parse the ini file and config EDMA rings, queue, mappings, etc.
+ */
+static int edma_parse_ini(void)
+{
+	/*
+	 * TO-DO: Remove the hardcoded values and replace them with the
+	 * parsing logic.
+	 */
+	struct edma_init_info *edma_init = &edma_gbl_ctx.edma_init;
+	struct edma_host_ctx *host_ctx = &edma_init->host_ctx;
+	struct edma_rx_rings_config *host_rx_config = &host_ctx->host_info.host_rx_config;
+	struct edma_tx_rings_config *host_tx_config = &host_ctx->host_info.host_tx_config;
+
+	edma_init->num_cores = edma_dp_num_cores;
+	host_ctx->edma_host_num_rxfill_rings = edma_dp_host_num_rxfill_rings;
+
+	/*
+	 * configure host RX ctx.
+	 */
+	host_rx_config->num_of_rx_rings = edma_dp_host_num_rx_rings;
+	host_rx_config->num_queues_per_ring = edma_dp_host_queues_per_ring;
+
+	for (int i = 0; i < 8; i++) {
+		host_rx_config->rx_ring_map[i] = edma_dp_host_rx_rings[i];
+		host_rx_config->rx_ring_to_queue_map[i] = edma_dp_host_rx_queue_map[i];
+		host_rx_config->rx_ring_to_rxfill_map[i] = edma_dp_host_rxfill_map[i];
+	}
+
+	/*
+	 * Configure host TX ctx.
+	 */
+	host_tx_config->num_of_tx_rings = edma_dp_host_num_tx_rings;
+	host_tx_config->num_of_txcmpl_rings = edma_dp_host_num_txcmpl_rings;
+	host_tx_config->max_rings_per_core = 2;
+
+	for (int i = 0; i < 8; i++) {
+		host_tx_config->tx_ring_map[i] = edma_dp_host_tx_rings[i];
+		host_tx_config->txcmpl_ring_map[i] = edma_dp_host_txcmpl_rings[i];
+		host_tx_config->tx_ring_to_txcomp_map[i] = edma_dp_host_txcmpl_map[i];
+	}
+
+	/*
+	 * Fill the information in current configuration structures.
+	 */
+	edma_fill_rx_config();
+	edma_fill_tx_config();
+
+	return 0;
+}
+
+/*
  * edma_validate_desc_map()
  *	Validate descriptor maps received from the dtsi
  */
@@ -455,7 +640,6 @@ static int edma_of_get_pdata(struct resource *edma_res)
 {
 	struct platform_device *pdev;
 	uint64_t mem_size, mask;
-	uint32_t i, j;
 	int ret;
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	bool ddr_ext_upstream;
@@ -515,29 +699,48 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	}
 
 	/*
-	 * Get id of first TXDESC ring
+	 * Get the Maximum number of RX desc rings
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txdesc-ring-start",
-				&edma_gbl_ctx.txdesc_ring_start) != 0) {
-		edma_err("Read error 1st TXDESC ring (txdesc_ring_start)\n");
+	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxdesc-ring-max",
+                               &edma_gbl_ctx.rxdesc_ring_max) != 0) {
+               edma_err("Unable to read the Max RX desc rings \n");
 		return -EINVAL;
-	}
+        }
 
-	if (edma_gbl_ctx.txdesc_ring_start >= EDMA_MAX_TXDESC_RINGS) {
-		edma_err("Incorrect txdesc-ring-start value (%d) received as input\n",
-				edma_gbl_ctx.txdesc_ring_start);
-		return -EINVAL;
-	}
-	edma_debug("txdesc ring start: %d\n", edma_gbl_ctx.txdesc_ring_start);
+	edma_err("RX desc ring max: %d\n", edma_gbl_ctx.rxdesc_ring_max);
 
 	/*
-	 * Get number of TXDESC rings
+	 * Get the Maximum number of RX fill rings
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txdesc-rings",
-				&edma_gbl_ctx.num_txdesc_rings) != 0) {
-		edma_err("Unable to read number of txdesc rings.\n");
+	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxfill-ring-max",
+                               &edma_gbl_ctx.rxfill_ring_max) != 0) {
+               edma_err("Unable to read the Max RX fill rings \n");
 		return -EINVAL;
-	}
+        }
+
+	 edma_err("RX fill ring max: %d\n", edma_gbl_ctx.rxfill_ring_max);
+
+	/*
+	 * Get the Maximum number of TX desc rings
+	 */
+	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txdesc-ring-max",
+                               &edma_gbl_ctx.txdesc_ring_max) != 0) {
+               edma_err("Unable to read the Max TX desc rings \n");
+		return -EINVAL;
+        }
+
+	edma_err("TX desc ring max: %d\n", edma_gbl_ctx.txdesc_ring_max);
+
+	/*
+	 * Get the Maximum number of TX cmpl rings
+	 */
+	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txcomp-ring-max",
+                               &edma_gbl_ctx.txcomp_ring_max) != 0) {
+               edma_err("Unable to read the Max TX comp rings \n");
+		return -EINVAL;
+        }
+
+	edma_err("TX completion ring max: %d\n", edma_gbl_ctx.txcomp_ring_max);
 
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	if (dp_global_ctx.is_mht_dev) {
@@ -551,52 +754,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	} else {
 		edma_gbl_ctx.mht_tx_ports = 0;
 	}
-#endif
 
-	if (edma_gbl_ctx.num_txdesc_rings > EDMA_MAX_TXDESC_RINGS) {
-		edma_err("Invalid txdesc-rings value (%d) received as input\n",
-				edma_gbl_ctx.num_txdesc_rings);
-		return -EINVAL;
-	}
-
-	edma_gbl_ctx.txdesc_ring_end = edma_gbl_ctx.txdesc_ring_start +
-					edma_gbl_ctx.num_txdesc_rings;
-	if (edma_gbl_ctx.txdesc_ring_end > EDMA_MAX_TXDESC_RINGS) {
-		edma_err("Invalid Txdesc ring configuration: txdesc-ring-start (%d)"
-				" and txdesc-rings (%d)\n",
-				edma_gbl_ctx.txdesc_ring_start,
-				edma_gbl_ctx.num_txdesc_rings);
-		return -EINVAL;
-	}
-	edma_debug("txdesc rings count: %d, txdesc ring end: %d\n",
-			edma_gbl_ctx.num_txdesc_rings, edma_gbl_ctx.txdesc_ring_end);
-
-	/*
-	 * Get id of first TXCMPL ring
-	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txcmpl-ring-start",
-				&edma_gbl_ctx.txcmpl_ring_start) != 0) {
-		edma_err("Read error 1st TXCMPL ring (txcmpl_ring_start)\n");
-		return -EINVAL;
-	}
-
-	if (edma_gbl_ctx.txcmpl_ring_start >= EDMA_MAX_TXCMPL_RINGS) {
-		edma_err("Incorrect txcmpl-ring-start value (%d) received as input\n",
-				edma_gbl_ctx.txcmpl_ring_start);
-		return -EINVAL;
-	}
-	edma_debug("txcmpl ring start: %d\n", edma_gbl_ctx.txcmpl_ring_start);
-
-	/*
-	 * Get number of TXCMPL rings
-	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txcmpl-rings",
-				&edma_gbl_ctx.num_txcmpl_rings) != 0) {
-		edma_err("Unable to read number of txcmpl rings.\n");
-		return -EINVAL;
-	}
-
-#ifdef NSS_DP_MHT_SW_PORT_MAP
 	if (dp_global_ctx.is_mht_dev) {
 		if (of_property_read_u32(edma_gbl_ctx.device_node,
 					"qcom,mht-txcmpl-rings",
@@ -610,67 +768,6 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	}
 #endif
 
-	if (edma_gbl_ctx.num_txcmpl_rings > EDMA_MAX_TXCMPL_RINGS) {
-		edma_err("Invalid txcmpl-rings value (%d) received as input\n",
-				edma_gbl_ctx.num_txcmpl_rings);
-		return -EINVAL;
-	}
-
-	edma_gbl_ctx.txcmpl_ring_end = edma_gbl_ctx.txcmpl_ring_start +
-					edma_gbl_ctx.num_txcmpl_rings;
-	if (edma_gbl_ctx.txcmpl_ring_end > EDMA_MAX_TXCMPL_RINGS) {
-		edma_err("Invalid Txcmpl ring configuration: txcmpl-ring-start (%d)"
-				" and txcmpl-rings (%d)\n",
-				edma_gbl_ctx.txcmpl_ring_start,
-				edma_gbl_ctx.num_txcmpl_rings);
-		return -EINVAL;
-	}
-	edma_debug("txcmpl rings count: %d, txcmpl ring end: %d\n",
-			edma_gbl_ctx.num_txcmpl_rings, edma_gbl_ctx.txcmpl_ring_end);
-
-	/*
-	 * Get id of first RXFILL ring
-	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxfill-ring-start",
-				&edma_gbl_ctx.rxfill_ring_start) != 0) {
-		edma_err("Read error 1st RXFILL ring (rxfill-ring-start)\n");
-		return -EINVAL;
-	}
-
-	if (edma_gbl_ctx.rxfill_ring_start >= EDMA_MAX_RXFILL_RINGS) {
-		edma_err("Incorrect rxfill-ring-start value (%d) received as input\n",
-				edma_gbl_ctx.rxfill_ring_start);
-		return -EINVAL;
-	}
-	edma_debug("rxfill ring start: %d\n", edma_gbl_ctx.rxfill_ring_start);
-
-	/*
-	 * Get number of RXFILL rings
-	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxfill-rings",
-					&edma_gbl_ctx.num_rxfill_rings) != 0) {
-		edma_err("Unable to read number of rxfill rings.\n");
-		return -EINVAL;
-	}
-
-	if (edma_gbl_ctx.num_rxfill_rings > EDMA_MAX_RXFILL_RINGS) {
-		edma_err("Invalid rxfill-rings value (%d) received as input\n",
-				edma_gbl_ctx.num_rxfill_rings);
-		return -EINVAL;
-	}
-
-	edma_gbl_ctx.rxfill_ring_end = edma_gbl_ctx.rxfill_ring_start +
-					edma_gbl_ctx.num_rxfill_rings;
-	if (edma_gbl_ctx.rxfill_ring_end > EDMA_MAX_RXFILL_RINGS) {
-		edma_err("Invalid Rxfill ring configuration: rxfill-ring-start (%d)"
-				" and rxfill-rings (%d)\n",
-				edma_gbl_ctx.rxfill_ring_start,
-				edma_gbl_ctx.num_rxfill_rings);
-		return -EINVAL;
-	}
-	edma_debug("rxfill rings count: %d, rxfill ring end: %d\n",
-			edma_gbl_ctx.num_rxfill_rings, edma_gbl_ctx.rxfill_ring_end);
-
 	/*
 	 * Get page_mode of RXFILL rings
 	 * TODO: Move this setting to DP common node
@@ -679,49 +776,6 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rx-page-mode",
 					&edma_gbl_ctx.rx_page_mode);
 #endif
-
-	/*
-	 * Get id of first RXDESC ring
-	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxdesc-ring-start",
-				&edma_gbl_ctx.rxdesc_ring_start) != 0) {
-		edma_err("Read error 1st RXDESC ring (rxdesc-ring-start)\n");
-		return -EINVAL;
-	}
-
-	if (edma_gbl_ctx.rxdesc_ring_start >= EDMA_MAX_RXDESC_RINGS) {
-		edma_err("Incorrect rxdesc-ring-start value (%d) received as input\n",
-				edma_gbl_ctx.rxdesc_ring_start);
-		return -EINVAL;
-	}
-	edma_debug("rxdesc ring start: %d\n", edma_gbl_ctx.rxdesc_ring_start);
-
-	/*
-	 * Get number of RXDESC rings
-	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxdesc-rings",
-					&edma_gbl_ctx.num_rxdesc_rings) != 0) {
-		edma_err("Unable to read number of rxdesc rings.\n");
-		return -EINVAL;
-	}
-
-	if (edma_gbl_ctx.num_rxdesc_rings > EDMA_MAX_RXDESC_RINGS) {
-		edma_err("Invalid rxdesc-rings value (%d) received as input\n",
-				edma_gbl_ctx.num_rxdesc_rings);
-		return -EINVAL;
-	}
-
-	edma_gbl_ctx.rxdesc_ring_end = edma_gbl_ctx.rxdesc_ring_start +
-					edma_gbl_ctx.num_rxdesc_rings;
-	if (edma_gbl_ctx.rxdesc_ring_end > EDMA_MAX_RXDESC_RINGS) {
-		edma_err("Invalid Rxdesc ring configuration: rxdesc-ring-start (%d)"
-				" and rxdesc-rings (%d)\n",
-				edma_gbl_ctx.rxdesc_ring_start,
-				edma_gbl_ctx.num_rxdesc_rings);
-		return -EINVAL;
-	}
-	edma_debug("rxdesc rings count: %d, rxdesc ring end: %d\n",
-			edma_gbl_ctx.num_rxdesc_rings, edma_gbl_ctx.rxdesc_ring_end);
 
 	/*
 	 * Get Tx Map priority level
@@ -761,57 +815,6 @@ static int edma_of_get_pdata(struct resource *edma_res)
 				edma_gbl_ctx.rx_priority_level);
 
 	/*
-	 * Get TXDESC Map
-	 */
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
-		"qcom,txdesc-map",
-		(int32_t *)edma_gbl_ctx.tx_map,
-		(EDMA_MAC_TX_MAP * EDMA_TX_MAX_PRIORITY_LEVEL * NR_CPUS));
-	if (ret) {
-		edma_err("Unable to read Tx map array. ret: %d\n", ret);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < EDMA_TX_RING_PER_CORE_MAX; i++) {
-		for_each_possible_cpu(j) {
-			edma_debug("txmap[%d][%d] = %d\n", i, j,
-					edma_gbl_ctx.tx_map[i][j]);
-		}
-	}
-
-	/*
-	 * Get Rx queue start
-	 */
-	ret = of_property_read_u8(edma_gbl_ctx.device_node,
-			"qcom,rx-queue-start",
-			&edma_gbl_ctx.rx_queue_start);
-	if (ret) {
-		edma_err("Unable to read Rx queue start.\n");
-		return -EINVAL;
-	}
-	edma_debug("rx queue start: %d\n",
-			edma_gbl_ctx.rx_queue_start);
-
-	/*
-	 * Get rx_ring to queue mapping
-	 */
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
-			"qcom,rx-ring-queue-map",
-			(int32_t *)edma_gbl_ctx.rx_ring_queue_map,
-			(EDMA_MAX_PRI_PER_CORE * NR_CPUS));
-	if (ret) {
-		edma_err("Unable to read Rx ring to queue map array. ret: %d\n", ret);
-		return -EINVAL;
-	}
-
-	for (i = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
-		for_each_possible_cpu(j) {
-			edma_debug("Rx ring to queue map[%d][%d] = %d\n", i, j,
-					edma_gbl_ctx.rx_ring_queue_map[i][j]);
-		}
-	}
-
-	/*
 	 * Get TXDESC flow control Group ID Map
 	 */
 	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
@@ -821,23 +824,6 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		edma_err("Unable to read TxDesc-Fc-Grp map array. \
 				ret: %d\n", ret);
 			return -EINVAL;
-	}
-
-	/*
-	 * Get RXDESC Map
-	 */
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
-			"qcom,rxdesc-map",
-			(int32_t *)edma_gbl_ctx.rxdesc_ring_map,
-			(EDMA_RXDESC_RING_PER_CORE_MAX * NR_CPUS));
-	if (ret) {
-		edma_err("Unable to read Rx ring map array. Return: %d\n", ret);
-		return -EINVAL;
-	}
-
-	for_each_possible_cpu(i) {
-		edma_debug("rxdesc_ring_map[%d] = %d\n", i,
-				edma_gbl_ctx.rxdesc_ring_map[0][i]);
 	}
 
 #if defined(NSS_DP_POINT_OFFLOAD)
@@ -1256,7 +1242,7 @@ void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc)
 	cpumask_t edma_rps_cpumask = {{edma_cfg_rx_rps_bitmap_cores}};
 	uint32_t q_map[NR_CPUS] = {0};
 	uint32_t hash, cpu;
-	uint32_t q_off = egc->rx_queue_start;
+	uint32_t q_off = egc->edma_init.host_ctx.host_info.host_rx_config.rx_ring_to_queue_map[0];
 	int map_len = 0;
 	int idx = 0;
 
@@ -1580,8 +1566,11 @@ int edma_init(void)
 		return -EINVAL;
 	}
 
-	if (!edma_validate_desc_map()) {
-		edma_err("Incorrect desc map received\n");
+	/*
+	 * Parse and config EDMA ini
+	 */
+	if (edma_parse_ini()) {
+		edma_err("INI parsing failed \n");
 		return -EINVAL;
 	}
 
@@ -1636,12 +1625,14 @@ int edma_init(void)
 	/*
 	 * Configure the EDMA common clocks
 	 */
+#ifdef NSS_DP_IPQ9679
 	ret = edma_configure_clocks();
 	if (ret) {
 		edma_err("Error in configuring the common EDMA clocks\n");
 		ret = -EFAULT;
 		goto edma_hw_init_fail;
 	}
+#endif
 
 	edma_info("EDMA common clocks are configured\n");
 
@@ -1672,7 +1663,7 @@ int edma_init(void)
 	 * redirect packets/flows to specific host cores.
 	 */
 	for (i = 0; i < NR_CPUS; i++) {
-		queue_start = edma_gbl_ctx.rx_ring_queue_map[edma_gbl_ctx.rx_queue_start][i];
+		queue_start = edma_gbl_ctx.rx_ring_queue_map[0][i];
 		ppe_drv_core2queue_mapping(i, queue_start);
 	}
 
@@ -1750,7 +1741,7 @@ int edma_irq_init(void)
 	/*
 	 * Get TXCMPL rings IRQ numbers
 	 */
-	entry_num = 0;
+	entry_num = 2;
 	for (i = 0; i < num_txcmpl_rings; i++, entry_num++) {
 		edma_gbl_ctx.txcmpl_intr[i] =
 			platform_get_irq(edma_gbl_ctx.pdev, entry_num);
@@ -1768,6 +1759,7 @@ int edma_irq_init(void)
 	/*
 	 * Get RXDESC rings IRQ numbers
 	 */
+	entry_num = 21;
 	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++, entry_num++) {
 		edma_gbl_ctx.rxdesc_intr[i] =
 			platform_get_irq(edma_gbl_ctx.pdev, entry_num);
@@ -1782,6 +1774,8 @@ int edma_irq_init(void)
 				 i, edma_gbl_ctx.rxdesc_intr[i]);
 	}
 
+
+#ifdef NSS_DP_IPQ9679
 	/*
 	 * Get misc IRQ number
 	 */
@@ -1794,12 +1788,15 @@ int edma_irq_init(void)
 	edma_debug("%s: misc IRQ:%u\n", (edma_gbl_ctx.device_node)->name,
 						edma_gbl_ctx.misc_intr);
 
+#endif
 	/*
 	 * Get RXFILL rings IRQ numbers
 	 */
+
+	entry_num = 46;
 	for (i = 0; i < edma_gbl_ctx.num_rxfill_rings; i++) {
-		entry_num++;
 		edma_gbl_ctx.rxfill_intr[i] = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
+		entry_num++;
 		if (edma_gbl_ctx.rxfill_intr[i] < 0) {
 			edma_err("%s: rxfill_intr[%u] irq get failed\n",
 					(edma_gbl_ctx.device_node)->name, i);
@@ -1933,7 +1930,7 @@ done:
 					edma_gbl_ctx.rxdesc_intr[i],
 					edma_rxdesc_irq_name[i]);
 	}
-
+#ifdef NSS_DP_IPQ9679
 	/*
 	 * Request Misc IRQ
 	 */
@@ -1945,7 +1942,7 @@ done:
 				edma_gbl_ctx.misc_intr);
 		goto misc_intr_req_fail;
 	}
-
+#endif
 	/*
 	 * Request IRQ for RXFILL rings
 	 */
@@ -1979,7 +1976,7 @@ rx_fill_ring_intr_req_fail:
 	synchronize_irq(edma_gbl_ctx.misc_intr);
 	free_irq(edma_gbl_ctx.misc_intr, (void *)edma_gbl_ctx.pdev);
 
-
+#ifdef NSS_DP_IPQ9679
 misc_intr_req_fail:
 	/*
 	 * Free IRQ for RXDESC rings
@@ -1990,7 +1987,7 @@ misc_intr_req_fail:
 		free_irq(edma_gbl_ctx.rxdesc_intr[i],
 				(void *)&(edma_gbl_ctx.rxdesc_rings[i]));
 	}
-
+#endif
 rx_desc_ring_intr_req_fail:
 	/*
 	 * Free IRQ for TXCMPL rings
