@@ -735,12 +735,14 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 		return -EFAULT;
 #endif
 
+#if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 	dp_priv->link_poll = of_property_read_bool(np, "qcom,link-poll");
-
+#else
 	/*
 	 * TO-DO: Remove this WAR
 	 */
 	dp_priv->link_poll = 0;
+#endif
 
 	if (of_property_read_u32(np, "qcom,phy-mdio-addr",
 		&dp_priv->phy_mdio_addr) && dp_priv->link_poll) {
@@ -845,7 +847,7 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	return 0;
 }
 
-#ifdef NSS_DP_IPQ9679
+#if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 /*
  * nss_dp_mdio_attach()
  */
@@ -969,7 +971,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 	struct device_node *np = pdev->dev.of_node;
 	struct nss_gmac_hal_platform_data gmac_hal_pdata;
 	int32_t ret = 0;
-#ifdef NSS_DP_IPQ9679
+#if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 	uint8_t phy_id[MII_BUS_ID_SIZE + 3];
 #endif
 #if defined(NSS_DP_PPE_SUPPORT)
@@ -1060,7 +1062,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		goto netdev_register_fail;
 	}
 
-#ifdef NSS_DP_IPQ9679
+#if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 	if (dp_priv->link_poll) {
 		dp_priv->miibus = nss_dp_mdio_attach(pdev);
 		if (!dp_priv->miibus) {
@@ -1138,7 +1140,7 @@ vsi_set_fail:
 	}
 #endif
 
-#ifdef NSS_DP_IPQ9679
+#if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 phy_setup_fail:
 #endif
 	unregister_netdev(netdev);
