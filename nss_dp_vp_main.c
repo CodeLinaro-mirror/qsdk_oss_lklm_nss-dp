@@ -139,7 +139,6 @@ struct net_device *nss_dp_vp_init(void)
 		goto fail;
 	}
 
-#if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 	/*
 	 * Open the Dataplane for Tx as soon as it is initialized.
 	 * TODO: Think of a better time to do this.
@@ -148,7 +147,6 @@ struct net_device *nss_dp_vp_init(void)
 		netdev_dbg(netdev, "Data plane open failed\n");
 		goto data_plane_open_fail;
 	}
-#endif
 
 	/*
 	 * We do not need to register this netdev. This is only
@@ -159,10 +157,8 @@ struct net_device *nss_dp_vp_init(void)
 
 	return netdev;
 
-#if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 data_plane_open_fail:
 	dp_priv->data_plane_ops->deinit(dp_priv->dpc);
-#endif
 fail:
 	free_netdev(netdev);
 	return NULL;
@@ -176,6 +172,6 @@ EXPORT_SYMBOL(nss_dp_vp_init);
 bool nss_dp_vp_deinit(struct net_device *netdev)
 {
 	free_netdev(netdev);
-	return NULL;
+	return true;
 }
 EXPORT_SYMBOL(nss_dp_vp_deinit);
