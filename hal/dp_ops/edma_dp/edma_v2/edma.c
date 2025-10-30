@@ -474,7 +474,7 @@ static void edma_of_get_vp_pdata(void)
 	err = of_property_read_u32(egc->device_node, "qcom,rx-vp-rings", &egc->rx_vp_rings);
 	if (err) goto no_vp;
 
-	edma_info("VP rings detected (ring_idx :%d, num_rings:%d)", egc->rx_vp_ring_idx, egc->rx_vp_rings);
+	edma_info("VP rings detected (ring_idx :%d, num_rings:%d)", egc->rxdesc_vp_ring_idx, egc->rx_vp_rings);
 
 	BUG_ON(egc->rx_vp_rings > NSS_DP_VP_NUM_RINGS);
 	return;

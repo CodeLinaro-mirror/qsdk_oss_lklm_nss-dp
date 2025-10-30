@@ -280,7 +280,7 @@ void edma_cfg_tx_loopback_mapping(struct edma_gbl_ctx *egc)
 			reg = EDMA_REG_TXDESC2CMPL_MAP_5;
 		}
 
-		edma_debug("Configure point offload TXDESC:%u to use TXCMPL:%u\n", ring_id, &egc->txcmpl_loopback_ring[ring_id]);
+		edma_debug("Configure point offload TXDESC:%u to use TXCMPL\n", ring_id);
 
 		/*
 		 * Set the Tx complete descriptor ring number in the mapping register.

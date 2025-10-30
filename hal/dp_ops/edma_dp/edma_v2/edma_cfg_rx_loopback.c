@@ -373,7 +373,7 @@ static void edma_cfg_rx_loopback_rings_to_rx_fill_mapping(struct edma_gbl_ctx *e
 			reg = EDMA_REG_RXDESC2FILL_MAP_2;
 		}
 
-		edma_debug("Configure RXDESC loopback ring:%u to use RXFILL loopback ring:%u\n", ring_id, egc->rxfill_loopback_ring);
+		edma_debug("Configure RXDESC loopback ring:%u to use RXFILL loopback ring:%u\n", ring_id, egc->rxfill_loopback_ring_id_arr[i]);
 
 		/*
 		 * Set the Rx fill ring number in the
