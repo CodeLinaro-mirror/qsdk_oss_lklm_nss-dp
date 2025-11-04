@@ -432,13 +432,13 @@ struct edma_gbl_ctx {
 			/* Number of loopback rings */
 	uint32_t rxdesc_loopback_ring_to_queue_bm[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT];
 			/* PPE queue ids of the Rx descriptor loopback rings */
-	uint8_t *txdesc_loopback_ring_id_arr;
+	uint32_t *txdesc_loopback_ring_id_arr;
 			/* Array of TX desc Ring IDs */
-	uint8_t *txcmpl_loopback_ring_id_arr;
+	uint32_t *txcmpl_loopback_ring_id_arr;
 			/* Array of TX completion Ring IDs */
-	uint8_t *rxdesc_loopback_ring_id_arr;
+	uint32_t *rxdesc_loopback_ring_id_arr;
 			/* Array of RX desc Ring IDs */
-	uint8_t *rxfill_loopback_ring_id_arr;
+	uint32_t *rxfill_loopback_ring_id_arr;
 			/* Array of RX fill Ring IDs */
 	uint32_t loopback_queue_base;
 			/* Loopback Base Queue ID */
