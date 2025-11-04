@@ -991,20 +991,20 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx->txdesc_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	edma_gbl_ctx->txdesc_loopback_ring_id_arr = kmalloc(sizeof(uint32_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
 	if (!edma_gbl_ctx->txdesc_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for txdesc loopback ring_id\n");
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx->txcmpl_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	edma_gbl_ctx->txcmpl_loopback_ring_id_arr = kmalloc(sizeof(uint32_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
 	if (!edma_gbl_ctx->txcmpl_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for txcmpl loopback ring_id\n");
 		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx->rxdesc_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	edma_gbl_ctx->rxdesc_loopback_ring_id_arr = kmalloc(sizeof(uint32_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
 	if (!edma_gbl_ctx->rxdesc_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for rxdesc loopback ring_id\n");
 		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
@@ -1012,7 +1012,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx->rxfill_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	edma_gbl_ctx->rxfill_loopback_ring_id_arr = kmalloc(sizeof(uint32_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
 	if (!edma_gbl_ctx->rxfill_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for rxfill loopback ring_id\n");
 		kfree(edma_gbl_ctx->rxdesc_loopback_ring_id_arr);
