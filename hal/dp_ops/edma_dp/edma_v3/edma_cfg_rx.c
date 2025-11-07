@@ -151,6 +151,14 @@ static int edma_cfg_rx_desc_ring_setup(struct edma_rxdesc_ring *rxdesc_ring)
 	rxdesc_ring->pdma = (dma_addr_t)virt_to_phys(rxdesc_ring->pdesc);
 
 	/*
+	 * Skip allocating secondary descriptors if preheader mode is configured
+	 */
+	if (rxdesc_ring->pre_hdr_mode_en) {
+		edma_info("EDMA Rx ring:(%d) is configured in a preheader mode\n", rxdesc_ring->ring_id);
+		return 0;
+	}
+
+	/*
 	 * Allocate secondary RxDesc ring descriptors
 	 */
 	rxdesc_ring->sdesc = kmalloc(roundup((sizeof(struct edma_rxdesc_sec_desc) * rxdesc_ring->count),
@@ -224,6 +232,13 @@ static void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 	kfree(rxdesc_ring->pdesc);
 	rxdesc_ring->pdesc = NULL;
 	rxdesc_ring->pdma = (dma_addr_t)0;
+
+	/*
+	 * Skip freeing up secondary descriptors if preheader mode is configured
+	 */
+	if (rxdesc_ring->pre_hdr_mode_en) {
+		return;
+	}
 
 	/*
 	 * TODO:
@@ -576,8 +591,15 @@ static void edma_cfg_rx_desc_ring_flow_control(uint32_t threshold_xoff, uint32_t
 		if (edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
 			struct edma_rxdesc_ring *rxdesc_ring;
 
+			/*
+			 * If pre-header mode is enabled, then set the pre-header payload offset value
+			 */
 			rxdesc_ring = edma_gbl_ctx.rxdesc_info[i].rxdesc_ring;
+			if (rxdesc_ring->pre_hdr_mode_en) {
+				data |= EDMA_RXDESC_PAYLOAD_OFFSET_SET(EDMA_RXDESC_PH_PAYLOAD_OFFSET);
+			}
 			edma_reg_write(EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id), data);
+			edma_info("EDMA_REG_RXDESC_FC_THRE : 0x%0x\n", data);
 		}
 	}
 }
@@ -674,16 +696,33 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 	paddr = (uint32_t)(rxdesc_ring->pdma & EDMA_RXDESC_BA_MASK);
 	edma_reg_write(EDMA_REG_RXDESC_BA(rxdesc_ring->ring_id), paddr);
 
-	saddr = (uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK);
-	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id), saddr);
-
 #if defined(NSS_DP_HIGHMEM_SUPP)
 	paddr = (uint32_t)((rxdesc_ring->pdma >> 32) & EDMA_RXDESC_BA_HIGHER_MASK);
 	edma_reg_write(EDMA_REG_RXDESC_BA_HIGH(rxdesc_ring->ring_id), paddr);
-
-	saddr = (uint32_t)((rxdesc_ring->sdma >> 32) & EDMA_RXDESC_PREHEADER_BA_HIGHER_MASK);
-	edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA_HIGH(rxdesc_ring->ring_id), saddr);
 #endif
+
+	if (!rxdesc_ring->pre_hdr_mode_en) {
+		/*
+		 * Configure Rx ring in a secondary descriptor mode
+		 */
+		saddr = (uint32_t)(rxdesc_ring->sdma & EDMA_RXDESC_PREHEADER_BA_MASK);
+		edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA(rxdesc_ring->ring_id), saddr);
+
+#if defined(NSS_DP_HIGHMEM_SUPP)
+		saddr = (uint32_t)((rxdesc_ring->sdma >> 32) & EDMA_RXDESC_PREHEADER_BA_HIGHER_MASK);
+		edma_reg_write(EDMA_REG_RXDESC_PREHEADER_BA_HIGH(rxdesc_ring->ring_id), saddr);
+#endif
+	} else {
+		/*
+		 * Configure Rx ring in a preheader mode
+		 */
+		data = EDMA_RXDESC_CTRL_PH_EN_SET(EDMA_RXDESC_PH_EN);
+		edma_reg_write(EDMA_REG_RXDESC_CTRL(rxdesc_ring->ring_id), data);
+		edma_info("EDMA_REG_RXDESC_CTRL reg (%d) configured value is 0x%0x, read: 0x%0x \n",
+					 rxdesc_ring->ring_id, data,
+					 edma_reg_read(EDMA_REG_RXDESC_CTRL(rxdesc_ring->ring_id)));
+	}
+
 	data = rxdesc_ring->count & EDMA_RXDESC_RING_SIZE_MASK;
 
 	/*
@@ -1309,6 +1348,14 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		rxdesc_ring->count = rxdesc_info[ring_idx].desc_count;
 
 		/*
+		 * Fetch the mode in which the particular ring has to be configured
+		 */
+		rxdesc_ring->pre_hdr_mode_en = EDMA_RING_MODE_GET(rxdesc_ring->ring_id, edma_rx_ring_mode_bitmask);
+		edma_info("Edma Rx ring: (%d) configured mode value is %d. edma_rx_ring_mode_bitmask: 0x%0x\n",
+				rxdesc_ring->ring_id, rxdesc_ring->pre_hdr_mode_en,
+				edma_rx_ring_mode_bitmask);
+
+		/*
 		 * Create a mapping between RX Desc ring and Rx fill ring.
 		 */
 		rxfill_id = rxdesc_info[ring_idx].rxfill_ring_id;
@@ -1319,6 +1366,16 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		}
 
 		rxdesc_ring->rxfill = rxfill_info[rxfill_id].rxfill_ring;
+
+		/*
+		 * ASSERT if the mapped Rxfill ring has a valid mode set and the mode is not
+		 * same as that of the Rx ring
+		 */
+		if (rxdesc_ring->rxfill->pre_hdr_mode_en != EDMA_RING_MODE_NOT_SET) {
+			BUG_ON(rxdesc_ring->rxfill->pre_hdr_mode_en != rxdesc_ring->pre_hdr_mode_en);
+		} else {
+			rxdesc_ring->rxfill->pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
+		}
 
 		ret = edma_cfg_rx_desc_ring_setup(rxdesc_ring);
 		if (ret != 0) {
@@ -1379,6 +1436,11 @@ int32_t edma_cfg_rx_rings_alloc(struct edma_gbl_ctx *egc)
 		}
 
 		rxfill_info[i].rxfill_ring->ring_id = i;
+
+		/*
+		 * Initialize the preheader mode parameter to invalid
+		 */
+		rxfill_info[i].rxfill_ring->pre_hdr_mode_en = EDMA_RING_MODE_NOT_SET;
 	}
 
 	for (int i = 0; i < egc->rxdesc_ring_max; i++) {
@@ -1397,6 +1459,11 @@ int32_t edma_cfg_rx_rings_alloc(struct edma_gbl_ctx *egc)
 		}
 
 		rxdesc_info[i].rxdesc_ring->ring_id = i;
+
+		/*
+		 * Initialize the preheader mode parameter to invalid
+		 */
+		rxdesc_info[i].rxdesc_ring->pre_hdr_mode_en = EDMA_RING_MODE_NOT_SET;
 	}
 
 	if (edma_cfg_rx_rings_setup(egc)) {

@@ -148,6 +148,13 @@ static void edma_cfg_tx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 	txdesc_ring->pdma = (dma_addr_t)0;
 
 	/*
+	 * Skip freeing up secondary descriptors if preheader mode is configured
+	 */
+	if (txdesc_ring->pre_hdr_mode_en) {
+		return;
+	}
+
+	/*
 	 * TODO:
 	 * Free any buffers assigned to any secondary descriptors
 	 */
@@ -176,6 +183,14 @@ static int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
 	txdesc_ring->pdma = (dma_addr_t)virt_to_phys(txdesc_ring->pdesc);
 
 	/*
+	 * Skip allocating secondary descriptors if preheader mode is configured
+	 */
+	if (txdesc_ring->pre_hdr_mode_en) {
+		edma_info("EDMA Tx ring:(%d) is configured in a preheader mode\n", txdesc_ring->id);
+		return 0;
+	}
+
+	/*
 	 * Allocate sencondary Tx ring descriptors
 	 */
 	txdesc_ring->sdesc = kmalloc(roundup((sizeof(struct edma_sec_txdesc) * txdesc_ring->count),
@@ -200,23 +215,17 @@ static int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
  */
 static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring)
 {
-	uint32_t paddr, saddr;
+	uint32_t addr, ring_ctrl_cfg = 0;
 
 	/*
 	 * Configure TXDESC ring
 	 */
-	paddr = (uint32_t)(txdesc_ring->pdma & EDMA_RING_DMA_MASK);
-	edma_reg_write(EDMA_REG_TXDESC_BA(txdesc_ring->id), paddr);
-
-	saddr = (uint32_t)(txdesc_ring->sdma & EDMA_RING_DMA_MASK);
-	edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id), saddr);
+	addr = (uint32_t)(txdesc_ring->pdma & EDMA_RING_DMA_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA(txdesc_ring->id), addr);
 
 #if defined(NSS_DP_HIGHMEM_SUPP)
-	paddr = (uint32_t)((txdesc_ring->pdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
-	edma_reg_write(EDMA_REG_TXDESC_BA_HIGH(txdesc_ring->id), paddr);
-
-	saddr = (uint32_t)((txdesc_ring->sdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
-	edma_reg_write(EDMA_REG_TXDESC_BA2_HIGH(txdesc_ring->id), saddr);
+	addr = (uint32_t)((txdesc_ring->pdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+	edma_reg_write(EDMA_REG_TXDESC_BA_HIGH(txdesc_ring->id), addr);
 #endif
 
 	edma_reg_write(EDMA_REG_TXDESC_RING_SIZE(txdesc_ring->id),
@@ -226,15 +235,36 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
 	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id),
 			(uint32_t)EDMA_TX_INITIAL_PROD_IDX);
 
+	if (!txdesc_ring->pre_hdr_mode_en) {
+		/*
+		 * Configure Tx ring in a secondary descriptor mode
+		 */
+		addr = (uint32_t)(txdesc_ring->sdma & EDMA_RING_DMA_MASK);
+		edma_reg_write(EDMA_REG_TXDESC_BA2(txdesc_ring->id), addr);
+
+#if defined(NSS_DP_HIGHMEM_SUPP)
+		addr = (uint32_t)((txdesc_ring->sdma >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+		edma_reg_write(EDMA_REG_TXDESC_BA2_HIGH(txdesc_ring->id), addr);
+#endif
+	} else {
+		/*
+		 * Configure Tx ring in a preheader mode
+		 */
+		ring_ctrl_cfg = EDMA_TXDESC_CTRL_PH_EN_SET(EDMA_TXDESC_PH_EN);
+	}
+
 	/*
 	 * Configure group ID for flow control and TSO IDENT UPDATE CTRL for this Tx ring
 	 * FC_GRP_ID: Flow control group identifier for this ring
 	 * TSO_IDENT_UPDATE_CTRL: Set to EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER to allow
 	 * hardware parser to update TSO identifier fields
 	 */
-	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id),
-			EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id) |
+	ring_ctrl_cfg |= (EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id) |
 			EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL_SET(EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER));
+	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), ring_ctrl_cfg);
+	edma_info("EDMA_REG_TXDESC_CTRL (%d) configured value is 0x%0x, reg value : 0x%0x\n",
+				 txdesc_ring->id, ring_ctrl_cfg,
+				 edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id)));
 }
 
 /*
@@ -575,6 +605,14 @@ static int edma_cfg_tx_rings_setup(struct edma_gbl_ctx *egc)
 			txdesc_ring = txdesc_info[i].txdesc_ring;
 			txdesc_ring->count = txdesc_info[i].desc_count;
 
+			/*
+			 * Fetch the mode in which the particular ring has to be configured
+			 */
+			txdesc_ring->pre_hdr_mode_en = EDMA_RING_MODE_GET(txdesc_ring->id, edma_tx_ring_mode_bitmask);
+			edma_info("Edma Tx ring: (%d) configured mode value is %d. edma_tx_ring_mode_bitmask: 0x%0x\n",
+					 txdesc_ring->id, txdesc_ring->pre_hdr_mode_en,
+					 edma_tx_ring_mode_bitmask);
+
 			ret = edma_cfg_tx_desc_ring_setup(txdesc_ring);
 			if (ret != 0) {
 				edma_err("Error in setting up %d txdesc ring. ret: %d",
@@ -634,6 +672,11 @@ int32_t edma_cfg_tx_rings_alloc(struct edma_gbl_ctx *egc)
 			}
 
 			txdesc_info[i].txdesc_ring->id = i;
+
+			/*
+			 * Initialize the preheader mode parameter to invalid
+			 */
+			txdesc_info[i].txdesc_ring->pre_hdr_mode_en = EDMA_RING_MODE_NOT_SET;
 		}
 	}
 

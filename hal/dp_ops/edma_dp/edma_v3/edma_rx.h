@@ -17,6 +17,8 @@ extern uint32_t rx_ring_sz_high_mem;
 						   replenishing RxFill ring */
 #define EDMA_RX_SKB_HEADROOM		128
 
+#define EDMA_RX_PH_SIZE		(sizeof(struct edma_rxdesc_sec_desc))	/* Rx preheader size */
+
 /*
  * Helper function for generating mask for bit field in a word. This will generate a mask which will
  * enable bits from start to end(both inclusive) of the bit field in a word.
@@ -389,6 +391,7 @@ struct edma_rxfill_ring {
 	uint32_t prod_idx;		/* Ring producer index */
 	uint32_t alloc_size;		/* Buffer size to allocate */
 	uint32_t num_rxfill_pending;	/* Number of allocation pending */
+	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
 	struct edma_rxfill_desc *desc;	/* descriptor ring virtual address */
 	dma_addr_t dma;			/* descriptor ring physical address */
 	uint32_t buf_len;		/* Buffer length for rxfill descriptor */
@@ -409,6 +412,7 @@ struct edma_rxdesc_ring {
 	uint32_t count;			/* number of descriptors in the ring */
 	uint32_t work_leftover;		/* Leftover descriptors to be processed */
 	uint32_t cons_idx;		/* Ring consumer index */
+	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
 	struct edma_rxdesc_desc *pdesc;
 					/* Primary descriptor ring virtual address */
 	struct edma_rxdesc_desc *pdesc_head;

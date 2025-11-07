@@ -106,6 +106,11 @@
  */
 #define EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT	10
 
+#define EDMA_RX_RING_MODE_BITMASK_DEF		0xF00000
+#define EDMA_TX_RING_MODE_BITMASK_DEF		0x0
+
+#define EDMA_RING_MODE_NOT_SET			-1
+
 /*
  * QID to RID Table
  */
@@ -221,6 +226,9 @@ typedef enum {
 
 #define EDMA_DEFAULT_DDR_SIZE __DDR_SIZE_GBYTES(3UL) /* 3GB */
 #define EDMA_DEFAULT_DMA_MASK_BIT_HI 32
+
+#define EDMA_TXRX_RING_PH_EN_MASK(ring_id)			(0x1 << (ring_id))
+#define EDMA_RING_MODE_GET(idx, mode_bm)		(((mode_bm) & EDMA_TXRX_RING_PH_EN_MASK(idx)) >> (idx))
 
 /*
  * EDMA Ring usage stats macro
@@ -644,6 +652,8 @@ extern struct edma_init_info init_info;
 extern uint32_t edma_hang_recover;
 extern int edma_dp_extension_en;
 
+extern int edma_rx_ring_mode_bitmask;
+extern int edma_tx_ring_mode_bitmask;
 
 int edma_irq_init(void);
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx);

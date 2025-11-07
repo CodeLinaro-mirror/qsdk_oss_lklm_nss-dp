@@ -87,6 +87,19 @@ module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
 
 /*
+ * Each bit denotes the configured mode for that particular EDMA Tx/Rx rings IDs:
+ *   Bit is set : The particular ring is configured in pre-header mode
+ *   Bit is not set : The particular ring is configured in secondary ring mode
+ */
+int edma_rx_ring_mode_bitmask = EDMA_RX_RING_MODE_BITMASK_DEF;
+module_param(edma_rx_ring_mode_bitmask, int, 0640);
+MODULE_PARM_DESC(edma_rx_ring_mode_bitmask, "EDMA Rx ring mode (preheader/secondary ring) bitmask");
+
+int edma_tx_ring_mode_bitmask = EDMA_TX_RING_MODE_BITMASK_DEF;
+module_param(edma_tx_ring_mode_bitmask, int, 0640);
+MODULE_PARM_DESC(edma_tx_ring_mode_bitmask, "EDMA Tx ring mode (preheader/secondary ring) bitmask");
+
+/*
  * Input String length for VLAN insertion.
  */
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40

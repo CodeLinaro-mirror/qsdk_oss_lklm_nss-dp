@@ -313,6 +313,7 @@ struct edma_txdesc_ring {
 	struct edma_sec_txdesc *sdesc;	/* Secondary descriptor ring virtual address */
 	struct edma_tx_desc_stats tx_desc_stats;
 					/* Tx descriptor ring statistics */
+	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	uint32_t count;			/* Number of descriptors */
 	uint8_t fc_grp_id;		/* Flow control group ID */
