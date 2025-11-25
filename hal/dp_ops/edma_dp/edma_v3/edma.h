@@ -126,6 +126,21 @@
 #define EDMA_MAX_LOOPBACK_BUF 32
 
 /*
+ * EDMA ring subtypes. Each type can have subtype which can inherit the
+ * data from its parent type. For example, EDMA_RING_TYPE_HOST can have
+ * 2 subtypes - HOST_SFE and HOST_VP. This can be extended further as
+ * required.
+ */
+#define EDMA_RING_TYPE_FLAGS_HOST_COMMON	0x1
+#define EDMA_RING_TYPE_FLAGS_HOST_VP		0x2
+
+/*
+ * EDMA ring status flags
+ */
+#define EDMA_RING_STATUS_FLAGS_IN_USE		0x1
+#define EDMA_RING_STATUS_FLAGS_IS_CONFIGURED	0x2
+
+/*
  * edma_port_ucast_queues
  * 	EDMA unicast queue number
  * To-do: read queue start from dtsi
@@ -143,6 +158,15 @@ enum edma_cpu_port_mcast_queues {
 	EDMA_CPU_PORT_MCAST_QUEUE_START = 256,
 	EDMA_CPU_PORT_MCAST_QUEUE_END = 271,
 };
+
+/*
+ * edma_ring_types_t
+ *	EDMA ring types
+ */
+typedef enum {
+	EDMA_RING_TYPE_HOST = 1,	/* Host specific rings */
+	EDMA_RING_TYPE_DS		/* Direct Switch specific rings */
+} edma_ring_types_t;
 
 /*
  * EDMA profile ID
@@ -256,115 +280,196 @@ struct edma_dp_loopback_buf_info {
 #endif
 
 /*
- * TO-DO: Convert all the hardcoded values with MACROS
- * for all structures in edma_init_info
+ * edma_txdesc_ring_info
+ *	TX descriptor ring information
  */
-
-/*
- * RX rings configuration.
- */
-struct edma_rx_rings_config {
-	uint8_t num_of_rx_rings;		/* Number of rings to be configured */
-	uint8_t num_queues_per_ring;		/* Queue set for each ring */
-	uint8_t rx_ring_map[8];			/* RX rings to be used */
-	uint8_t rx_ring_to_queue_map[8];	/* RX rings and queue base information */
-	uint8_t rx_queue_priority_map[16];	/* RX queues priority map */
-	uint8_t rx_ring_to_rxfill_map[8];	/* RX ring to RX-fill ring map */
+struct edma_txdesc_ring_info {
+	struct edma_txdesc_ring *txdesc_ring;	/* TX ring pointer */
+	edma_ring_types_t ring_type;		/* Ring type */
+	uint32_t desc_count;			/* Number of Descriptors */
+	uint32_t type_flags;			/* Ring type flags */
+	uint32_t status_flags;			/* Ring status flags */
+	uint32_t txcmpl_ring_id;		/* TX completion ring ID for this ring */
+	uint32_t fc_grp_id;			/* Flow Control group ID */
 };
 
 /*
- * TX rings information.
+ * edma_txcmpl_ring_info
+ *	TX completion ring information
  */
-struct edma_tx_rings_config {
-	uint8_t num_of_tx_rings;		/* Number of rings to be configured */
-	uint8_t num_of_txcmpl_rings;		/* Number of tx completion rings */
-	uint8_t max_rings_per_core;		/* Max rings per core */
-	uint8_t tx_ring_map[8];			/* TX rings to be used */
-	uint8_t txcmpl_ring_map[8];		/* TX completion rings to be used */
-	uint8_t tx_ring_per_core_map[6][2];	/* Max rings per core */
-	uint8_t tx_ring_to_txcomp_map[8];	/* Tx ring to txcomp map */
+struct edma_txcmpl_ring_info {
+	struct edma_txcmpl_ring *txcmpl_ring;	/* TX completion ring pointer */
+	edma_ring_types_t ring_type;		/* Ring type */
+	uint32_t desc_count;			/* Number of Descriptors */
+	uint32_t type_flags;			/* Ring type flags */
+	uint32_t status_flags;			/* Ring status flags */
+	uint32_t intr_num;			/* Interrupt number */
 };
 
 /*
- * Host mode information.
+ * edma_rxdesc_ring_info
+ *	RX desc ring information
  */
-struct edma_host_info {
-	struct edma_rx_rings_config host_rx_config;	/* Rx rings config information in Host mode */
-	struct edma_tx_rings_config host_tx_config;	/* Tx rings config information in Host mode */
+struct edma_rxdesc_ring_info {
+	struct edma_rxdesc_ring *rxdesc_ring;		/* Rx ring pointer */
+	edma_ring_types_t ring_type;			/* Ring type */
+	uint32_t desc_count;				/* Number of Descriptors */
+	uint32_t rxfill_ring_id;			/* RX fill ring ID for this ring */
+	uint32_t ppe_queue_base;			/* Queue base */
+	uint32_t ppe_num_queues;			/* Number of queues for this ring */
+	uint32_t type_flags;				/* Ring type flags */
+	uint32_t status_flags;				/* Ring status flags */
+	uint32_t intr_num;				/* Interrupt number */
 };
 
 /*
- * Host VP mode information.
+ * edma_rxfill_ring_info
+ *	RX Fill ring information
  */
-struct edma_host_vp_info {
-	struct edma_rx_rings_config vp_rx_config;	/* Rx rings config information in Host mode */
-	struct edma_tx_rings_config vp_tx_config;	/* Tx rings config information in Host mode */
+struct edma_rxfill_ring_info {
+	struct edma_rxfill_ring *rxfill_ring;		/* Fill ring pointer */
+	edma_ring_types_t ring_type;			/* Ring type */
+	uint32_t type_flags;				/* Ring type flags */
+	uint32_t status_flags;				/* Ring status flags */
+	uint32_t desc_count;				/* Number of Descriptors */
+	uint32_t alloc_size;				/* Alloc size (Total buffer size) */
+	uint32_t buffer_len;				/* buffer length (Max packet length supported per buffer) */
+	bool page_mode;					/* Page mode */
+	uint32_t intr_num;				/* Interrupt number */
 };
 
 /*
- * HOST mode configuration information.
+ * edma_rx_per_ring_map
+ *	One RX ring mapping.
  */
-struct edma_host_ctx {
-	uint8_t edma_host_num_rxfill_rings;		/* Number of RXFILL rings. */
-	uint8_t edma_host_rxfill_rings[8];		/* RXFILL rings to be used for all host modes. */
-	struct edma_host_info host_info;		/* Host specific information. */
-	struct edma_host_vp_info host_vp_info;		/* Host VP specific information. */
+struct edma_rx_per_ring_map {
+	uint32_t rx_ring_id;		/* RX ring ID */
+	uint32_t rx_fill_ring_id;	/* RX fill ring ID */
+	uint32_t ppe_queue_base;	/* PPE Queue base */
 };
 
 /*
- * PPE DS node information.
+ * edma_tx_per_ring_map
+ *	One TX ring mapping.
+ */
+struct edma_tx_per_ring_map {
+	uint32_t tx_ring_id;		/* TX ring ID */
+	uint32_t tx_cmpl_ring_id;	/* TX completion ring ID */
+	uint32_t fc_grp_id;		/* Flow Control group ID */
+};
+
+/*
+ * edma_rx_rings_info
+ *	RX rings information.
+ */
+struct edma_rx_rings_info {
+	struct edma_rx_per_ring_map rx_map[EDMA_MAX_RXDESC_RING_PER_TYPE];	/* RX per ring map */
+	uint32_t num_rx_rings;							/* Number of rings to be configured */
+	uint32_t num_queues_per_ring;						/* Queue set for each ring */
+};
+
+/*
+ * edma_tx_rings_info
+ *	TX rings information.
+ */
+struct edma_tx_rings_info {
+	struct edma_tx_per_ring_map tx_map[EDMA_MAX_TXDESC_RING_PER_TYPE];	/* TX per ring map */
+	uint32_t tx_ring_per_core_map[NR_CPUS][EDMA_MAX_TX_RINGS_PER_CORE];	/* Max rings per core */
+	uint32_t num_tx_rings;							/* Number of rings to be configured */
+	uint32_t max_rings_per_core;						/* Max rings per core */
+};
+
+/*
+ * edma_rings_common_info
+ *	Common information per section.
+ */
+struct edma_rings_common_info {
+	uint32_t edma_rxfill_ring_map[EDMA_MAX_RXFILL_RING_PER_TYPE];		/* RXFILL ring map */
+	uint32_t edma_txcmpl_ring_map[EDMA_MAX_TXCMPL_RING_PER_TYPE];		/* TXCMPL ring map */
+	uint32_t edma_num_rxfill_rings;						/* Number of RXFILL rings. */
+	uint32_t edma_num_txcmpl_rings;						/* Number of TXCMPL rings. */
+};
+
+#ifdef NSS_DP_PPEDS_SUPPORT
+/*
+ * edma_ppeds_node_info
+ *	PPE DS node information.
  */
 struct edma_ppeds_node_info {
-	uint8_t num_rx_rings;			/* Number of RX rings */
-	uint8_t num_tx_rings;			/* Number of TX rings */
-	uint8_t num_txcmpl_rings;		/* Number of TX completion rings */
-	uint8_t rx_rings[2];			/* RX rings to be used */
-	uint8_t tx_rings[2];			/* TX rings to be used */
-	uint8_t txcmpl_rings[2];		/* TX completion rings to be used */
-	uint8_t rx_rings_to_queue_map[2];	/* Queue base for the RX rings */
-	uint8_t rx_queue_priority_map[16];	/* RX queues priority map */
-	uint8_t rx_ring_to_rxfill_map[2];	/* RX ring to RX-fill ring map */
-	uint8_t tx_ring_to_txcomp_map[2];	/* Tx ring to txcomp map */
+	struct edma_rx_per_ring_map rx_map[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/* RX ring map */
+	struct edma_tx_per_ring_map tx_map[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/* TX ring map */
+	uint32_t num_rx_rings;							/* Number of RX rings */
+	uint32_t num_tx_rings;							/* Number of TX rings */
+	uint32_t num_queues_per_ring;						/* Number of queues per ring. */
 };
 
 /*
- * PPE DS information.
+ * edma_ppeds_info
+ *	PPE DS information.
  */
-struct edma_ppe_ds_ctx {
-	uint8_t num_nodes;				/* Number of DS nodes. */
-	uint8_t num_queues_per_ring;			/* Number of queues per ring. */
-	uint8_t max_rings_per_node;			/* Maximum rings per node. */
-	struct edma_ppeds_node_info ppeds_config[4];	/* PPEDS node information. */
+struct edma_ppeds_info {
+	struct edma_ppeds_node_info node_info[EDMA_PPEDS_MAX_NODES];	/* PPEDS node information. */
+	uint32_t num_nodes;						/* Number of DS nodes. */
 };
+#endif
 
 /*
- * DS mode configuration information.
+ * edma_ds_info
+ *	DS mode configuration information.
  */
-struct edma_ds_ctx {
-	uint8_t edma_ds_num_rxfill_rings;		/* Number of RXFILL rings. */
-	uint8_t edma_ds_rxfill_rings[8];		/* RXFILL rings to be used for all DS modes. */
-
-	struct edma_ppe_ds_ctx ppe_ds_ctx;		/* PPE-DS config information. */
+struct edma_ds_info {
+#ifdef NSS_DP_PPEDS_SUPPORT
+	struct edma_ppeds_info ppeds_info;		/* PPE-DS config information. */
+#endif
+	struct edma_rings_common_info ppeds_cmn_info;	/* Common information for all PPEDS nodes. */
 };
 
 /*
- * EDMA initialization information (RX / TX rings, queues)
+ * edma_host_sfe_info
+ *	SFE mode configuration information.
+ */
+struct edma_host_sfe_info {
+	struct edma_rx_rings_info rx_info;	/* RX rings information */
+	struct edma_tx_rings_info tx_info;	/* TX rings information */
+};
+
+/*
+ * edma_host_vp_info
+ *	VP mode configuration information.
+ */
+struct edma_host_vp_info {
+	struct edma_rx_rings_info rx_info;	/* RX rings information */
+	struct edma_tx_rings_info tx_info;	/* TX rings information */
+};
+
+/*
+ * edma_host_info
+ *	HOST mode configuration information.
+ */
+struct edma_host_info {
+	struct edma_rings_common_info common_info;
+	struct edma_host_sfe_info sfe_info;		/* Host SFE specific information. */
+	struct edma_host_vp_info vp_info;		/* Host VP specific information. */
+};
+
+/*
+ * edma_init_info
+ *	EDMA configuration information (RX / TX rings, queues)
  */
 struct edma_init_info {
-	uint8_t num_cores;
-						/* Number of cores */
-	uint8_t valid_flags;
+	struct edma_host_info host_info;
+						/* Host config info. */
+	struct edma_ds_info ds_info;
+						/* DS config info. */
+	uint32_t valid_flags;
 						/* Valid flags indicating the VP,
 						 * HOST, DS context information is valid or not
 						 */
-	struct edma_host_ctx host_ctx;
-						/* Host ctx config info. */
-	struct edma_ds_ctx ds_ctx;
-						/* DS ctx config info. */
 };
 
 /*
- * EDMA private data structure
+ * edma_gbl_ctx
+ *	EDMA private data structure
  */
 struct edma_gbl_ctx {
 	struct net_device *netdev_arr[EDMA_MAX_PORTS];
@@ -391,14 +496,14 @@ struct edma_gbl_ctx {
 	struct ctl_table_header *ctl_table_hdr;
 			/* sysctl table entry */
 
-	struct edma_rxfill_ring *rxfill_rings;
-			/* Rx Fill Rings, SW is producer */
-	struct edma_rxdesc_ring *rxdesc_rings;
-			/* Rx Descriptor Rings, SW is consumer */
-	struct edma_txdesc_ring *txdesc_rings;
-			/* Tx Descriptor Ring, SW is producer */
-	struct edma_txcmpl_ring *txcmpl_rings;
-			/* Tx complete Ring, SW is consumer */
+	struct edma_rxfill_ring_info rxfill_info[EDMA_MAX_RXFILL_RINGS];
+			/* RX fill ring information */
+	struct edma_rxdesc_ring_info rxdesc_info[EDMA_MAX_RXDESC_RINGS];
+			/* RX desc ring information */
+	struct edma_txdesc_ring_info txdesc_info[EDMA_MAX_TXDESC_RINGS];
+			/* TX desc ring information */
+	struct edma_txcmpl_ring_info txcmpl_info[EDMA_MAX_TXCMPL_RINGS];
+			/* TX cmpl ring information */
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	struct edma_rxdesc_ring *rxdesc_loopback_rings;
@@ -410,22 +515,12 @@ struct edma_gbl_ctx {
 	struct edma_txcmpl_ring *txcmpl_loopback_rings;
 			/* TX completion loopback ring */
 #endif
-	uint32_t rxfill_ring_map[EDMA_RXFILL_RING_PER_CORE_MAX][NR_CPUS];
-			/* Rx Fill ring per-core mapping from device tree */
-	uint32_t rxdesc_ring_map[EDMA_RXDESC_RING_PER_CORE_MAX][NR_CPUS];
-			/* Rx Descriptor ring per-core mapping from device tree */
 	uint32_t (*rxdesc_ring_to_queue_bm)[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT];
 			/* Bitmap of mapped PPE queue ids of the Rx descriptor rings */
 	uint32_t *cache_data;
 			/* pointer to EDMA descriptor rings cache register data */
-	int32_t tx_to_txcmpl_map[EDMA_MAX_TXDESC_RINGS];
-			/* Tx ring to Tx complete ring mapping */
-	int32_t tx_map[EDMA_MAX_TX_PORTS][NR_CPUS];
-			/* Per core Tx ring to core mapping */
 	int32_t tx_fc_grp_map[NSS_DP_HW_MAX_FC_GRP];
 			/* Per GMAC TxDesc ring to flow control group mapping */
-	int32_t txcmpl_map[EDMA_TXCMPL_RING_PER_CORE_MAX][NR_CPUS];
-			/* Tx complete ring to core mapping */
 
 	struct dentry *root_dentry;	/* Root debugfs entry */
 	struct dentry *stats_dentry;	/* Statistics debugfs entry */
@@ -447,38 +542,8 @@ struct edma_gbl_ctx {
 			/* Max TX desc rings */
 	uint32_t rxfill_ring_max;
 			/* Max RX fill rings */
-	uint32_t txcomp_ring_max;
+	uint32_t txcmpl_ring_max;
 			/* Max TX comp rings */
-	uint32_t num_txdesc_rings;
-			/* Number of TxDesc rings */
-	uint32_t txdesc_ring_start;
-			/* Id of first TXDESC ring */
-	uint32_t txdesc_ring_end;
-			/* Id of the last TXDESC ring */
-	uint32_t num_txcmpl_rings;
-			/* Number of TxCmpl rings */
-	uint32_t txcmpl_ring_start;
-			/* Id of first TXCMPL ring */
-	uint32_t txcmpl_ring_end;
-			/* Id of last TXCMPL ring */
-	uint32_t num_rxfill_rings;
-			/* Number of RxFill rings */
-	uint32_t rxfill_ring_start;
-			/* Id of first RxFill ring */
-	uint32_t rxfill_ring_end;
-			/* Id of last RxFill ring */
-	uint32_t num_rxdesc_rings;
-			/* Number of RxDesc rings */
-	uint32_t rxdesc_ring_start;
-			/* Id of first RxDesc ring */
-	uint32_t rxdesc_ring_end;
-			/* Id of last RxDesc ring */
-	uint32_t txcmpl_intr[EDMA_MAX_TXCMPL_RINGS];
-			/* TxCmpl ring IRQ numbers */
-	uint32_t rxfill_intr[EDMA_MAX_RXFILL_RINGS];
-			/* Rx fill ring IRQ numbers */
-	uint32_t rxdesc_intr[EDMA_MAX_RXDESC_RINGS];
-			/* Rx desc ring IRQ numbers */
 	uint32_t misc_intr;
 			/* Misc IRQ number */
 
@@ -538,8 +603,6 @@ struct edma_gbl_ctx {
 #endif
 	bool edma_initialized;
 			/* Flag to check initialization status */
-	uint32_t rx_ring_queue_map[EDMA_MAX_PRI_PER_CORE][NR_CPUS];
-			/* Rx ring to queue mapping */
 #ifdef NSS_DP_PPEDS_SUPPORT
 	uint32_t ppeds_node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
 	struct edma_ppeds_drv ppeds_drv;
@@ -568,13 +631,13 @@ struct edma_gbl_ctx {
 	void __iomem *tstamp_nsec;
 			/* EDMA timestamp value in nano-second */
 #endif
-	struct edma_init_info edma_init;
-			/* EDMA initialization information */
 };
 
 extern struct edma_gbl_ctx edma_gbl_ctx;
+extern struct edma_init_info init_info;
 extern uint32_t edma_hang_recover;
 extern int edma_dp_extension_en;
+
 
 int edma_irq_init(void);
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx);

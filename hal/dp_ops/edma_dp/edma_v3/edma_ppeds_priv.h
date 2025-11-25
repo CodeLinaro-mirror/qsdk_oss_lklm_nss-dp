@@ -14,6 +14,7 @@
 #define EDMA_PPEDS_RX_WEIGHT	1	/* PPE-DS Rx processing budget */
 #define EDMA_PPEDS_SERVICE_STOP_BIT 0
 #define EDMA_PPEDS_TXCOMP_NAPI_BIT 1
+#define EDMA_PPEDS_MAX_RINGS_PER_NODE	2
 
 /*
  * Rx rings flow control threshold values

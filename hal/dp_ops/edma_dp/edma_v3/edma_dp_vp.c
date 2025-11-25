@@ -43,7 +43,7 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 	/*
 	 * Select a TX ring based on current core
 	 */
-	txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[0][smp_processor_id()];
+	txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[smp_processor_id()][0];
 
 	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
 	stats = this_cpu_ptr(pcpu_stats->tx_stats);

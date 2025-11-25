@@ -34,9 +34,9 @@
  * Number of Max Tx/Rx Rings supported
  */
 #define NSS_DP_EDMA_MAX_RXDESC_RINGS		24	/* Max RxDesc rings */
-#define NSS_DP_EDMA_MAX_RXFILL_RINGS		 8	/* Max RxFill rings */
-#define NSS_DP_EDMA_MAX_TXCMPL_RINGS		32	/* Max TxCmpl rings */
-#define NSS_DP_EDMA_MAX_TXDESC_RINGS		32	/* Max TxDesc rings */
+#define NSS_DP_EDMA_MAX_RXFILL_RINGS		20	/* Max RxFill rings */
+#define NSS_DP_EDMA_MAX_TXCMPL_RINGS		20	/* Max TxCmpl rings */
+#define NSS_DP_EDMA_MAX_TXDESC_RINGS		24	/* Max TxDesc rings */
 
 /*
  * TX/RX NAPI budget

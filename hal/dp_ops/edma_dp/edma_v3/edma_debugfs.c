@@ -106,8 +106,6 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	struct edma_rx_fill_stats *rx_fill_stats;
 	struct edma_rx_desc_stats *rx_desc_stats;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-	uint32_t rx_fill_start_id = egc->rxfill_ring_start;
-	uint32_t rx_desc_start_id = egc->rxdesc_ring_start;
 	uint32_t i, j;
 	unsigned int start;
 #ifdef NSS_DP_PPEDS_SUPPORT
@@ -117,14 +115,14 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	struct edma_ppeds *ppeds_node;
 #endif
 
-	rx_fill_stats = kzalloc(egc->num_rxfill_rings * sizeof(struct edma_rx_fill_stats),
+	rx_fill_stats = kzalloc(egc->rxfill_ring_max * sizeof(struct edma_rx_fill_stats),
 				 GFP_KERNEL);
 	if (!rx_fill_stats) {
 		edma_err("Error in allocating the Rx fill stats buffer\n");
 		return -ENOMEM;
 	}
 
-	rx_desc_stats = kzalloc(egc->num_rxdesc_rings * sizeof(struct edma_rx_desc_stats),
+	rx_desc_stats = kzalloc(egc->rxdesc_ring_max * sizeof(struct edma_rx_desc_stats),
 				 GFP_KERNEL);
 	if (!rx_desc_stats) {
 		edma_err("Error in allocating the Rx descriptor stats buffer\n");
@@ -135,11 +133,14 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	/*
 	 * Get stats for Rx fill rings
 	 */
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
 		struct edma_rxfill_ring *rxfill_ring;
 		struct edma_rx_fill_stats *stats;
 
-		rxfill_ring = &egc->rxfill_rings[i];
+		if (!(egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		rxfill_ring = egc->rxfill_info[i].rxfill_ring;
 		stats = &rxfill_ring->rx_fill_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&stats->syncp);
@@ -153,11 +154,14 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	/*
 	 * Get stats for Rx Desc rings
 	 */
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 		struct edma_rx_desc_stats *stats;
 
-		rxdesc_ring = &egc->rxdesc_rings[i];
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
 		stats = &rxdesc_ring->rx_desc_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&stats->syncp);
@@ -173,17 +177,20 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	edma_debugfs_print_banner(m, EDMA_RX_RING_STATS_NODE_NAME);
 
 	seq_printf(m, "\n#EDMA RX descriptor rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
-		seq_printf(m, "\t\tEDMA RX descriptor %d ring stats:\n", i + rx_desc_start_id);
+	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
+		if (!(edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		seq_printf(m, "\t\tEDMA RX descriptor %d ring stats:\n", i);
 		seq_printf(m, "\t\t rxdesc[%d]:src_port_inval = %llu\n",
-				i + rx_desc_start_id, rx_desc_stats[i].src_port_inval);
+				i, rx_desc_stats[i].src_port_inval);
 		seq_printf(m, "\t\t rxdesc[%d]:src_port_inval_type = %llu\n",
-				i + rx_desc_start_id, rx_desc_stats[i].src_port_inval_type);
+				i, rx_desc_stats[i].src_port_inval_type);
 		seq_printf(m, "\t\t rxdesc[%d]:src_port_inval_netdev = %llu\n",
-				i + rx_desc_start_id,
+				i,
 				rx_desc_stats[i].src_port_inval_netdev);
 		seq_printf(m, "\t\t rxdesc[%d]:rx_napi_sched = %llu\n\n",
-				i + rx_desc_start_id, rx_desc_stats[i].rx_napi_sched);
+				i, rx_desc_stats[i].rx_napi_sched);
 		seq_printf(m, "\t\t Rx Descriptor ring full utilization stats\n");
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
 			 seq_printf(m, "\t\t %s utilized %d times\n", edma_debugfs_ring_usage_dump[j],
@@ -193,12 +200,15 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	}
 
 	seq_printf(m, "\n#EDMA RX fill rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx.num_rxfill_rings; i++) {
-		seq_printf(m, "\t\tEDMA RX fill %d ring stats:\n", i + rx_fill_start_id);
+	for (i = 0; i < edma_gbl_ctx.rxfill_ring_max; i++) {
+		if (!(edma_gbl_ctx.rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		seq_printf(m, "\t\tEDMA RX fill %d ring stats:\n", i);
 		seq_printf(m, "\t\t rxfill[%d]:alloc_failed = %llu\n",
-				i + rx_fill_start_id, rx_fill_stats[i].alloc_failed);
+				i, rx_fill_stats[i].alloc_failed);
 		seq_printf(m, "\t\t rxfill[%d]:page_alloc_failed = %llu\n\n",
-				i + rx_fill_start_id, rx_fill_stats[i].page_alloc_failed);
+				i, rx_fill_stats[i].page_alloc_failed);
 		seq_printf(m, "\t\t Rx fill ring empty stats\n");
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
 			seq_printf(m, "\t\t %s occurred %d times\n", edma_debugfs_ring_usage_rx_fill_dump[j],
@@ -258,8 +268,6 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	struct edma_tx_cmpl_stats *tx_cmpl_stats;
 	struct edma_tx_desc_stats *tx_desc_stats;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-	uint32_t tx_cmpl_start_id = egc->txcmpl_ring_start;
-	uint32_t tx_desc_start_id = egc->txdesc_ring_start;
 	uint32_t i, j;
 	unsigned int start;
 #ifdef NSS_DP_PPEDS_SUPPORT
@@ -269,13 +277,13 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	struct edma_ppeds *ppeds_node;
 #endif
 
-	tx_cmpl_stats = kzalloc(egc->num_txcmpl_rings * sizeof(struct edma_tx_cmpl_stats), GFP_KERNEL);
+	tx_cmpl_stats = kzalloc(egc->txcmpl_ring_max * sizeof(struct edma_tx_cmpl_stats), GFP_KERNEL);
 	if (!tx_cmpl_stats) {
 		edma_err("Error in allocating the Tx complete stats buffer\n");
 		return -ENOMEM;
 	}
 
-	tx_desc_stats = kzalloc(egc->num_txdesc_rings * sizeof(struct edma_tx_desc_stats), GFP_KERNEL);
+	tx_desc_stats = kzalloc(egc->txdesc_ring_max * sizeof(struct edma_tx_desc_stats), GFP_KERNEL);
 	if (!tx_desc_stats) {
 		edma_err("Error in allocating the Tx descriptor stats buffer\n");
 		kfree(tx_cmpl_stats);
@@ -285,11 +293,14 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	/*
 	 * Get stats for Tx desc rings
 	 */
-	for (i = 0; i < egc->num_txdesc_rings; i++) {
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
 		struct edma_txdesc_ring *txdesc_ring;
 		struct edma_tx_desc_stats *stats;
 
-		txdesc_ring = &egc->txdesc_rings[i];
+		if (!(egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		txdesc_ring = egc->txdesc_info[i].txdesc_ring;
 		stats = &txdesc_ring->tx_desc_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&stats->syncp);
@@ -303,11 +314,14 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	/*
 	 * Get stats for Tx Complete rings
 	 */
-	for (i = 0; i < egc->num_txcmpl_rings; i++) {
+	for (i = 0; i < egc->txcmpl_ring_max; i++) {
 		struct edma_txcmpl_ring *txcmpl_ring;
 		struct edma_tx_cmpl_stats *stats;
 
-		txcmpl_ring = &egc->txcmpl_rings[i];
+		if (!(egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		txcmpl_ring = egc->txcmpl_info[i].txcmpl_ring;
 		stats = &txcmpl_ring->tx_cmpl_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&stats->syncp);
@@ -321,31 +335,37 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	edma_debugfs_print_banner(m, EDMA_TX_RING_STATS_NODE_NAME);
 
 	seq_printf(m, "\n#EDMA TX complete rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx.num_txcmpl_rings; i++) {
-		seq_printf(m, "\t\tEDMA TX complete %d ring stats:\n", i + tx_cmpl_start_id);
+	for (i = 0; i < edma_gbl_ctx.txcmpl_ring_max; i++) {
+		if (!(edma_gbl_ctx.txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		seq_printf(m, "\t\tEDMA TX complete %d ring stats:\n", i);
 		seq_printf(m, "\t\t txcmpl[%d]:invalid_buffer = %llu\n",
-				i + tx_cmpl_start_id, tx_cmpl_stats[i].invalid_buffer);
+				i, tx_cmpl_stats[i].invalid_buffer);
 		for (j = 0; j < EDMA_TX_CMPL_ERR_MAX; j++) {
 			if (!strcmp(edma_txcmpl_err_string[j], "Reserved")) {
 				continue;
 			}
 			seq_printf(m, "\t\t txcmpl[%d]:%s = %llu\n",
-					i + tx_cmpl_start_id, edma_txcmpl_err_string[j], tx_cmpl_stats[i].errors[j]);
+					i, edma_txcmpl_err_string[j], tx_cmpl_stats[i].errors[j]);
 		}
 		seq_printf(m, "\t\t txcmpl[%d]:desc_with_more_bit = %llu\n",
-				i + tx_cmpl_start_id, tx_cmpl_stats[i].desc_with_more_bit);
+				i, tx_cmpl_stats[i].desc_with_more_bit);
 		seq_printf(m, "\t\t txcmpl[%d]:no_pending_desc = %llu\n",
-				i + tx_cmpl_start_id, tx_cmpl_stats[i].no_pending_desc);
+				i, tx_cmpl_stats[i].no_pending_desc);
 		seq_printf(m, "\n");
 	}
 
 	seq_printf(m, "\n#EDMA TX descriptor rings stats:\n\n");
-	for (i = 0; i < edma_gbl_ctx.num_txdesc_rings; i++) {
-		seq_printf(m, "\t\tEDMA TX descriptor %d ring stats:\n", i + tx_desc_start_id);
+	for (i = 0; i < edma_gbl_ctx.txdesc_ring_max; i++) {
+		if (!(edma_gbl_ctx.txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED))
+			continue;
+
+		seq_printf(m, "\t\tEDMA TX descriptor %d ring stats:\n", i);
 		seq_printf(m, "\t\t txdesc[%d]:no_desc_avail = %llu\n",
-				i + tx_desc_start_id, tx_desc_stats[i].no_desc_avail);
+				i, tx_desc_stats[i].no_desc_avail);
 		seq_printf(m, "\t\t txdesc[%d]:tso_max_seg_exceed = %llu\n\n",
-				i + tx_desc_start_id, tx_desc_stats[i].tso_max_seg_exceed);
+				i, tx_desc_stats[i].tso_max_seg_exceed);
 		seq_printf(m, "\t\t Tx descriptor ring full utilization stats\n");
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
 			seq_printf(m, "\t\t %s utilized %d times\n", edma_debugfs_ring_usage_dump[j],
@@ -476,17 +496,19 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
 	struct edma_ppeds *ppeds_node;
 #endif
 
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
-		memset(&egc->rxfill_rings[i].rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED)
+			memset(&egc->rxfill_info[i].rxfill_ring->rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
 	}
 
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
-		memset(&egc->rxdesc_rings[i].rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
+	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED)
+			memset(&egc->rxdesc_info[i].rxdesc_ring->rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
 	}
 
-
-	for (i = 0; i < egc->num_txdesc_rings; i++) {
-		memset(&egc->txdesc_rings[i].tx_desc_stats, 0, sizeof(struct edma_tx_desc_stats));
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
+		if (egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED)
+			memset(&egc->txdesc_info[i].txdesc_ring->tx_desc_stats, 0, sizeof(struct edma_tx_desc_stats));
 	}
 
 #ifdef NSS_DP_PPEDS_SUPPORT

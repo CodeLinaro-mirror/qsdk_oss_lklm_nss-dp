@@ -259,14 +259,14 @@ static int32_t edma_cfg_rx_desc_rings_reset_queue_mapping(void)
  *	API to reset the priority for PPE queues mapped to Rx rings
  */
 static int32_t edma_cfg_rx_desc_ring_reset_queue_priority(struct edma_gbl_ctx *egc,
-				uint32_t rxdesc_ring_idx)
+				uint32_t queue_id, uint32_t ring_id)
 {
 	fal_qos_scheduler_cfg_t qsch;
-	uint32_t i, queue_id, port_id;
+	uint32_t i, port_id;
+	uint32_t num_queues = 0;
 
-	for (i = 0; i < EDMA_MAX_PRI_PER_CORE; i++) {
-		queue_id = egc->rx_ring_queue_map[i][rxdesc_ring_idx];
-
+	num_queues = egc->rxdesc_info[ring_id].ppe_num_queues;
+	for (i = 0; i < num_queues; i++) {
 		memset(&qsch, 0, sizeof(fal_qos_scheduler_cfg_t));
 		if (fal_queue_scheduler_get(EDMA_SWITCH_DEV_ID, queue_id,
 					EDMA_PPE_QUEUE_LEVEL, &port_id, &qsch) != SW_OK) {
@@ -282,6 +282,8 @@ static int32_t edma_cfg_rx_desc_ring_reset_queue_priority(struct edma_gbl_ctx *e
 			edma_err("Error in resetting %u queue's priority\n", queue_id);
 			return -1;
 		}
+
+		queue_id++;
 	}
 
 	return 0;
@@ -295,11 +297,6 @@ static int32_t edma_cfg_rx_desc_ring_reset_queue_config(struct edma_gbl_ctx *egc
 {
 	int32_t i;
 
-	if (unlikely(egc->num_rxdesc_rings > NR_CPUS)) {
-		edma_err("Invalid count of rxdesc rings: %d\n", egc->num_rxdesc_rings);
-		return -1;
-	}
-
 	/*
 	 * Unmap Rxdesc ring to PPE queue mapping to reset its backpressure configuration
 	 */
@@ -311,15 +308,36 @@ static int32_t edma_cfg_rx_desc_ring_reset_queue_config(struct edma_gbl_ctx *egc
 	/*
 	 * Reset the priority for PPE queues mapped to Rx rings
 	 */
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
-		if(edma_cfg_rx_desc_ring_reset_queue_priority(egc, i)) {
-			edma_err("Error in resetting ring:%d queue's priority\n",
-					 i + egc->rxdesc_ring_start);
-			return -1;
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			if (edma_cfg_rx_desc_ring_reset_queue_priority(egc, egc->rxdesc_info[i].ppe_queue_base + egc->rx_queue_start, i)) {
+				edma_err("Error in resetting ring:%d queue's priority\n",
+					 i);
+				return -1;
+			}
 		}
 	}
 
 	return 0;
+}
+
+/*
+ * edma_cfg_fill_ring_to_queue_bitmap()
+ *	API to fill the ring to queue bitmap for one ring
+ */
+static void edma_cfg_fill_ring_to_queue_bitmap(uint32_t ring_id, uint32_t *bitmap)
+{
+	uint32_t queue_id, word_idx = 0;
+	uint32_t num_queues = 0;
+
+	num_queues = edma_gbl_ctx.rxdesc_info[ring_id].ppe_num_queues;
+	queue_id = edma_gbl_ctx.rx_queue_start + edma_gbl_ctx.rxdesc_info[ring_id].ppe_queue_base;
+	for (int idx = 0; idx < num_queues; idx++) {
+		word_idx = (queue_id / EDMA_BITS_IN_WORD);
+
+		bitmap[word_idx] |= 1 << queue_id;
+		queue_id ++;
+	}
 }
 
 /*
@@ -331,16 +349,22 @@ static void edma_cfg_rx_desc_ring_to_queue_mapping(uint32_t enable)
 	uint32_t i, j;
 	sw_error_t ret;
 	fal_queue_bmp_t queue_bmp = {0};
+	uint32_t rxdesc_ring_to_queue_bitmap[EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT];
 
 	/*
 	 * Rxdesc ring to PPE queue mapping
 	 */
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &edma_gbl_ctx.rxdesc_rings[i];
+		if (!(edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxdesc_ring = edma_gbl_ctx.rxdesc_info[i].rxdesc_ring;
 		if (enable) {
-			memcpy(queue_bmp.bmp, edma_gbl_ctx.rxdesc_ring_to_queue_bm[i],
+			memset(rxdesc_ring_to_queue_bitmap, 0, (sizeof(uint32_t) * EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT));
+			edma_cfg_fill_ring_to_queue_bitmap(i, rxdesc_ring_to_queue_bitmap);
+			memcpy(queue_bmp.bmp, rxdesc_ring_to_queue_bitmap,
 					sizeof(uint32_t) * EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT);
 		}
 
@@ -528,11 +552,13 @@ static void edma_cfg_rx_fill_ring_flow_control(uint32_t threshold_xoff, uint32_t
 	data = (threshold_xoff & EDMA_RXFILL_FC_XOFF_THRE_MASK) << EDMA_RXFILL_FC_XOFF_THRE_SHIFT;
 	data |= ((threshold_xon & EDMA_RXFILL_FC_XON_THRE_MASK) << EDMA_RXFILL_FC_XON_THRE_SHIFT);
 
-	for (i = 0; i < edma_gbl_ctx.num_rxfill_rings; i++) {
-		struct edma_rxfill_ring *rxfill_ring;
+	for (i = 0; i < edma_gbl_ctx.rxfill_ring_max; i++) {
+		if (edma_gbl_ctx.rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_rxfill_ring *rxfill_ring;
 
-		rxfill_ring = &edma_gbl_ctx.rxfill_rings[i];
-		edma_reg_write(EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id), data);
+			rxfill_ring = edma_gbl_ctx.rxfill_info[i].rxfill_ring;
+			edma_reg_write(EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id), data);
+		}
 	}
 }
 
@@ -546,11 +572,13 @@ static void edma_cfg_rx_desc_ring_flow_control(uint32_t threshold_xoff, uint32_t
 
 	data = (threshold_xoff & EDMA_RXDESC_FC_XOFF_THRE_MASK) << EDMA_RXDESC_FC_XOFF_THRE_SHIFT;
 	data |= ((threshold_xon & EDMA_RXDESC_FC_XON_THRE_MASK) << EDMA_RXDESC_FC_XON_THRE_SHIFT);
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
-		struct edma_rxdesc_ring *rxdesc_ring;
+	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
+		if (edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &edma_gbl_ctx.rxdesc_rings[i];
-		edma_reg_write(EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id), data);
+			rxdesc_ring = edma_gbl_ctx.rxdesc_info[i].rxdesc_ring;
+			edma_reg_write(EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id), data);
+		}
 	}
 }
 
@@ -563,20 +591,23 @@ static void edma_cfg_rx_desc_ring_flow_control(uint32_t threshold_xoff, uint32_t
 static int32_t edma_cfg_rx_mapped_queue_ac_fc_configure(uint16_t threshold,
 				uint32_t enable)
 {
-	uint32_t i, j, queue_id;
+	uint32_t i, j, queue_id, num_queues;
 	fal_ac_dynamic_threshold_t cfg;
 	fal_ac_obj_t obj;
 	fal_ac_ctrl_t ac_ctrl;
 	bool is_enable = (enable ? true: false);
 
-	for (i = 0; i < edma_gbl_ctx.num_rxdesc_rings; i++) {
+	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &edma_gbl_ctx.rxdesc_rings[i];
+		if (!(edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
 
-		for (j = 0; j < EDMA_MAX_PRI_PER_CORE; j++) {
-			queue_id = edma_gbl_ctx.rx_ring_queue_map[j][i];
+		rxdesc_ring = edma_gbl_ctx.rxdesc_info[i].rxdesc_ring;
+		queue_id = edma_gbl_ctx.rx_queue_start + edma_gbl_ctx.rxdesc_info[i].ppe_queue_base;
+		num_queues = edma_gbl_ctx.rxdesc_info[i].ppe_num_queues;
 
+		for (j = 0; j < num_queues; j++) {
 			/*
 			 * Configure the mapped queues AC FC configuration threshold
 			 */
@@ -622,6 +653,8 @@ static int32_t edma_cfg_rx_mapped_queue_ac_fc_configure(uint16_t threshold,
 						" for queue:%d", is_enable, obj.obj_id);
 				return -1;
 			}
+
+			queue_id ++;
 		}
 	}
 
@@ -833,8 +866,10 @@ void edma_cfg_rx_mcast_qid_to_core_mapping(struct edma_gbl_ctx *egc, uint8_t cor
 
 	/*
 	 * Map PPE multicast queues to the Rx ring according to the core.
+	 * TO-DO: Update this API for IPQ9679 later as per updated mirror
+	 * functionality.
 	 */
-	desc_index = egc->rxdesc_ring_map[0][core_id];
+	desc_index = 0;
 	for (q_id = EDMA_CPU_PORT_MCAST_QUEUE_START;
 		q_id <= EDMA_CPU_PORT_MCAST_QUEUE_END;
 			q_id += EDMA_QID2RID_NUM_PER_REG) {
@@ -857,61 +892,90 @@ void edma_cfg_rx_mcast_qid_to_core_mapping(struct edma_gbl_ctx *egc, uint8_t cor
  */
 static void edma_cfg_rx_qid_to_rx_desc_ring_mapping(struct edma_gbl_ctx *egc)
 {
-	uint32_t desc_index, q_id;
+	uint32_t q, first_rxdesc_ring;
 	uint32_t reg_index, data;
-	uint32_t ring_index;
-	uint32_t q;
+	uint32_t max_q;
+	uint32_t mc_mirror_ring;
+	bool is_first_rxdesc_ring = false;
 
 	/*
 	 * Set PPE QID to EDMA Rx ring mapping.
 	 * Each entry can hold mapping for 4 PPE queues and
 	 * entry size is 4 bytes.
 	 */
-	desc_index = (egc->rxdesc_ring_start & EDMA_RX_RING_ID_MASK);
+	for (int i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
 
-	/*
-	 * Here map all the queues to ring.
-	 */
+		if (!is_first_rxdesc_ring) {
+			first_rxdesc_ring = i;
+			is_first_rxdesc_ring = true;
+		}
 
-	for (q_id = egc->rx_queue_start;
-		q_id <= EDMA_CPU_PORT_QUEUE_MAX(egc->rx_queue_start);
-			q_id += EDMA_QID2RID_NUM_PER_REG) {
-		reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
-		q = q_id - egc->rx_queue_start;
-		ring_index = (desc_index + EDMA_QUEUE_OFFSET(q));
+		q = egc->rx_queue_start + egc->rxdesc_info[i].ppe_queue_base;
+		max_q = q + egc->rxdesc_info[i].ppe_num_queues;
 
-		data = EDMA_RX_RING_ID_QUEUE0_SET(ring_index) |
-			EDMA_RX_RING_ID_QUEUE1_SET(ring_index) |
-			EDMA_RX_RING_ID_QUEUE2_SET(ring_index) |
-			EDMA_RX_RING_ID_QUEUE3_SET(ring_index);
+		for (int q_id = q; q_id < max_q; q_id++) {
+			reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
 
-		edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
-		edma_info("Configure QID2RID(%d) reg:0x%x to 0x%x, desc_index: %d, reg_index: %d\n",
-				q_id, EDMA_QID2RID_TABLE_MEM(reg_index), data, desc_index, reg_index);
+			if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 0)
+				data = EDMA_RX_RING_ID_QUEUE0_SET(i);
+			else if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 1)
+				data = EDMA_RX_RING_ID_QUEUE1_SET(i);
+			else if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 2)
+				data = EDMA_RX_RING_ID_QUEUE2_SET(i);
+			else if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 3)
+				data = EDMA_RX_RING_ID_QUEUE3_SET(i);
 
+			data |= edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
+			edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
+		}
+
+		for (int q_id = q; q_id < max_q; q_id++) {
+			reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
+			data |= edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
+
+			edma_debug("Configure QID2RID(%d) reg:0x%x to 0x%x\n",
+				q_id, EDMA_QID2RID_TABLE_MEM(reg_index), data);
+		}
 	}
 
-#ifdef NSS_DP_IPQ9679
 	/*
 	 * Map PPE multicast queues to the first Rx ring.
+	 * These queues are used for mirroring as well.
+	 *
+	 * TO-DO: Instead of using first common RX desc ring
+	 * use a separate ring for mirror purpose.
 	 */
-	desc_index = (egc->rxdesc_ring_start & EDMA_RX_RING_ID_MASK);
-	for (q_id = EDMA_CPU_PORT_MCAST_QUEUE_START;
+	data = 0;
+	mc_mirror_ring = first_rxdesc_ring;
+	for (int q_id = EDMA_CPU_PORT_MCAST_QUEUE_START;
 		q_id <= EDMA_CPU_PORT_MCAST_QUEUE_END;
-			q_id += EDMA_QID2RID_NUM_PER_REG) {
+			q_id ++) {
 		reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
-		data = EDMA_RX_RING_ID_QUEUE0_SET(desc_index) |
-			EDMA_RX_RING_ID_QUEUE1_SET(desc_index) |
-			EDMA_RX_RING_ID_QUEUE2_SET(desc_index) |
-			EDMA_RX_RING_ID_QUEUE3_SET(desc_index);
 
+		if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 0)
+			data = EDMA_RX_RING_ID_QUEUE0_SET(mc_mirror_ring);
+		else if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 1)
+			data = EDMA_RX_RING_ID_QUEUE1_SET(mc_mirror_ring);
+		else if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 2)
+			data = EDMA_RX_RING_ID_QUEUE2_SET(mc_mirror_ring);
+		else if ((q_id % EDMA_QID2RID_NUM_PER_REG) == 3)
+			data = EDMA_RX_RING_ID_QUEUE3_SET(mc_mirror_ring);
+
+		data |= edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
 		edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
-
-		edma_debug("Configure QID2RID(%d) reg:0x%x to 0x%x\n",
-				q_id, EDMA_QID2RID_TABLE_MEM(reg_index), data);
 	}
 
-#endif
+	for (int q_id = EDMA_CPU_PORT_MCAST_QUEUE_START;
+		q_id <= EDMA_CPU_PORT_MCAST_QUEUE_END;
+			q_id++) {
+		reg_index = q_id/EDMA_QID2RID_NUM_PER_REG;
+		data |= edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
+
+		edma_debug("Configure QID2RID(%d) MCAST reg:0x%x to 0x%x\n",
+			q_id, EDMA_QID2RID_TABLE_MEM(reg_index), data);
+	}
 }
 
 /*
@@ -935,10 +999,14 @@ static void edma_cfg_rx_rings_to_rx_fill_mapping(struct edma_gbl_ctx *egc)
 	edma_reg_write(EDMA_REG_RXDESC2FILL_MAP_4, 0);
 	edma_reg_write(EDMA_REG_RXDESC2FILL_MAP_5, 0);
 
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
 		uint32_t data, reg, ring_id;
-		struct edma_rxdesc_ring *rxdesc_ring = &egc->rxdesc_rings[i];
+		struct edma_rxdesc_ring *rxdesc_ring;
 
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
 		ring_id = rxdesc_ring->ring_id;
 		if ((ring_id >= 0) && (ring_id <= 3)) {
 			reg = EDMA_REG_RXDESC2FILL_MAP_0;
@@ -978,6 +1046,38 @@ static void edma_cfg_rx_rings_to_rx_fill_mapping(struct edma_gbl_ctx *egc)
 }
 
 /*
+ * edma_cfg_rx_desc_ring_enable()
+ *	API to enable one RX DESC ring.
+ */
+void edma_cfg_rx_desc_ring_enable(struct edma_rxdesc_ring *rxdesc_ring)
+{
+	uint32_t data;
+	uint32_t i = rxdesc_ring->ring_id;
+
+	data = edma_reg_read(EDMA_REG_RXDESC_DISABLE(i));
+	data &= ~EDMA_RXDESC_RX_DISABLE;
+	edma_reg_write(EDMA_REG_RXDESC_DISABLE(i), data);
+}
+
+/*
+ * edma_cfg_rx_fill_ring_enable()
+ *	API to enable one RX FILL ring.
+ */
+void edma_cfg_rx_fill_ring_enable(struct edma_rxfill_ring *rxfill_ring)
+{
+	uint32_t data;
+	uint32_t i = rxfill_ring->ring_id;
+
+	data = edma_reg_read(EDMA_REG_RXFILL_RING_EN(i));
+	data |= EDMA_RXFILL_RING_EN;
+	edma_reg_write(EDMA_REG_RXFILL_RING_EN(i), data);
+
+	data = edma_reg_read(EDMA_REG_RXFILL_DISABLE(i));
+	data &= ~EDMA_RXFILL_RING_DISABLE;
+	edma_reg_write(EDMA_REG_RXFILL_DISABLE(i), data);
+}
+
+/*
  * edma_cfg_rx_rings_enable()
  *	API to enable Rx and Rxfill rings
  */
@@ -986,26 +1086,19 @@ void edma_cfg_rx_rings_enable(struct edma_gbl_ctx *egc)
 	uint32_t i;
 
 	/*
-	 * Enable Rx rings
+	 * Disable Rx rings
 	 */
-	for (i = egc->rxdesc_ring_start; i < egc->rxdesc_ring_end; i++) {
-		uint32_t data;
-
-		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE(i));
-		data &= ~EDMA_RXDESC_RX_DISABLE;
-		edma_reg_write(EDMA_REG_RXDESC_DISABLE(i), data);
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_rx_desc_ring_enable(egc->rxdesc_info[i].rxdesc_ring);
 	}
 
-	for (i = egc->rxfill_ring_start; i < egc->rxfill_ring_end; i++) {
-		uint32_t data;
-
-		data = edma_reg_read(EDMA_REG_RXFILL_RING_EN(i));
-		data |= EDMA_RXFILL_RING_EN;
-		edma_reg_write(EDMA_REG_RXFILL_RING_EN(i), data);
-
-		data = edma_reg_read(EDMA_REG_RXFILL_DISABLE(i));
-		data &= ~EDMA_RXFILL_RING_DISABLE;
-		edma_reg_write(EDMA_REG_RXFILL_DISABLE(i), data);
+	/*
+	 * Disable RxFill Rings
+	 */
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_rx_fill_ring_enable(egc->rxfill_info[i].rxfill_ring);
 	}
 }
 
@@ -1064,6 +1157,40 @@ void edma_cfg_rx_ring_reset(struct edma_rxdesc_ring *ring)
 }
 
 /*
+ * edma_cfg_rx_desc_ring_disable()
+ *	API to disable one RXDESC ring.
+ */
+void edma_cfg_rx_desc_ring_disable(struct edma_rxdesc_ring *rxdesc_ring)
+{
+	uint32_t data;
+
+	data = edma_reg_read(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id));
+	data |= EDMA_RXDESC_RX_DISABLE;
+	edma_reg_write(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id), data);
+
+	do {
+		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(rxdesc_ring->ring_id));
+	} while (!data);
+}
+
+/*
+ * edma_cfg_rx_fill_ring_disable()
+ *	API to disable one RXFILL ring.
+ */
+void edma_cfg_rx_fill_ring_disable(struct edma_rxfill_ring *rxfill_ring)
+{
+	uint32_t data;
+
+	data = edma_reg_read(EDMA_REG_RXFILL_RING_EN(rxfill_ring->ring_id));
+	data &= ~EDMA_RXFILL_RING_EN;
+	edma_reg_write(EDMA_REG_RXFILL_RING_EN(rxfill_ring->ring_id), data);
+
+	data = edma_reg_read(EDMA_REG_RXFILL_DISABLE(rxfill_ring->ring_id));
+	data |= EDMA_RXFILL_RING_DISABLE;
+	edma_reg_write(EDMA_REG_RXFILL_DISABLE(rxfill_ring->ring_id), data);
+}
+
+/*
  * edma_cfg_rx_rings_disable()
  *	API to disable Rx and Rxfill rings
  */
@@ -1074,35 +1201,17 @@ void edma_cfg_rx_rings_disable(struct edma_gbl_ctx *egc)
 	/*
 	 * Disable Rx rings
 	 */
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
-		uint32_t data;
-		struct edma_rxdesc_ring *rxdesc_ring = NULL;
-
-		rxdesc_ring = &egc->rxdesc_rings[i];
-		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id));
-		data |= EDMA_RXDESC_RX_DISABLE;
-		edma_reg_write(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id), data);
-
-		do {
-			data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(rxdesc_ring->ring_id));
-		} while (!data);
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_rx_desc_ring_disable(egc->rxdesc_info[i].rxdesc_ring);
 	}
 
 	/*
 	 * Disable RxFill Rings
 	 */
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
-		uint32_t data;
-		struct edma_rxfill_ring *rxfill_ring = NULL;
-
-		rxfill_ring = &egc->rxfill_rings[i];
-		data = edma_reg_read(EDMA_REG_RXFILL_RING_EN(rxfill_ring->ring_id));
-		data &= ~EDMA_RXFILL_RING_EN;
-		edma_reg_write(EDMA_REG_RXFILL_RING_EN(rxfill_ring->ring_id), data);
-
-		data = edma_reg_read(EDMA_REG_RXFILL_DISABLE(rxfill_ring->ring_id));
-		data |= EDMA_RXFILL_RING_DISABLE;
-		edma_reg_write(EDMA_REG_RXFILL_DISABLE(rxfill_ring->ring_id), data);
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_rx_fill_ring_disable(egc->rxfill_info[i].rxfill_ring);
 	}
 }
 
@@ -1155,114 +1264,73 @@ void edma_cfg_rx_point_offload_mapping(struct edma_gbl_ctx *egc)
  */
 static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 {
-	int32_t ring_idx, alloc_size, buf_len, pri_idx;
-
-	/*
-	 * Set buffer allocation size
-	 */
-	if (egc->rx_jumbo_mru) {
-		alloc_size = egc->rx_jumbo_mru + EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
-		buf_len = alloc_size - EDMA_RX_SKB_HEADROOM - NET_IP_ALIGN;
-	} else if (egc->rx_page_mode) {
-		alloc_size = EDMA_RX_PAGE_MODE_SKB_SIZE + EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
-		buf_len = PAGE_SIZE;
-	} else {
-		alloc_size = dp_global_ctx.rx_buf_size;
-		buf_len = alloc_size - EDMA_RX_SKB_HEADROOM - NET_IP_ALIGN;
-	}
-
-	edma_debug("EDMA ctx:%px rx_ring alloc_size=%d, buf_len=%d\n", egc, alloc_size, buf_len);
+	struct edma_rxdesc_ring_info *rxdesc_info = egc->rxdesc_info;
+	struct edma_rxfill_ring_info *rxfill_info = egc->rxfill_info;
+	int32_t ring_idx;
 
 	/*
 	 * Allocate Rx fill ring descriptors
 	 */
-	for (ring_idx = 0; ring_idx < egc->num_rxfill_rings; ring_idx++) {
+	for (ring_idx = 0; ring_idx < egc->rxfill_ring_max; ring_idx++) {
 		int32_t ret;
 		struct edma_rxfill_ring *rxfill_ring = NULL;
 
-		rxfill_ring = &egc->rxfill_rings[ring_idx];
-		rxfill_ring->count = EDMA_RX_RING_SIZE;
-		rxfill_ring->ring_id = egc->rxfill_ring_start + ring_idx;
-		rxfill_ring->alloc_size = alloc_size;
-		rxfill_ring->buf_len = buf_len;
-		rxfill_ring->page_mode = egc->rx_page_mode;
+		if (!(rxfill_info[ring_idx].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxfill_ring = rxfill_info[ring_idx].rxfill_ring;
+		rxfill_ring->count = rxfill_info[ring_idx].desc_count;
+		rxfill_ring->alloc_size = rxfill_info[ring_idx].alloc_size;
+		rxfill_ring->buf_len = rxfill_info[ring_idx].buffer_len;
+		rxfill_ring->page_mode = rxfill_info[ring_idx].page_mode;
 
 		ret = edma_cfg_rx_fill_ring_setup(rxfill_ring);
 		if (ret != 0) {
 			edma_err("Error in setting up %d rxfill ring. ret: %d",
 					 rxfill_ring->ring_id, ret);
-			while (--ring_idx >= 0) {
-				edma_cfg_rx_fill_ring_cleanup(egc,
-					&egc->rxfill_rings[ring_idx]);
-			}
-
 			return -ENOMEM;
 		}
+
+		rxfill_info[ring_idx].status_flags |= EDMA_RING_STATUS_FLAGS_IS_CONFIGURED;
 	}
 
 	/*
 	 * Allocate RxDesc ring descriptors
 	 */
-	for (ring_idx = 0; ring_idx < egc->num_rxdesc_rings; ring_idx++) {
-		uint32_t index, word_idx, bit_idx, queue_id = egc->rx_queue_start;
+	for (ring_idx = 0; ring_idx < egc->rxdesc_ring_max; ring_idx++) {
 		int32_t ret;
+		uint32_t rxfill_id;
 		struct edma_rxdesc_ring *rxdesc_ring = NULL;
 
-		rxdesc_ring = &egc->rxdesc_rings[ring_idx];
-		rxdesc_ring->count = EDMA_RX_RING_SIZE;
-		rxdesc_ring->ring_id = egc->rxdesc_ring_start + ring_idx;
+		if (!(rxdesc_info[ring_idx].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
 
-		if (queue_id > EDMA_CPU_PORT_QUEUE_MAX(egc->rx_queue_start)) {
-			edma_err("Invalid queue_id: %d\n", queue_id);
-			while (--ring_idx >= 0) {
-				edma_cfg_rx_desc_ring_cleanup(egc, &egc->rxdesc_rings[ring_idx]);
-			}
-
-			goto rxdesc_mem_alloc_fail;
-		}
-
-		for (pri_idx = 0; pri_idx < EDMA_MAX_PRI_PER_CORE; pri_idx++) {
-			queue_id = egc->rx_ring_queue_map[pri_idx][ring_idx];
-			word_idx = (queue_id / EDMA_BITS_IN_WORD);
-			bit_idx = (queue_id % EDMA_BITS_IN_WORD);
-
-			/*
-			 * To-do: Use ring queue map from dtsi to build a bitmap
-			 */
-			egc->rxdesc_ring_to_queue_bm[ring_idx][word_idx] |= 1 << bit_idx;
-			edma_debug("Queue_id: %d, ring_id: %d\n", queue_id, ring_idx);
-		}
+		rxdesc_ring = rxdesc_info[ring_idx].rxdesc_ring;
+		rxdesc_ring->count = rxdesc_info[ring_idx].desc_count;
 
 		/*
 		 * Create a mapping between RX Desc ring and Rx fill ring.
-		 * Number of fill rings are lesser than the descriptor rings
-		 * Share the fill rings across descriptor rings.
 		 */
-		index = egc->rxfill_ring_start + (ring_idx % egc->num_rxfill_rings);
-		rxdesc_ring->rxfill = &egc->rxfill_rings[index - egc->rxfill_ring_start];
+		rxfill_id = rxdesc_info[ring_idx].rxfill_ring_id;
+		if (!(rxfill_info[rxfill_id].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED)) {
+			edma_err("Fill ring %d for rx desc ring %d is not configured",
+					 rxfill_id, rxdesc_ring->ring_id);
+			return -ENOMEM;
+		}
+
+		rxdesc_ring->rxfill = rxfill_info[rxfill_id].rxfill_ring;
 
 		ret = edma_cfg_rx_desc_ring_setup(rxdesc_ring);
 		if (ret != 0) {
 			edma_err("Error in setting up %d rxdesc ring. ret: %d",
 					 rxdesc_ring->ring_id, ret);
-			while (--ring_idx >= 0) {
-				edma_cfg_rx_desc_ring_cleanup(egc, &egc->rxdesc_rings[ring_idx]);
-			}
-
-			goto rxdesc_mem_alloc_fail;
+			return -ENOMEM;
 		}
-	}
 
-	edma_info("Rx descriptor count for Rx desc and Rx fill rings : %d\n", EDMA_RX_RING_SIZE);
+		rxdesc_info[ring_idx].status_flags |= EDMA_RING_STATUS_FLAGS_IS_CONFIGURED;
+	}
 
 	return 0;
-
-rxdesc_mem_alloc_fail:
-	for (ring_idx = 0; ring_idx < egc->num_rxfill_rings; ring_idx++) {
-		edma_cfg_rx_fill_ring_cleanup(egc, &egc->rxfill_rings[ring_idx]);
-	}
-
-	return -ENOMEM;
 }
 
 /*
@@ -1292,36 +1360,48 @@ void edma_cfg_rx_page_mode_and_jumbo(struct edma_gbl_ctx *egc)
  */
 int32_t edma_cfg_rx_rings_alloc(struct edma_gbl_ctx *egc)
 {
-	egc->rxfill_rings = kzalloc((sizeof(struct edma_rxfill_ring) *
-				egc->num_rxfill_rings), GFP_KERNEL);
-	if (!egc->rxfill_rings) {
-		edma_err("Error in allocating rxfill ring\n");
-		return -ENOMEM;
+	struct edma_rxdesc_ring_info *rxdesc_info = egc->rxdesc_info;
+	struct edma_rxfill_ring_info *rxfill_info = egc->rxfill_info;
+
+	for (int i = 0; i < egc->rxfill_ring_max; i++) {
+		if (!(rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		if (rxfill_info[i].rxfill_ring) {
+			edma_err("Fill Ring %d is already allocated \n", i);
+			return -ENOMEM;
+		}
+
+		rxfill_info[i].rxfill_ring = kzalloc(sizeof(struct edma_rxfill_ring), GFP_KERNEL);
+		if (!rxfill_info[i].rxfill_ring) {
+			edma_err("Error in allocating fill ring\n");
+			return -ENOMEM;
+		}
+
+		rxfill_info[i].rxfill_ring->ring_id = i;
 	}
 
-	egc->rxdesc_rings = kzalloc((sizeof(struct edma_rxdesc_ring) *
-				egc->num_rxdesc_rings), GFP_KERNEL);
-	if (!egc->rxdesc_rings) {
-		edma_err("Error in allocating rxdesc ring\n");
-		goto rxdesc_ring_alloc_fail;
-	}
+	for (int i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (!(rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
 
-	edma_info("RxDesc:%u (%u-%u) RxFill:%u (%u-%u)\n",
-		egc->num_rxdesc_rings, egc->rxdesc_ring_start,
-		(egc->rxdesc_ring_start + egc->num_rxdesc_rings - 1),
-		egc->num_rxfill_rings, egc->rxfill_ring_start,
-		(egc->rxfill_ring_start + egc->num_rxfill_rings - 1));
+		if (rxdesc_info[i].rxdesc_ring) {
+			edma_err("RX desc Ring %d is already allocated \n", i);
+			return -ENOMEM;
+		}
 
-	egc->rxdesc_ring_to_queue_bm = kzalloc(egc->num_rxdesc_rings * sizeof(uint32_t) * \
-			EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT, GFP_KERNEL);
-	if (!egc->rxdesc_ring_to_queue_bm) {
-		edma_err("Error in allocating mapped queue area for Rxdesc rings\n");
-		goto rx_rings_mapped_queue_alloc_failed;
+		rxdesc_info[i].rxdesc_ring = kzalloc(sizeof(struct edma_rxdesc_ring), GFP_KERNEL);
+		if (!rxdesc_info[i].rxdesc_ring) {
+			edma_err("Error in allocating rxdesc ring\n");
+			return -ENOMEM;
+		}
+
+		rxdesc_info[i].rxdesc_ring->ring_id = i;
 	}
 
 	if (edma_cfg_rx_rings_setup(egc)) {
 		edma_err("Error in setting up rx rings\n");
-		goto rx_rings_setup_fail;
+		return -ENOMEM;
 	}
 
 	/*
@@ -1329,22 +1409,10 @@ int32_t edma_cfg_rx_rings_alloc(struct edma_gbl_ctx *egc)
 	 */
 	if (edma_cfg_rx_desc_ring_reset_queue_config(egc)) {
 		edma_err("Error in resetting the Rx descriptor rings configurations\n");
-		edma_cfg_rx_rings_cleanup(egc);
 		return -EINVAL;
 	}
 
 	return 0;
-
-rx_rings_setup_fail:
-	kfree(egc->rxdesc_ring_to_queue_bm);
-	egc->rxdesc_ring_to_queue_bm = NULL;
-rx_rings_mapped_queue_alloc_failed:
-	kfree(egc->rxdesc_rings);
-	egc->rxdesc_rings = NULL;
-rxdesc_ring_alloc_fail:
-	kfree(egc->rxfill_rings);
-	egc->rxfill_rings = NULL;
-	return -ENOMEM;
 }
 
 /*
@@ -1358,25 +1426,39 @@ void edma_cfg_rx_rings_cleanup(struct edma_gbl_ctx *egc)
 	/*
 	 * Free Rx fill ring descriptors
 	 */
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
-		edma_cfg_rx_fill_ring_cleanup(egc, &egc->rxfill_rings[i]);
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		if (!(egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED) {
+			edma_cfg_rx_fill_ring_cleanup(egc, egc->rxfill_info[i].rxfill_ring);
+		}
+
+		if (egc->rxfill_info[i].rxfill_ring) {
+			kfree(egc->rxfill_info[i].rxfill_ring);
+			egc->rxfill_info[i].rxfill_ring = NULL;
+		}
+
+		egc->rxfill_info[i].status_flags = 0;
 	}
 
 	/*
 	 * Free Rx completion ring descriptors
 	 */
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
-		edma_cfg_rx_desc_ring_cleanup(egc, &egc->rxdesc_rings[i]);
-	}
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
 
-	kfree(egc->rxfill_rings);
-	kfree(egc->rxdesc_rings);
-	egc->rxfill_rings = NULL;
-	egc->rxdesc_rings = NULL;
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED) {
+			edma_cfg_rx_desc_ring_cleanup(egc, egc->rxdesc_info[i].rxdesc_ring);
+		}
 
-	if (egc->rxdesc_ring_to_queue_bm) {
-		kfree(egc->rxdesc_ring_to_queue_bm);
-		egc->rxdesc_ring_to_queue_bm = NULL;
+		if (egc->rxdesc_info[i].rxdesc_ring) {
+			kfree(egc->rxdesc_info[i].rxdesc_ring);
+			egc->rxdesc_info[i].rxdesc_ring = NULL;
+		}
+
+		egc->rxdesc_info[i].status_flags = 0;
 	}
 }
 
@@ -1429,15 +1511,17 @@ void edma_cfg_rx_rings(struct edma_gbl_ctx *egc)
 	/*
 	 * Configure RXFILL rings
 	 */
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
-		edma_cfg_rx_fill_ring_configure(&egc->rxfill_rings[i]);
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_rx_fill_ring_configure(egc->rxfill_info[i].rxfill_ring);
 	}
 
 	/*
 	 * Configure RXDESC ring
 	 */
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
-		edma_cfg_rx_desc_ring_configure(&egc->rxdesc_rings[i]);
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_rx_desc_ring_configure(egc->rxdesc_info[i].rxdesc_ring);
 	}
 
 	if (edma_cfg_rx_fc_enable) {
@@ -1478,10 +1562,13 @@ void edma_cfg_rx_napi_disable(struct edma_gbl_ctx *egc)
 {
 	uint32_t i;
 
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &egc->rxdesc_rings[i];
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
 
 		if (!rxdesc_ring->napi_added) {
 			continue;
@@ -1490,10 +1577,13 @@ void edma_cfg_rx_napi_disable(struct edma_gbl_ctx *egc)
 		napi_disable(&rxdesc_ring->napi);
 	}
 
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
 		struct edma_rxfill_ring *rxfill_ring;
 
-		rxfill_ring = &egc->rxfill_rings[i];
+		if (!(egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxfill_ring = egc->rxfill_info[i].rxfill_ring;
 
 		if (!rxfill_ring->napi_added) {
 			continue;
@@ -1511,10 +1601,13 @@ void edma_cfg_rx_napi_enable(struct edma_gbl_ctx *egc)
 {
 	uint32_t i;
 
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &egc->rxdesc_rings[i];
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
 
 		if (!rxdesc_ring->napi_added) {
 			continue;
@@ -1523,10 +1616,13 @@ void edma_cfg_rx_napi_enable(struct edma_gbl_ctx *egc)
 		napi_enable(&rxdesc_ring->napi);
 	}
 
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
 		struct edma_rxfill_ring *rxfill_ring;
 
-		rxfill_ring = &egc->rxfill_rings[i];
+		if (!(egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxfill_ring = egc->rxfill_info[i].rxfill_ring;
 
 		if (!rxfill_ring->napi_added) {
 			continue;
@@ -1544,10 +1640,13 @@ void edma_cfg_rx_napi_delete(struct edma_gbl_ctx *egc)
 {
 	uint32_t i;
 
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
 		struct edma_rxdesc_ring *rxdesc_ring;
 
-		rxdesc_ring = &egc->rxdesc_rings[i];
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
 
 		if (!rxdesc_ring->napi_added) {
 			continue;
@@ -1557,10 +1656,13 @@ void edma_cfg_rx_napi_delete(struct edma_gbl_ctx *egc)
 		rxdesc_ring->napi_added = false;
 	}
 
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
 		struct edma_rxfill_ring *rxfill_ring;
 
-		rxfill_ring = &egc->rxfill_rings[i];
+		if (!(egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxfill_ring = egc->rxfill_info[i].rxfill_ring;
 
 		if (!rxfill_ring->napi_added) {
 			continue;
@@ -1586,8 +1688,14 @@ void edma_cfg_rx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev)
 		nss_dp_rx_napi_budget = NSS_DP_HAL_RX_NAPI_BUDGET;
 	}
 
-	for (i = 0; i < egc->num_rxdesc_rings; i++) {
-		struct edma_rxdesc_ring *rxdesc_ring = &egc->rxdesc_rings[i];
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		struct edma_rxdesc_ring *rxdesc_ring = NULL;
+
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		if (nss_dp_capwap_vp_rx_core == i) {
 			edma_info("Adding capwap napi for ring_id %d for core3\n", nss_dp_capwap_vp_rx_core);
@@ -1619,8 +1727,14 @@ void edma_cfg_rx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev)
 		nss_dp_rxfill_napi_budget = NSS_DP_HAL_RXFILL_NAPI_BUDGET;
 	}
 
-	for (i = 0; i < egc->num_rxfill_rings; i++) {
-		struct edma_rxfill_ring *rxfill_ring = &egc->rxfill_rings[i];
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		struct edma_rxfill_ring *rxfill_ring;
+
+		if (!(egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		rxfill_ring = egc->rxfill_info[i].rxfill_ring;
+
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 		netif_napi_add(netdev, &rxfill_ring->napi,
 			edma_rxfill_napi_poll, nss_dp_rxfill_napi_budget);

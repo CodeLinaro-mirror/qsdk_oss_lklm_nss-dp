@@ -152,9 +152,11 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 
 	/*
 	 * Select a TX ring
-	 * TO-DO: Remove the hardcoded value based on number of CPUS
 	 */
-	skbq = (skb_get_queue_mapping(skb) & 7);
+	skbq = (skb_get_queue_mapping(skb) & ((1 << NR_CPUS) - 1));
+	if (unlikely(skbq >= NR_CPUS)) {
+		skbq = NR_CPUS - 1;
+	}
 
 	dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
 #ifdef NSS_DP_MHT_SW_PORT_MAP
@@ -167,7 +169,7 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 		txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[0][skbq];
 	}
 #else
-	txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[0][skbq];
+	txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[skbq][0];
 #endif
 
 	pcpu_stats = &dp_dev->dp_info.pcpu_stats;

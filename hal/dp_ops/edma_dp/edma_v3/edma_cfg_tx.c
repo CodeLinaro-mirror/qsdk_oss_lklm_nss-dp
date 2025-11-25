@@ -313,29 +313,6 @@ static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring
 }
 
 /*
- * edma_cfg_tx_cmpl_mapping_fill()
- *	API to fill tx complete ring mapping per core
- */
-void edma_cfg_tx_cmpl_mapping_fill(struct edma_gbl_ctx *egc)
-{
-	uint32_t i, j;
-
-	for (i = 0; i < EDMA_TX_RING_PER_CORE_MAX; i++) {
-		for_each_possible_cpu(j) {
-			int32_t txdesc_id = egc->tx_map[i][j];
-			if (txdesc_id < 0) {
-				continue;
-			}
-
-			egc->txcmpl_map[i][j] =
-					egc->tx_to_txcmpl_map[txdesc_id];
-			edma_debug("txcmpl_map[i][j]: %d\n",
-					egc->txcmpl_map[i][j]);
-		}
-	}
-}
-
-/*
  * edma_cfg_tx_fill_per_port_tx_map()
  *	API to fill per-port Tx ring mapping in net device private area.
  */
@@ -346,19 +323,29 @@ void edma_cfg_tx_fill_per_port_tx_map(struct net_device *netdev, uint32_t macid)
 	uint32_t sw_port, j;
 #endif
 	struct nss_dp_dev *dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
-	uint32_t txdesc_start = edma_gbl_ctx.txdesc_ring_start;
 	struct edma_txdesc_ring *txdesc_ring;
+	struct edma_tx_rings_info *tx_info;
 	uint32_t txdesc_ring_id;
 
-	for_each_possible_cpu(i) {
+	if (dp_dev->macid == NSS_DP_VP_MAC_ID) {
+		tx_info = &init_info.host_info.vp_info.tx_info;
+	} else {
+		tx_info = &init_info.host_info.sfe_info.tx_info;
+	}
 
-		txdesc_ring_id = edma_gbl_ctx.tx_map[nss_dp_get_idx_from_macid(macid)][i];
-		txdesc_ring = &edma_gbl_ctx.txdesc_rings[txdesc_ring_id - txdesc_start];
-		dp_dev->dp_info.txr_map[0][i] = txdesc_ring;
+	for_each_possible_cpu(i) {
+		for (int j = 0; j < tx_info->max_rings_per_core; j++) {
+			if (j >= EDMA_MAX_TX_RINGS_PER_CORE)
+				continue;
+
+			txdesc_ring_id = tx_info->tx_ring_per_core_map[i][j];
+			txdesc_ring = edma_gbl_ctx.txdesc_info[txdesc_ring_id].txdesc_ring;
+			dp_dev->dp_info.txr_map[i][j] = txdesc_ring;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
-		if (dp_dev->nss_dp_mht_dev)
-			dp_dev->dp_info.txr_sw_port_map[0][i] = txdesc_ring;
+			if (dp_dev->nss_dp_mht_dev)
+				dp_dev->dp_info.txr_sw_port_map[0][i] = txdesc_ring;
 #endif
+		}
 	}
 
 #ifdef NSS_DP_MHT_SW_PORT_MAP
@@ -378,6 +365,19 @@ void edma_cfg_tx_fill_per_port_tx_map(struct net_device *netdev, uint32_t macid)
 }
 
 /*
+ * edma_cfg_tx_desc_ring_enable()
+ *	API to enable one TX DESC ring.
+ */
+void edma_cfg_tx_desc_ring_enable(struct edma_txdesc_ring *txdesc_ring)
+{
+	uint32_t data;
+
+	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
+	data |= EDMA_TXDESC_CTRL_TXEN_SET(EDMA_TXDESC_TX_ENABLE);
+	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
+}
+
+/*
  * edma_cfg_tx_rings_enable()
  *	API to enable TX rings
  */
@@ -388,13 +388,9 @@ void edma_cfg_tx_rings_enable(struct edma_gbl_ctx *egc)
 	/*
 	 * Enable Tx rings
 	 */
-	for (i = 0; i < egc->num_txdesc_rings; i++) {
-		uint32_t data;
-		struct edma_txdesc_ring *txdesc_ring = &egc->txdesc_rings[i];
-
-		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
-		data |= EDMA_TXDESC_CTRL_TXEN_SET(EDMA_TXDESC_TX_ENABLE);
-		edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
+		if (egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_tx_desc_ring_enable(egc->txdesc_info[i].txdesc_ring);
 	}
 }
 
@@ -427,6 +423,19 @@ void edma_cfg_tx_ring_reset(struct edma_txdesc_ring *ring)
 }
 
 /*
+ * edma_cfg_tx_desc_ring_disable()
+ *	API to disable one TXDESC ring.
+ */
+void edma_cfg_tx_desc_ring_disable(struct edma_txdesc_ring *txdesc_ring)
+{
+	uint32_t data;
+
+	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
+	data &= ~EDMA_TXDESC_TX_ENABLE;
+	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
+}
+
+/*
  * edma_cfg_tx_rings_disable()
  *	API to disable TX rings
  */
@@ -437,14 +446,9 @@ void edma_cfg_tx_rings_disable(struct edma_gbl_ctx *egc)
 	/*
 	 * Disable Tx rings
 	 */
-	for (i = 0; i < egc->num_txdesc_rings; i++) {
-		struct edma_txdesc_ring *txdesc_ring = NULL;
-		uint32_t data;
-
-		txdesc_ring = &egc->txdesc_rings[i];
-		data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
-		data &= ~EDMA_TXDESC_TX_ENABLE;
-		edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
+		if (egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_tx_desc_ring_disable(egc->txdesc_info[i].txdesc_ring);
 	}
 }
 
@@ -465,45 +469,40 @@ void edma_cfg_tx_mapping(struct edma_gbl_ctx *egc)
 	edma_reg_write(EDMA_REG_TXDESC2CMPL_MAP_1, 0);
 	edma_reg_write(EDMA_REG_TXDESC2CMPL_MAP_2, 0);
 	edma_reg_write(EDMA_REG_TXDESC2CMPL_MAP_3, 0);
-	desc_index = egc->txcmpl_ring_start;
 
 	/*
 	 * 6 registers to hold the completion mapping for total 32
 	 * TX desc rings (0-5, 6-11, 12-17, 18-23, 24-29 and rest).
 	 * In each entry 5 bits hold the mapping for a particular TX desc ring.
 	 */
-	for (i = egc->txdesc_ring_start; i < egc->txdesc_ring_end; i++) {
-		uint32_t reg, data;
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
+		if (egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			uint32_t reg, data;
 
-		if ((i >= 0) && (i <= 5)) {
-			reg = EDMA_REG_TXDESC2CMPL_MAP_0;
-		} else if ((i >= 6) && (i <= 11)) {
-			reg = EDMA_REG_TXDESC2CMPL_MAP_1;
-		} else if ((i >= 12) && (i <= 17)) {
-			reg = EDMA_REG_TXDESC2CMPL_MAP_2;
-		} else if ((i >= 18) && (i <= 23)) {
-			reg = EDMA_REG_TXDESC2CMPL_MAP_3;
-		}
+			desc_index = egc->txdesc_info[i].txcmpl_ring_id;
+			if ((i >= 0) && (i <= 5)) {
+				reg = EDMA_REG_TXDESC2CMPL_MAP_0;
+			} else if ((i >= 6) && (i <= 11)) {
+				reg = EDMA_REG_TXDESC2CMPL_MAP_1;
+			} else if ((i >= 12) && (i <= 17)) {
+				reg = EDMA_REG_TXDESC2CMPL_MAP_2;
+			} else if ((i >= 18) && (i <= 23)) {
+				reg = EDMA_REG_TXDESC2CMPL_MAP_3;
+			}
 
-		edma_debug("Configure TXDESC:%u to use TXCMPL:%u\n", i, desc_index);
+			edma_debug("Configure TXDESC:%u to use TXCMPL:%u\n", i, desc_index);
 
-		/*
-		 * Set the Tx complete descriptor ring number in the mapping register.
-		 * E.g. If (txcmpl ring)desc_index = 19, (txdesc ring)i = 19.
-		 * 	reg = EDMA_REG_TXDESC2CMPL_MAP_3
-		 * 	data |= (desc_index & 0x1F) << ((i % 6) * 5);
-		 * 	data |= (0x1F << 5); -
-		 * 	This sets 10011 at 5th bit of register EDMA_REG_TXDESC2CMPL_MAP_3
-		 */
-		data = edma_reg_read(reg);
-		data |= (desc_index & EDMA_TXDESC2CMPL_MAP_TXDESC_MASK) << ((i % 6) * 5);
-		edma_reg_write(reg, data);
-
-		egc->tx_to_txcmpl_map[i] = desc_index;
-
-		desc_index++;
-		if (desc_index == egc->txcmpl_ring_end) {
-			desc_index = egc->txcmpl_ring_start;
+			/*
+			 * Set the Tx complete descriptor ring number in the mapping register.
+			 * E.g. If (txcmpl ring)desc_index = 19, (txdesc ring)i = 19.
+			 * 	reg = EDMA_REG_TXDESC2CMPL_MAP_3
+			 * 	data |= (desc_index & 0x1F) << ((i % 6) * 5);
+			 * 	data |= (0x1F << 5); -
+			 * 	This sets 10011 at 5th bit of register EDMA_REG_TXDESC2CMPL_MAP_3
+			 */
+			data = edma_reg_read(reg);
+			data |= (desc_index & EDMA_TXDESC2CMPL_MAP_TXDESC_MASK) << ((i % 6) * 5);
+			edma_reg_write(reg, data);
 		}
 	}
 
@@ -560,98 +559,56 @@ void edma_cfg_tx_point_offload_mapping(struct edma_gbl_ctx *egc)
  */
 static int edma_cfg_tx_rings_setup(struct edma_gbl_ctx *egc)
 {
-	uint32_t i, j = 0;
-#ifdef NSS_DP_MHT_SW_PORT_MAP
-	uint32_t edma_max_gmac = egc->max_tx_ports;
+	uint32_t i = 0;
 
-	/*
-	 * Set Txdesc flow control group id
-	 * Note: Only valid for HAL Ports. Not valid for dummy ports
-	 * Mapping is done for MAX GMAC ports, VP ports needs to be excluded.
-	 */
-	if (!dp_global_ctx.is_mht_dev)
-		edma_max_gmac = egc->max_tx_ports - NSS_DP_VP_HAL_MAX_PORTS;
-
-#ifdef NSS_DP_EDMA_MHT_SW_WITH_VP_RING
-	/*
-	 * Marina has dedicated rings allocated to support
-	 * both MHT HOLB and VP based features together.
-	 * Hence subtract the VP port from max_tx_ports.
-	 */
-	edma_max_gmac = egc->max_tx_ports - NSS_DP_VP_HAL_MAX_PORTS;
-#endif
-#else
-	uint32_t edma_max_gmac = EDMA_MAX_GMACS;
-#endif
-	for (i = 0; i < edma_max_gmac; i++) {
-		for_each_possible_cpu(j) {
-			struct edma_txdesc_ring *txdesc_ring = NULL;
-			uint32_t txdesc_idx = egc->tx_map[i][j]
-						- egc->txdesc_ring_start;
-
-			txdesc_ring = &egc->txdesc_rings[txdesc_idx];
-			txdesc_ring->fc_grp_id = egc->tx_fc_grp_map[i];
-		}
-	}
+	struct edma_txdesc_ring_info *txdesc_info = egc->txdesc_info;
+	struct edma_txcmpl_ring_info *txcmpl_info = egc->txcmpl_info;
 
 	/*
 	 * Allocate TxDesc ring descriptors
 	 */
-	for (i = 0; i < egc->num_txdesc_rings; i++) {
-		struct edma_txdesc_ring *txdesc_ring = NULL;
-		int32_t ret;
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
+		if (txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_txdesc_ring *txdesc_ring = NULL;
+			int32_t ret;
 
-		txdesc_ring = &egc->txdesc_rings[i];
-		txdesc_ring->count = EDMA_TX_RING_SIZE;
-		txdesc_ring->id = egc->txdesc_ring_start + i;
+			txdesc_ring = txdesc_info[i].txdesc_ring;
+			txdesc_ring->count = txdesc_info[i].desc_count;
 
-		ret = edma_cfg_tx_desc_ring_setup(txdesc_ring);
-		if (ret != 0) {
-			edma_err("Error in setting up %d txdesc ring. ret: %d",
-					 txdesc_ring->id, ret);
-			while (i-- >= 0) {
-				edma_cfg_tx_desc_ring_cleanup(egc,
-					&egc->txdesc_rings[i]);
+			ret = edma_cfg_tx_desc_ring_setup(txdesc_ring);
+			if (ret != 0) {
+				edma_err("Error in setting up %d txdesc ring. ret: %d",
+						 txdesc_ring->id, ret);
+				return -ENOMEM;
 			}
 
-			return -ENOMEM;
+			txdesc_info[i].status_flags |= EDMA_RING_STATUS_FLAGS_IS_CONFIGURED;
 		}
 	}
 
 	/*
 	 * Allocate TxCmpl ring descriptors
 	 */
-	for (i = 0; i < egc->num_txcmpl_rings; i++) {
-		struct edma_txcmpl_ring *txcmpl_ring = NULL;
-		int32_t ret;
+	for (i = 0; i < egc->txcmpl_ring_max; i++) {
+		if (txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_txcmpl_ring *txcmpl_ring = NULL;
+			int32_t ret;
 
-		txcmpl_ring = &egc->txcmpl_rings[i];
-		txcmpl_ring->count = EDMA_TX_RING_SIZE;
-		txcmpl_ring->id = egc->txcmpl_ring_start + i;
+			txcmpl_ring = txcmpl_info[i].txcmpl_ring;
+			txcmpl_ring->count = txcmpl_info[i].desc_count;
 
-		ret = edma_cfg_tx_cmpl_ring_setup(txcmpl_ring);
-		if (ret != 0) {
-			edma_err("Error in setting up %d txcmpl ring. ret: %d",
-					 txcmpl_ring->id, ret);
-			while (i-- >= 0) {
-				edma_cfg_tx_cmpl_ring_cleanup(egc,
-						&egc->txcmpl_rings[i]);
+			ret = edma_cfg_tx_cmpl_ring_setup(txcmpl_ring);
+			if (ret != 0) {
+				edma_err("Error in setting up %d txcmpl ring. ret: %d",
+						 txcmpl_ring->id, ret);
+				return -ENOMEM;
 			}
 
-			goto txcmpl_mem_alloc_fail;
+			txcmpl_info[i].status_flags |= EDMA_RING_STATUS_FLAGS_IS_CONFIGURED;
 		}
 	}
 
-	edma_info("Tx descriptor count for Tx desc and Tx complete rings: %d\n", EDMA_TX_RING_SIZE);
-	edma_cfg_tx_cmpl_mapping_fill(egc);
-
 	return 0;
-
-txcmpl_mem_alloc_fail:
-	for (i = 0; i < egc->num_txdesc_rings; i++)
-		edma_cfg_tx_desc_ring_cleanup(egc, &egc->txdesc_rings[i]);
-
-	return -ENOMEM;
 }
 
 /*
@@ -660,40 +617,49 @@ txcmpl_mem_alloc_fail:
  */
 int32_t edma_cfg_tx_rings_alloc(struct edma_gbl_ctx *egc)
 {
-	egc->txdesc_rings = kzalloc((sizeof(struct edma_txdesc_ring) *
-				egc->num_txdesc_rings), GFP_KERNEL);
-	if (!egc->txdesc_rings) {
-		edma_err("Error in allocating txdesc ring\n");
-		return -ENOMEM;
+	struct edma_txdesc_ring_info *txdesc_info = egc->txdesc_info;
+	struct edma_txcmpl_ring_info *txcmpl_info = egc->txcmpl_info;
+
+	for (int i = 0; i < egc->txdesc_ring_max; i++) {
+		if (txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			if (txdesc_info[i].txdesc_ring) {
+				edma_err("TX desc Ring %d is already allocated \n", i);
+				return -ENOMEM;
+			}
+
+			txdesc_info[i].txdesc_ring = kzalloc(sizeof(struct edma_txdesc_ring), GFP_KERNEL);
+			if (!txdesc_info[i].txdesc_ring) {
+				edma_err("Error in allocating txdesc ring\n");
+				return -ENOMEM;
+			}
+
+			txdesc_info[i].txdesc_ring->id = i;
+		}
 	}
 
-	egc->txcmpl_rings = kzalloc((sizeof(struct edma_txcmpl_ring) *
-				egc->num_txcmpl_rings), GFP_KERNEL);
-	if (!egc->txcmpl_rings) {
-		edma_err("Error in allocating txcmpl ring\n");
-		goto txcmpl_ring_alloc_fail;
-	}
+	for (int i = 0; i < egc->txcmpl_ring_max; i++) {
+		if (txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			if (txcmpl_info[i].txcmpl_ring) {
+				edma_err("TX cmpl Ring %d is already allocated \n", i);
+				return -ENOMEM;
+			}
 
-	edma_info("Num rings - TxDesc:%u (%u-%u) TxCmpl:%u (%u-%u)\n",
-			egc->num_txdesc_rings, egc->txdesc_ring_start,
-			(egc->txdesc_ring_start + egc->num_txdesc_rings - 1),
-			egc->num_txcmpl_rings, egc->txcmpl_ring_start,
-			(egc->txcmpl_ring_start + egc->num_txcmpl_rings - 1));
+			txcmpl_info[i].txcmpl_ring = kzalloc(sizeof(struct edma_txcmpl_ring), GFP_KERNEL);
+			if (!txcmpl_info[i].txcmpl_ring) {
+				edma_err("Error in allocating txcmpl ring\n");
+				return -ENOMEM;
+			}
+
+			txcmpl_info[i].txcmpl_ring->id = i;
+		}
+	}
 
 	if (edma_cfg_tx_rings_setup(egc)) {
 		edma_err("Error in setting up tx rings\n");
-		goto tx_rings_setup_fail;
+		return -ENOMEM;
 	}
 
 	return 0;
-
-tx_rings_setup_fail:
-	kfree(egc->txcmpl_rings);
-	egc->txcmpl_rings = NULL;
-txcmpl_ring_alloc_fail:
-	kfree(egc->txdesc_rings);
-	egc->txdesc_rings = NULL;
-	return -ENOMEM;
 }
 
 /*
@@ -707,21 +673,40 @@ void edma_cfg_tx_rings_cleanup(struct edma_gbl_ctx *egc)
 	/*
 	 * Free any buffers assigned to any descriptors
 	 */
-	for (i = 0; i < egc->num_txdesc_rings; i++) {
-		edma_cfg_tx_desc_ring_cleanup(egc, &egc->txdesc_rings[i]);
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
+		if (!(egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		if (egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED) {
+			edma_cfg_tx_desc_ring_cleanup(egc, egc->txdesc_info[i].txdesc_ring);
+		}
+
+		if (egc->txdesc_info[i].txdesc_ring) {
+			kfree(egc->txdesc_info[i].txdesc_ring);
+			egc->txdesc_info[i].txdesc_ring = NULL;
+		}
+
+		egc->txdesc_info[i].status_flags = 0;
 	}
 
 	/*
 	 * Free Tx completion descriptors
 	 */
-	for (i = 0; i < egc->num_txcmpl_rings; i++) {
-		edma_cfg_tx_cmpl_ring_cleanup(egc, &egc->txcmpl_rings[i]);
-	}
+	for (i = 0; i < egc->txcmpl_ring_max; i++) {
+		if (!(egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
 
-	kfree(egc->txdesc_rings);
-	kfree(egc->txcmpl_rings);
-	egc->txdesc_rings = NULL;
-	egc->txcmpl_rings = NULL;
+		if (egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED) {
+			edma_cfg_tx_cmpl_ring_cleanup(egc, egc->txcmpl_info[i].txcmpl_ring);
+		}
+
+		if (egc->txcmpl_info[i].txcmpl_ring) {
+			kfree(egc->txcmpl_info[i].txcmpl_ring);
+			egc->txcmpl_info[i].txcmpl_ring = NULL;
+		}
+
+		egc->txcmpl_info[i].status_flags = 0;
+	}
 }
 
 /*
@@ -735,15 +720,17 @@ void edma_cfg_tx_rings(struct edma_gbl_ctx *egc)
 	/*
 	 * Configure TXDESC ring
 	 */
-	for (i = 0; i < egc->num_txdesc_rings; i++) {
-		edma_cfg_tx_desc_ring_configure(&egc->txdesc_rings[i]);
+	for (i = 0; i < egc->txdesc_ring_max; i++) {
+		if (egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_tx_desc_ring_configure(egc->txdesc_info[i].txdesc_ring);
 	}
 
 	/*
 	 * Configure TXCMPL ring
 	 */
-	for (i = 0; i < egc->num_txcmpl_rings; i++) {
-		edma_cfg_tx_cmpl_ring_configure(&egc->txcmpl_rings[i]);
+	for (i = 0; i < egc->txcmpl_ring_max; i++) {
+		if (egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
+			edma_cfg_tx_cmpl_ring_configure(egc->txcmpl_info[i].txcmpl_ring);
 	}
 }
 
@@ -755,10 +742,13 @@ void edma_cfg_tx_napi_enable(struct edma_gbl_ctx *egc)
 {
 	uint32_t i;
 
-	for (i = 0; i < egc->num_txcmpl_rings; i++) {
+	for (i = 0; i < egc->txcmpl_ring_max; i++) {
 		struct edma_txcmpl_ring *txcmpl_ring;
 
-		txcmpl_ring = &egc->txcmpl_rings[i];
+		if (!(egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		txcmpl_ring = egc->txcmpl_info[i].txcmpl_ring;
 
 		if (!txcmpl_ring->napi_added) {
 			continue;
@@ -780,10 +770,13 @@ void edma_cfg_tx_napi_disable(struct edma_gbl_ctx *egc)
 {
 	uint32_t i;
 
-	for (i = 0; i < egc->num_txcmpl_rings; i++) {
+	for (i = 0; i < egc->txcmpl_ring_max; i++) {
 		struct edma_txcmpl_ring *txcmpl_ring;
 
-		txcmpl_ring = &egc->txcmpl_rings[i];
+		if (!(egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		txcmpl_ring = egc->txcmpl_info[i].txcmpl_ring;
 
 		if (!txcmpl_ring->napi_added) {
 			continue;
@@ -801,10 +794,13 @@ void edma_cfg_tx_napi_delete(struct edma_gbl_ctx *egc)
 {
 	uint32_t i;
 
-	for (i = 0; i < egc->num_txcmpl_rings; i++) {
+	for (i = 0; i < egc->txcmpl_ring_max; i++) {
 		struct edma_txcmpl_ring *txcmpl_ring;
 
-		txcmpl_ring = &egc->txcmpl_rings[i];
+		if (!(egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		txcmpl_ring = egc->txcmpl_info[i].txcmpl_ring;
 
 		if (!txcmpl_ring->napi_added) {
 			continue;
@@ -821,8 +817,6 @@ void edma_cfg_tx_napi_delete(struct edma_gbl_ctx *egc)
  */
 void edma_cfg_tx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev, uint32_t macid)
 {
-	uint32_t i;
-	uint32_t index, ring_idx;
 	struct edma_txcmpl_ring *txcmpl_ring;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	struct nss_dp_dev *dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
@@ -838,10 +832,11 @@ void edma_cfg_tx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev, u
 	/*
 	 * Adding tx napi for a interface with each queue.
 	 */
-	index = nss_dp_get_idx_from_macid(macid);
-	for_each_possible_cpu(i) {
-		ring_idx = egc->txcmpl_map[index][i] - egc->txcmpl_ring_start;
-		txcmpl_ring = &egc->txcmpl_rings[ring_idx];
+	for (int i = 0; i < egc->txcmpl_ring_max; i++) {
+		if (!(egc->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		txcmpl_ring = egc->txcmpl_info[i].txcmpl_ring;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 		if (txcmpl_ring->napi_added) {
 			continue;
