@@ -418,6 +418,248 @@ void edma_cleanup(bool is_dp_override)
 }
 
 /*
+ * edma_validate_host_txrx_rings()
+ *	Validate host TX and RX ring information
+ *	Note: Caller is supposed to send NULL if no tx/rx info is given.
+ *	      The caller should ensure to send the valid bitmaps.
+ */
+static int edma_validate_host_txrx_rings(struct edma_rx_rings_info *rx_info,
+					struct edma_tx_rings_info *tx_info,
+					uint32_t rxfill_ring_bitmap,
+					uint32_t txcmpl_ring_bitmap)
+{
+	uint32_t rx_ring_bitmap = 0;
+	uint32_t tx_ring_bitmap = 0;
+	int i;
+
+	/*
+	 * If no RX / TX is valid, return error.
+	 */
+	if (!rx_info && !tx_info)
+		return -EINVAL;
+
+	if (!rx_info)
+		goto validate_tx;
+
+	/*
+	 * Validate RX ring counts
+	 */
+	if ((rx_info->num_rx_rings <= 0) || (rx_info->num_rx_rings > EDMA_MAX_RXDESC_RING_PER_TYPE)) {
+		edma_err("Invalid num_rx_rings (%d), valid range: 1-%d\n",
+			rx_info->num_rx_rings, EDMA_MAX_RXDESC_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate RX ring mappings and check for duplicates
+	 */
+	for (i = 0; i < rx_info->num_rx_rings; i++) {
+		uint32_t rx_ring_id = rx_info->rx_map[i].rx_ring_id;
+		uint32_t rx_fill_ring_id = rx_info->rx_map[i].rx_fill_ring_id;
+
+		if ((rx_ring_id < 0) || (rx_ring_id >= EDMA_MAX_RXDESC_RINGS)) {
+			edma_err("Invalid rx_ring_id (%d) at index %d, max allowed: %d\n",
+				rx_ring_id, i, EDMA_MAX_RXDESC_RINGS - 1);
+			return -EINVAL;
+		}
+
+		if ((rx_fill_ring_id < 0) || (rx_fill_ring_id >= EDMA_MAX_RXFILL_RINGS)) {
+			edma_err("Invalid rx_fill_ring_id (%d) at index %d, max allowed: %d\n",
+				rx_fill_ring_id, i, EDMA_MAX_RXFILL_RINGS - 1);
+			return -EINVAL;
+		}
+
+		/* Verify that rx_fill_ring_id is present in the validated rxfill_ring_bitmap */
+		if (!(rxfill_ring_bitmap & (1 << rx_fill_ring_id))) {
+			edma_err("rx_fill_ring_id (%d) at index %d is not present in edma_rxfill_ring_map\n",
+				rx_fill_ring_id, i);
+			return -EINVAL;
+		}
+
+		/* Check for duplicate RX ring ID */
+		if (rx_ring_bitmap & (1 << rx_ring_id)) {
+			edma_err("Duplicate rx_ring_id (%d) found at index %d\n", rx_ring_id, i);
+			return -EINVAL;
+		}
+
+		rx_ring_bitmap |= (1 << rx_ring_id);
+	}
+
+validate_tx:
+	if (!tx_info)
+		return 0;
+
+	/*
+	 * Validate TX ring counts
+	 */
+	if ((tx_info->num_tx_rings <= 0) || (tx_info->num_tx_rings > EDMA_MAX_TXDESC_RING_PER_TYPE)) {
+		edma_err("Invalid num_tx_rings (%d), valid range: 1-%d\n",
+			tx_info->num_tx_rings, EDMA_MAX_TXDESC_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	if ((tx_info->max_rings_per_core <= 0) || (tx_info->max_rings_per_core > EDMA_MAX_TX_RINGS_PER_CORE)) {
+		edma_err("Invalid max_rings_per_core (%d), valid range: 1-%d\n",
+			tx_info->max_rings_per_core, EDMA_MAX_TX_RINGS_PER_CORE);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate TX ring mappings and check for duplicates
+	 */
+	for (i = 0; i < tx_info->num_tx_rings; i++) {
+		uint32_t tx_ring_id = tx_info->tx_map[i].tx_ring_id;
+		uint32_t tx_cmpl_ring_id = tx_info->tx_map[i].tx_cmpl_ring_id;
+
+		if ((tx_ring_id < 0) || (tx_ring_id >= EDMA_MAX_TXDESC_RINGS)) {
+			edma_err("Invalid tx_ring_id (%d) at index %d, max allowed: %d\n",
+				tx_ring_id, i, EDMA_MAX_TXDESC_RINGS - 1);
+			return -EINVAL;
+		}
+
+		if ((tx_cmpl_ring_id < 0) || (tx_cmpl_ring_id >= EDMA_MAX_TXCMPL_RINGS)) {
+			edma_err("Invalid tx_cmpl_ring_id (%d) at index %d, max allowed: %d\n",
+				tx_cmpl_ring_id, i, EDMA_MAX_TXCMPL_RINGS - 1);
+			return -EINVAL;
+		}
+
+		/* Verify that tx_cmpl_ring_id is present in the validated txcmpl_ring_bitmap */
+		if (!(txcmpl_ring_bitmap & (1 << tx_cmpl_ring_id))) {
+			edma_err("tx_cmpl_ring_id (%d) at index %d is not present in edma_txcmpl_ring_map\n",
+				tx_cmpl_ring_id, i);
+			return -EINVAL;
+		}
+
+		/* Check for duplicate TX ring ID */
+		if (tx_ring_bitmap & (1 << tx_ring_id)) {
+			edma_err("Duplicate tx_ring_id (%d) found at index %d\n", tx_ring_id, i);
+			return -EINVAL;
+		}
+
+		tx_ring_bitmap |= (1 << tx_ring_id);
+	}
+
+	/*
+	 * Validate TX ring per core map
+	 */
+	for (i = 0; i < NR_CPUS; i++) {
+		int j;
+		for (j = 0; j < tx_info->max_rings_per_core; j++) {
+			uint32_t tx_ring_id;
+
+			if (j >= EDMA_MAX_TX_RINGS_PER_CORE) {
+				break;
+			}
+
+			tx_ring_id = tx_info->tx_ring_per_core_map[i][j];
+
+			if ((tx_ring_id < 0) || (tx_ring_id >= EDMA_MAX_TXDESC_RINGS)) {
+				edma_err("Invalid tx_ring_per_core_map[%d][%d] = %d, max allowed: %d\n",
+					i, j, tx_ring_id, EDMA_MAX_TXDESC_RINGS - 1);
+				return -EINVAL;
+			}
+
+			/* Verify that the ring ID was already validated in tx_map */
+			if (!(tx_ring_bitmap & (1 << tx_ring_id))) {
+				edma_err("tx_ring_per_core_map[%d][%d] = %d is not present in tx_map\n",
+					i, j, tx_ring_id);
+				return -EINVAL;
+			}
+		}
+	}
+
+	return 0;
+}
+
+/*
+ * edma_validate_host_ring_info()
+ *	Validate common ring information and call SFE ring validation
+ */
+static int edma_validate_host_ring_info(void)
+{
+	struct edma_host_info *host_info = &init_info.host_info;
+	struct edma_rings_common_info *common_info = &host_info->common_info;
+	struct edma_rx_rings_info *rx_info = &host_info->sfe_info.rx_info;
+	struct edma_tx_rings_info *tx_info = &host_info->sfe_info.tx_info;
+	uint32_t rxfill_ring_bitmap = 0;
+	uint32_t txcmpl_ring_bitmap = 0;
+	int i;
+
+	/*
+	 * Validate common FILL ring counts
+	 */
+	if ((common_info->edma_num_rxfill_rings <= 0) ||
+	    (common_info->edma_num_rxfill_rings > EDMA_MAX_RXFILL_RING_PER_TYPE)) {
+		edma_err("Invalid edma_num_rxfill_rings (%d), valid range: 1-%d\n",
+			common_info->edma_num_rxfill_rings, EDMA_MAX_RXFILL_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate RXFILL ring mappings and check for duplicates
+	 */
+	for (i = 0; i < common_info->edma_num_rxfill_rings; i++) {
+		uint32_t ring_id = common_info->edma_rxfill_ring_map[i];
+
+		if ((ring_id < 0) || (ring_id >= EDMA_MAX_RXFILL_RINGS)) {
+			edma_err("Invalid edma_rxfill_ring_map[%d] = %d, max allowed: %d\n",
+				i, ring_id, EDMA_MAX_RXFILL_RINGS - 1);
+			return -EINVAL;
+		}
+
+		/* Check for duplicate RXFILL ring ID */
+		if (rxfill_ring_bitmap & (1 << ring_id)) {
+			edma_err("Duplicate edma_rxfill_ring_map (%d) found at index %d\n", ring_id, i);
+			return -EINVAL;
+		}
+
+		rxfill_ring_bitmap |= (1 << ring_id);
+	}
+
+	/*
+	 * Validate common cmpl ring counts
+	 */
+	if ((common_info->edma_num_txcmpl_rings <= 0) ||
+	    (common_info->edma_num_txcmpl_rings > EDMA_MAX_TXCMPL_RING_PER_TYPE)) {
+		edma_err("Invalid edma_num_txcmpl_rings (%d), valid range: 1-%d\n",
+			common_info->edma_num_txcmpl_rings, EDMA_MAX_TXCMPL_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate TXCMPL ring mappings and check for duplicates
+	 */
+	for (i = 0; i < common_info->edma_num_txcmpl_rings; i++) {
+		uint32_t ring_id = common_info->edma_txcmpl_ring_map[i];
+
+		if ((ring_id < 0) || (ring_id >= EDMA_MAX_TXCMPL_RINGS)) {
+			edma_err("Invalid edma_txcmpl_ring_map[%d] = %d, max allowed: %d\n",
+				i, ring_id, EDMA_MAX_TXCMPL_RINGS - 1);
+			return -EINVAL;
+		}
+
+		/* Check for duplicate TXCMPL ring ID */
+		if (txcmpl_ring_bitmap & (1 << ring_id)) {
+			edma_err("Duplicate edma_txcmpl_ring_map (%d) found at index %d\n", ring_id, i);
+			return -EINVAL;
+		}
+
+		txcmpl_ring_bitmap |= (1 << ring_id);
+	}
+
+	/*
+	 * Validate host SFE rings (RX and TX)
+	 * This can be extended further for host VP / GRO rings.
+	 */
+	if (edma_validate_host_txrx_rings(rx_info, tx_info, rxfill_ring_bitmap, txcmpl_ring_bitmap)) {
+		edma_err("Validating host SFE rings failed\n");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
+/*
  * edma_parse_ini()
  *	parse the ini file and config EDMA rings, queue, mappings, etc.
  */
@@ -482,6 +724,14 @@ static int edma_parse_ini(void)
 			int c = ((i * EDMA_MAX_TX_RINGS_PER_CORE) + j);
 			tx_info->tx_ring_per_core_map[i][j] = edma_dp_host_tx_ring_to_core_map[c];
 		}
+	}
+
+	/*
+	 * Validate the ring informatino received.
+	 */
+	if (edma_validate_host_ring_info()) {
+		edma_err("Validating host rings failed\n");
+		return -EINVAL;
 	}
 
 	return 0;
