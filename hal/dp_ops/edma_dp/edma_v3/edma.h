@@ -187,6 +187,9 @@ enum edma_cpu_port_mcast_queues {
 #define EDMA_MISC_TX_CMPL_BUF_FULL_STATUS_GET(x)		(((x) & EDMA_MISC_TX_CMPL_BUF_FULL_MASK) >> 5)
 #define EDMA_MISC_DATA_LEN_ERR_STATUS_GET(x)		(((x) & EDMA_MISC_DATA_LEN_ERR_MASK) >> 6)
 #define EDMA_MISC_TX_TIMEOUT_STATUS_GET(x)		(((x) & EDMA_MISC_TX_TIMEOUT_MASK) >> 7)
+#define EDMA_MISC_PASS_THR_ERR_FWD_STATUS_GET(x)	(((x) & EDMA_MISC_PASS_THR_ERR_FWD_MASK) >> 8)
+#define EDMA_MISC_TXQ_PASSTHR_OFFSET_MIS_STATUS_GET(x)	(((x) & EDMA_MISC_TXQ_PASSTHR_OFFSET_MIS_MASK) >> 9)
+#define EDMA_MISC_TXQ_DS_CMPL_ERR_STATUS_GET(x)		(((x) & EDMA_MISC_TXQ_DS_CMPL_ERR_MASK) >> 10)
 
 #define __DDR_SIZE_KBYTES(x) ((x) * 1024)
 #define __DDR_SIZE_MBYTES(x) (__DDR_SIZE_KBYTES(x) * 1024)
@@ -218,6 +221,9 @@ struct edma_misc_stats {
 	uint64_t edma_misc_tx_data_len_err;		/* Tx data length error */
 	uint64_t edma_misc_tx_timeout;			/* Tx timeout error */
 	uint64_t edma_misc_tx_cmpl_buf_full;		/* Tx completion buffer full error */
+	uint64_t edma_misc_pass_thr_err_fwd;		/* Pass through packet forward error */
+	uint64_t edma_misc_txq_passthr_offset_miss;	/* TXQ pass through offset miss error */
+	uint64_t edma_misc_txq_ds_cmpl_err;		/* TXQ DS CMPL error */
 	struct u64_stats_sync syncp;			/* Synchronization pointer */
 };
 

@@ -1377,6 +1377,9 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		EDMA_MISC_TX_CMPL_BUF_FULL_MASK |
 		EDMA_MISC_DATA_LEN_ERR_MASK;
 	data |= EDMA_MISC_TX_TIMEOUT_MASK;
+	data |= EDMA_MISC_PASS_THR_ERR_FWD_MASK;
+	data |= EDMA_MISC_TXQ_PASSTHR_OFFSET_MIS_MASK;
+	data |= EDMA_MISC_TXQ_DS_CMPL_ERR_MASK;
 	egc->misc_intr_mask = data;
 
 	edma_cfg_rx_rings_enable(egc);
