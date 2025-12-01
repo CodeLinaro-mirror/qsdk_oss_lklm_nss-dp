@@ -123,6 +123,11 @@ static void nss_dp_get_pauseparam(struct net_device *netdev,
 {
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 
+	if (dp_priv->phylink_en && dp_priv->phylink) {
+		phylink_ethtool_get_pauseparam(dp_priv->phylink, pause);
+		return;
+	}
+
 	pause->rx_pause = dp_priv->pause & FLOW_CTRL_RX ? 1 : 0;
 	pause->tx_pause = dp_priv->pause & FLOW_CTRL_TX ? 1 : 0;
 	pause->autoneg = AUTONEG_ENABLE;
@@ -169,6 +174,10 @@ static int32_t nss_dp_set_pauseparam(struct net_device *netdev,
 {
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising) = { 0, };
+
+	if (dp_priv->phylink_en && dp_priv->phylink) {
+		return phylink_ethtool_set_pauseparam(dp_priv->phylink, pause);
+	}
 
 	/* set flow control settings */
 	dp_priv->pause = 0;
@@ -402,7 +411,11 @@ static int nss_dp_get_ethtool_link_ksetting(struct net_device *dev, struct ethto
 	sw_error_t ret;
 	fal_port_duplex_t duplex = FAL_FULL_DUPLEX;
 
-        __ETHTOOL_DECLARE_LINK_MODE_MASK(supported) = { 0, };
+	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported) = { 0, };
+
+	if (dp_priv->phylink_en && dp_priv->phylink) {
+		return phylink_ethtool_ksettings_get(dp_priv->phylink, cmd);
+	}
 
 	if (dp_priv->phydev) {
 		return phy_ethtool_get_link_ksettings(dev, cmd);
@@ -458,6 +471,21 @@ static int nss_dp_get_ethtool_link_ksetting(struct net_device *dev, struct ethto
 	return 0;
 }
 
+static int nss_dp_set_ethtool_link_ksettings(struct net_device *dev,
+					     const struct ethtool_link_ksettings *cmd)
+{
+	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(dev);
+
+	if (dp_priv->phylink_en && dp_priv->phylink) {
+		return phylink_ethtool_ksettings_set(dp_priv->phylink, cmd);
+	}
+
+	if (dp_priv->phydev)
+		return phy_ethtool_ksettings_set(dp_priv->phydev, cmd);
+
+	return -EIO;
+}
+
 /*
  * Ethtool operations
  */
@@ -471,7 +499,7 @@ struct ethtool_ops nss_dp_ethtool_ops = {
 	.set_settings = &nss_dp_set_settings,
 #else
 	.get_link_ksettings = nss_dp_get_ethtool_link_ksetting,
-	.set_link_ksettings = phy_ethtool_set_link_ksettings,
+	.set_link_ksettings = nss_dp_set_ethtool_link_ksettings,
 #endif
 	.get_pauseparam = &nss_dp_get_pauseparam,
 	.set_pauseparam = &nss_dp_set_pauseparam,
