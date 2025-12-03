@@ -292,6 +292,22 @@ static inline void edma_tx_desc_init(struct edma_pri_txdesc *txdesc)
 }
 
 /*
+ * edma_tx_is_tso_eligible()
+ *	Check if the skb is eligible for TSO (TCP Segmentation Offload)
+ */
+static inline bool edma_tx_is_tso_eligible(struct sk_buff *skb)
+{
+	if (skb_is_gso(skb)) {
+		if ((skb_shinfo(skb)->gso_type == SKB_GSO_TCPV4) ||
+				(skb_shinfo(skb)->gso_type == SKB_GSO_TCPV6)) {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+/*
  * edma_tx_skb_nr_frags()
  *	Process Tx for skb with nr_frags
  */
@@ -350,6 +366,14 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 				(void *)(skb_frag_address(frag) + buf_len));
 
 		EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
+
+		/*
+		 * Setting up the TSO bit even for frags apart
+		 * from the head skb.
+		 */
+		if (unlikely(edma_tx_is_tso_eligible(skb))) {
+			EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
+		}
 
 		*hw_next_to_use = ((*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK);
 		i++;
@@ -440,32 +464,29 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	 * Check if the packet needs TSO
 	 * This will be mostly true for SG packets.
 	 */
-	if (unlikely(skb_is_gso(skb))) {
-		if ((skb_shinfo(skb)->gso_type == SKB_GSO_TCPV4) ||
-				(skb_shinfo(skb)->gso_type == SKB_GSO_TCPV6)){
-			uint32_t mss;
-			mss = skb_shinfo(skb)->gso_size;
+	if (unlikely(edma_tx_is_tso_eligible(skb))) {
+		uint32_t mss;
+		mss = skb_shinfo(skb)->gso_size;
 
-			/*
-			 * If MSS<256, HW will do TSO using MSS=256,
-			 * if MSS>10K, HW will do TSO using MSS=10K,
-			 * else HW will report error 0x200000 in Tx Cmpl
-			 */
-			if (mss < EDMA_TX_TSO_MSS_MIN)
-				mss = EDMA_TX_TSO_MSS_MIN;
-			else if (mss > EDMA_TX_TSO_MSS_MAX)
-				mss = EDMA_TX_TSO_MSS_MAX;
+		/*
+		 * If MSS<256, HW will do TSO using MSS=256,
+		 * if MSS>10K, HW will do TSO using MSS=10K,
+		 * else HW will report error 0x200000 in Tx Cmpl
+		 */
+		if (mss < EDMA_TX_TSO_MSS_MIN)
+			mss = EDMA_TX_TSO_MSS_MIN;
+		else if (mss > EDMA_TX_TSO_MSS_MAX)
+			mss = EDMA_TX_TSO_MSS_MAX;
 
-			EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
-			EDMA_TXDESC_MSS_SET(txd, mss);
+		EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
+		EDMA_TXDESC_MSS_SET(txd, mss);
 
-			/*
-			 * Update tso stats
-			 */
-			u64_stats_update_begin(&stats->syncp);
-			stats->tx_tso_pkts++;
-			u64_stats_update_end(&stats->syncp);
-		}
+		/*
+		 * Update tso stats
+		 */
+		u64_stats_update_begin(&stats->syncp);
+		stats->tx_tso_pkts++;
+		u64_stats_update_end(&stats->syncp);
 	}
 
 	/*
@@ -603,6 +624,14 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 					(void *)(iter_skb->data + buf_len));
 
 			EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
+
+			/*
+			 * Setting up the TSO bit even for the fraglist packets apart
+			 * from the head skb.
+			 */
+			if (unlikely(edma_tx_is_tso_eligible(skb))) {
+				EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
+			}
 
 			*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK;
 			num_descs += 1;

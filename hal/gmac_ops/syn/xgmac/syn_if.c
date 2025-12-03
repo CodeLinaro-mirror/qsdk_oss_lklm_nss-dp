@@ -38,7 +38,7 @@ struct syn_ethtool_stats {
  * Array of strings describing data plane statistics
  */
 static const struct syn_ethtool_stats syn_gstrings_stats[] = {
-#if defined(NSS_DP_EDMA_V2)
+#if defined(NSS_DP_EDMA_V2) || defined(NSS_DP_EDMA_V3)
 	/*
 	 * Per GMAC DMA driver statistics are
 	 * supported only for IPQ95xx, IPQ53xx, and IPQ54xx.
@@ -63,6 +63,9 @@ static const struct syn_ethtool_stats syn_gstrings_stats[] = {
 	{"tx_queue_stopped_cpu1", SYN_STAT(tx_queue_stopped[1])},
 	{"tx_queue_stopped_cpu2", SYN_STAT(tx_queue_stopped[2])},
 	{"tx_queue_stopped_cpu3", SYN_STAT(tx_queue_stopped[3])},
+#if defined(NSS_DP_IPQ96XX)
+	{"tx_queue_stopped_cpu4", SYN_STAT(tx_queue_stopped[4])},
+#endif
 #endif
 };
 
