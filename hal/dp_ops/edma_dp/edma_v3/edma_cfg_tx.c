@@ -227,10 +227,14 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
 			(uint32_t)EDMA_TX_INITIAL_PROD_IDX);
 
 	/*
-	 * Configure group ID for flow control for this Tx ring
+	 * Configure group ID for flow control and TSO IDENT UPDATE CTRL for this Tx ring
+	 * FC_GRP_ID: Flow control group identifier for this ring
+	 * TSO_IDENT_UPDATE_CTRL: Set to EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER to allow
+	 * hardware parser to update TSO identifier fields
 	 */
 	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id),
-			EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id));
+			EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id) |
+			EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL_SET(EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER));
 }
 
 /*

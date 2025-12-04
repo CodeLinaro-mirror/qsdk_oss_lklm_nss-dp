@@ -1359,6 +1359,49 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	edma_reg_write(EDMA_REG_DMAR_CTRL, data);
 
 	/*
+	 * Configure TXQ_CTRL_2 register - TSO IP Identification (IPID) Update Control
+	 *
+	 * This register controls how the IP Identification field is updated for TSO packets.
+	 * The behavior is determined by a hierarchy of control bits:
+	 *
+	 * GLOBAL_TSO_IDENT_UP_CTRL[3] (bit 19) - Global override control in TXQ_CTRL_2 register:
+	 *	When set to 1: Ignore all other configurations and increment IPID by 1
+	 *	When set to 0: Check per-descriptor and per ring control bits for IPID increment
+	 *
+	 * When GLOBAL_TSO_IDENT_UP_CTRL[3] == 0 in TXQ_CTRL_2 register,
+	 * behavior depends on EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL[14:13] (which is per ring configuration):
+	 *
+	 *	Case 1: EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL[14:13] == 00 (bits cleared)
+	 *		- Ignore all other settings and increment IPID by 1
+	 *
+	 *	Case 2: EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL[14:13] == 01 (bit 13 set, bit 14 cleared)
+	 *		- Check tso_ipid_mode (per TX descriptor) flag:
+	 *			- If tso_ipid_mode == 0: Increment IPID by 1
+	 *			- If tso_ipid_mode == 1: Check IP fragmentation flags:
+	 *				If (DF && !MF && !offset): No increment
+	 *				If (!DF || MF || offset): Increment by 1
+	 *
+	 *	Case 3: EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL[14:13] == 1x (bit 14 set) - CURRENT CONFIGURATION
+	 *		Check IP fragmentation flags:
+	 *			-If (DF && !MF && !offset): No increment
+	 *			-If (!DF || MF || offset): Increment by 1
+	 *
+	 * Where:
+	 *	DF     = Don't Fragment flag in IP header
+	 *	MF     = More Fragments flag in IP header
+	 *	offset = Fragment offset field in IP header
+	 *
+	 * Current Configuration:
+	 *	- Clearing bit 19 (GLOBAL_TSO_IDENT_UP_CTRL[3] = 0) to enable per-descriptor and per ring control
+	 *	- EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL[14:13] is set to 1x (configured while TX ring setup)
+	 *	- This enables fragmentation-aware IPID handling by PPE hardware instead of using per descriptor tso_ipid_mode.
+	 */
+	data = edma_reg_read(EDMA_REG_TXQ_CTRL_2);
+	data &= ~EDMA_GLOBAL_TSO_IDENT_UP_CTRL_MASK;
+	edma_reg_write(EDMA_REG_TXQ_CTRL_2, data);
+	edma_info("EDMA_REG_TXQ_CTRL_2 configured: 0x%x (bit 19 cleared)\n", data);
+
+	/*
 	 * Configure Tx Timeout Threshold
 	 */
 #if defined(NSS_DP_MAX_TXCOMP_TIMEOUT)
