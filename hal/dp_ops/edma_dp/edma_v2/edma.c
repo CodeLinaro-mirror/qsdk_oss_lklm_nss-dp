@@ -1398,11 +1398,13 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_err("Error in resetting the hardware. ret: %d\n", ret);
 		return ret;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_HW_RESET_DONE);
 
 	/*
 	 * Set EDMA global page mode and jumbo MRU
 	 */
 	edma_cfg_rx_page_mode_and_jumbo(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_PAGE_MODE_SET);
 
 	/*
 	 * Set EDMA Tx max ports.
@@ -1416,6 +1418,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_err("Error in initializaing the rings. ret: %d\n", ret);
 		return ret;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_RINGS_ALLOCATED);
 
 	/*
 	 * Disable interrupts
@@ -1426,8 +1429,10 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	edma_cfg_tx_rings_disable(egc);
 
 	edma_cfg_tx_mapping(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_TX_MAPPING_DONE);
 	edma_cfg_tx_cmpl_mapping_fill(egc);
 	edma_cfg_rx_mapping(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_RX_MAPPING_DONE);
 #if defined(NSS_DP_POINT_OFFLOAD)
 	edma_cfg_tx_point_offload_mapping(egc);
 	edma_cfg_rx_point_offload_mapping(egc);
@@ -1435,7 +1440,9 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 
 	edma_fetch_mitigation_timer_rate(egc, NSS_DP_EDMA_CLK);
 	edma_cfg_tx_rings(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_TX_RINGS_CFG);
 	edma_cfg_rx_rings(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_RX_RINGS_CFG);
 #if defined(NSS_DP_POINT_OFFLOAD)
 	edma_cfg_rx_point_offload_rings(egc);
 #endif
@@ -1450,6 +1457,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		| EDMA_DMAR_TXDESC_OUTSTANDING_NUM_SET(7)
 		| EDMA_DMAR_RXFILL_OUTSTANDING_NUM_SET(7);
 	edma_reg_write(EDMA_REG_DMAR_CTRL, data);
+	edma_set_init_stage(EDMA_INIT_STAGE_DMA_CTRL_CFG);
 
 	/*
 	 * Configure Tx Timeout Threshold
@@ -1493,11 +1501,13 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_cfg_rx_rings_cleanup(egc);
 		return ret;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_PRIO_MAP_CFG);
 
 	/*
 	 * Initialize RPS hash map table
 	 */
 	edma_configure_rps_hash_map(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_RPS_HASH_CFG);
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	if (edma_gbl_ctx->loopback_en) {
@@ -1525,10 +1535,12 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		 * Loopback register configuration
 		 */
 		edma_hw_loopback_init(egc);
+		edma_set_init_stage(EDMA_INIT_STAGE_LOOPBACK_CFG);
 	}
 #endif
 
 	egc->edma_initialized = true;
+	edma_set_init_stage(EDMA_INIT_STAGE_PORT_ENABLED);
 
 	return 0;
 }
@@ -1628,6 +1640,11 @@ int edma_init(void)
 		return -EINVAL;
 	}
 
+	edma_gbl_ctx->hw_init_bitmap = 0;
+	edma_gbl_ctx->clk_init_bitmap = 0;
+	edma_gbl_ctx->noc_init_bitmap = 0;
+	edma_set_init_stage(EDMA_INIT_STAGE_CTX_ALLOC);
+
 	/*
 	 * Check the EDMA state
 	 */
@@ -1637,6 +1654,7 @@ int edma_init(void)
 	}
 
 	edma_init_ring_maps();
+	edma_set_init_stage(EDMA_INIT_STAGE_RING_MAPS_INIT);
 
 	/*
 	 * Get all the DTS data needed
@@ -1646,12 +1664,14 @@ int edma_init(void)
 		kfree(edma_gbl_ctx);
 		return -EINVAL;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_DTS_PARSED);
 
 	if (!edma_validate_desc_map()) {
 		edma_err("Incorrect desc map received\n");
 		kfree(edma_gbl_ctx);
 		return -EINVAL;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_DESC_MAP_VALID);
 
 	edma_gbl_ctx->ctl_table_hdr = register_sysctl("net/edma", edma_sub);
 	if (!edma_gbl_ctx->ctl_table_hdr) {
@@ -1659,6 +1679,7 @@ int edma_init(void)
 		kfree(edma_gbl_ctx);
 		return -EINVAL;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_SYSCTL_REG);
 
 	/*
 	 * Request memory region for EDMA registers
@@ -1673,6 +1694,7 @@ int edma_init(void)
 		kfree(edma_gbl_ctx);
 		return -EFAULT;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_MEM_REGION_REQ);
 
 	/*
 	 * Remap register resource
@@ -1684,6 +1706,7 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_init_remap_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_IOREMAP_DONE);
 
 	/*
 	 * Initialize EDMA debugfs entry
@@ -1694,6 +1717,7 @@ int edma_init(void)
 		ret = -EINVAL;
 		goto edma_debugfs_init_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_DEBUGFS_INIT);
 
 #ifdef NSS_DP_PPEDS_SUPPORT
 	if (edma_ppeds_init(&edma_gbl_ctx->ppeds_drv) != 0) {
@@ -1701,6 +1725,7 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_init_ppeds_init_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_PPEDS_INIT);
 #endif
 
 	/*
@@ -1712,6 +1737,7 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_hw_init_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_CLOCKS_CONFIGURED);
 
 	edma_info("EDMA common clocks are configured\n");
 
@@ -1720,6 +1746,7 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_hw_init_fail;
 	}
+
 #if !defined(NSS_DP_MEM_PROFILE_LOW)
 	/*
 	 * Register PTP service code callback function
@@ -1759,6 +1786,7 @@ int edma_init(void)
 	 * Initialize the procf entries for enabling EDMA ring stats
 	 */
 	edma_procfs_init();
+	edma_set_init_stage(EDMA_INIT_STAGE_PROCFS_INIT);
 
 	/*
          * Initialize the EDMA global context work task with the edma_recovery_work function
@@ -1769,6 +1797,7 @@ int edma_init(void)
         }
 
 	nss_dp_minidump_log(edma_gbl_ctx, sizeof(struct edma_gbl_ctx), "edma_gbl_ctx");
+	edma_set_init_stage(EDMA_INIT_STAGE_MINIDUMP_REG);
 
 	for_each_online_cpu(cpu) {
 		struct nss_dp_vp_ctx *ctx = per_cpu_ptr(&g_vp_ctx, cpu);

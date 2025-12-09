@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -285,6 +285,98 @@ struct edma_user_fc_grp_map {
 };
 
 /*
+ * edma_init_stage - EDMA initialization stage tracking
+ *
+ * This enum defines bits for tracking completion of each initialization stage.
+ * Each bit represents successful completion of a specific initialization point.
+ * Used for crash dump analysis to determine where initialization failed.
+ */
+enum edma_init_stage {
+	EDMA_INIT_STAGE_CTX_ALLOC = 0,           /* edma_gbl_ctx allocated */
+	EDMA_INIT_STAGE_RING_MAPS_INIT,          /* Ring maps initialized */
+	EDMA_INIT_STAGE_DTS_PARSED,              /* Device tree parsed */
+	EDMA_INIT_STAGE_DESC_MAP_VALID,          /* Descriptor map validated */
+	EDMA_INIT_STAGE_SYSCTL_REG,              /* Sysctl registered */
+	EDMA_INIT_STAGE_MEM_REGION_REQ,          /* Memory region requested */
+	EDMA_INIT_STAGE_IOREMAP_DONE,            /* IO remap completed */
+	EDMA_INIT_STAGE_DEBUGFS_INIT,            /* Debugfs initialized */
+	EDMA_INIT_STAGE_PPEDS_INIT,              /* PPE-DS initialized */
+	EDMA_INIT_STAGE_CLOCKS_CONFIGURED,       /* All clocks configured */
+	EDMA_INIT_STAGE_HW_RESET_DONE,           /* Hardware reset completed */
+	EDMA_INIT_STAGE_PAGE_MODE_SET,           /* Page mode configured */
+	EDMA_INIT_STAGE_RINGS_ALLOCATED,         /* Rings allocated */
+	EDMA_INIT_STAGE_TX_MAPPING_DONE,         /* Tx mapping configured */
+	EDMA_INIT_STAGE_RX_MAPPING_DONE,         /* Rx mapping configured */
+	EDMA_INIT_STAGE_TX_RINGS_CFG,            /* Tx rings configured */
+	EDMA_INIT_STAGE_RX_RINGS_CFG,            /* Rx rings configured */
+	EDMA_INIT_STAGE_DMA_CTRL_CFG,            /* DMA control configured */
+	EDMA_INIT_STAGE_PRIO_MAP_CFG,            /* Priority map configured */
+	EDMA_INIT_STAGE_RPS_HASH_CFG,            /* RPS hash configured */
+	EDMA_INIT_STAGE_LOOPBACK_CFG,            /* Loopback configured */
+	EDMA_INIT_STAGE_PORT_ENABLED,            /* EDMA port enabled */
+	EDMA_INIT_STAGE_PROCFS_INIT,             /* Procfs initialized */
+	EDMA_INIT_STAGE_MINIDUMP_REG,            /* Minidump registered */
+
+	EDMA_INIT_STAGE_MAX                      /* Maximum stages */
+};
+
+/*
+ * edma_clock_init_stage - Clock initialization stage tracking
+ *
+ * These bits track individual clock configuration stages.
+ * Different SoCs will use different subsets of these bits.
+ */
+enum edma_clock_init_stage {
+	EDMA_CLK_STAGE_CSR = 0,		/* NSS_DP_EDMA_CSR_CLK */
+	EDMA_CLK_STAGE_NSSNOC_CSR,	/* NSS_DP_EDMA_NSSNOC_CSR_CLK */
+	EDMA_CLK_STAGE_CC_CE_APB,	/* NSS_DP_EDMA_CC_CE_APB_CLK */
+	EDMA_CLK_STAGE_CC_CE_AXI,	/* NSS_DP_EDMA_CC_CE_AXI_CLK */
+	EDMA_CLK_STAGE_CC_NSSNOC_CE_APB,	/* NSS_DP_EDMA_CC_NSSNOC_APB_CLK */
+	EDMA_CLK_STAGE_CC_NSSNOC_CE_AXI,	/* NSS_DP_EDMA_CC_NSSNOC_CE_AXI_CLK */
+	EDMA_CLK_STAGE_NSSCC,		/* NSS_DP_EDMA_NSCC_CLK */
+	EDMA_CLK_STAGE_NSSCFG,		/* NSS_DP_EDMA_NSSCFG_CLK */
+	EDMA_CLK_STAGE_NSSNOC_NSSCC,	/* NSS_DP_EDMA_NSSNOC_NSSCC_CLK */
+	EDMA_CLK_STAGE_TS,		/* NSS_DP_EDMA_TS_CLK */
+	EDMA_CLK_STAGE_NSSNOC_PCNOC_1,	/* NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK */
+	EDMA_CLK_STAGE_NSS_NOC_REG,	/* NSS NOC register update */
+	EDMA_CLK_STAGE_NSSNOC_ATB,	/* NSS_DP_EDMA_NSSNOC_ATB_CLK */
+	EDMA_CLK_STAGE_NSSNOC_QOSGEN_REF,	/* NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK */
+	EDMA_CLK_STAGE_NSSNOC_SNOC_1,		/* NSS_DP_EDMA_NSSNOC_SNOC_1_CLK */
+	EDMA_CLK_STAGE_NSSNOC_SNOC,		/* NSS_DP_EDMA_NSSNOC_SNOC_CLK */
+	EDMA_CLK_STAGE_NSSNOC_TIMEOUT_REF,	/* NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK */
+	EDMA_CLK_STAGE_NSSNOC_XO_DCD,		/* NSS_DP_EDMA_NSSNOC_XO_DCD_CLK */
+	EDMA_CLK_STAGE_NSSNOC_MEMNOC,		/* NSS_DP_EDMA_NSSNOC_MEMNOC_CLK */
+	EDMA_CLK_STAGE_NSSNOC_MEM_NOC_1,	/* NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK */
+	EDMA_CLK_STAGE_IMEM_QSB,		/* NSS_DP_EDMA_IMEM_QSB_CLK */
+	EDMA_CLK_STAGE_NSSNOC_IMEM_QSB,		/* NSS_DP_EDMA_NSSNOC_IMEM_QSB_CLK */
+	EDMA_CLK_STAGE_IMEM_AHB,		/* NSS_DP_EDMA_IMEM_AHB_CLK */
+	EDMA_CLK_STAGE_NSSNOC_IMEM_AHB,		/* NSS_DP_EDMA_NSSNOC_IMEM_AHB_CLK */
+	EDMA_CLK_STAGE_MEM_NOC_NSSNOC,		/* NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK */
+	EDMA_CLK_STAGE_TBU,		/* NSS_DP_EDMA_TBU_CLK */
+	EDMA_CLK_STAGE_SNOC_NSSNOC,	/* NSS_DP_EDMA_SNOC_NSSNOC_CLK */
+	EDMA_CLK_STAGE_SNOC_NSSNOC_1,	/* NSS_DP_EDMA_SNOC_NSSNOC_1_CLK */
+	EDMA_CLK_STAGE_MAX
+};
+
+/*
+ * edma_noc_init_stage - NSS NOC initialization tracking (IPQ54xx specific)
+ *
+ * Detailed tracking for IO_COHERENCY NSS NOC register configuration.
+ */
+enum edma_noc_init_stage {
+	EDMA_NOC_STAGE_DT_PARSE_START = 0,
+	EDMA_NOC_STAGE_DT_PARSE_DONE,
+	EDMA_NOC_STAGE_REG_BASE_READ,
+	EDMA_NOC_STAGE_REG_COUNT_READ,
+	EDMA_NOC_STAGE_MEM_ALLOC_DONE,
+	EDMA_NOC_STAGE_REG_OFFSET_READ,
+	EDMA_NOC_STAGE_REG_WRITE_START,
+	EDMA_NOC_STAGE_REG_WRITE_DONE,
+	EDMA_NOC_STAGE_MEM_FREE_DONE,
+	EDMA_NOC_STAGE_MAX
+};
+
+/*
  * EDMA private data structure
  */
 struct edma_gbl_ctx {
@@ -487,6 +579,14 @@ struct edma_gbl_ctx {
 			/* VP rx ring index */
 	uint32_t rx_vp_rings;
 			/* Number of VP rings */
+
+	/* Initialization tracking bitmaps for crash dump analysis */
+	uint32_t hw_init_bitmap;
+			/* Tracks main initialization stages */
+	uint32_t clk_init_bitmap;
+			/* Tracks clock initialization stages */
+	uint32_t noc_init_bitmap;
+			/* Tracks NSS NOC initialization stages (IPQ54xx) */
 };
 
 extern struct edma_gbl_ctx *edma_gbl_ctx;
@@ -591,6 +691,39 @@ static inline bool edma_dp_per_ring_reset_support(void)
 	ring_reset_en = true;
 #endif
 	return ring_reset_en;
+}
+
+/*
+ * edma_set_init_stage()
+ *	Mark an initialization stage as complete
+ */
+static inline void edma_set_init_stage(enum edma_init_stage stage)
+{
+	if (edma_gbl_ctx && stage < EDMA_INIT_STAGE_MAX) {
+		edma_gbl_ctx->hw_init_bitmap |= BIT(stage);
+	}
+}
+
+/*
+ * edma_set_clk_stage()
+ *	Mark a clock initialization stage as complete
+ */
+static inline void edma_set_clk_stage(enum edma_clock_init_stage stage)
+{
+	if (edma_gbl_ctx && stage < EDMA_CLK_STAGE_MAX) {
+		edma_gbl_ctx->clk_init_bitmap |= BIT(stage);
+	}
+}
+
+/*
+ * edma_set_noc_stage()
+ *	Mark an NSS NOC initialization stage as complete
+ */
+static inline void edma_set_noc_stage(enum edma_noc_init_stage stage)
+{
+	if (edma_gbl_ctx && stage < EDMA_NOC_STAGE_MAX) {
+		edma_gbl_ctx->noc_init_bitmap |= BIT(stage);
+	}
 }
 
 #endif	/* __EDMA_H__ */
