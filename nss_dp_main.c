@@ -1206,7 +1206,14 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		pr_info("tstamp_sec: 0x%llx, tstamp_nsec: 0x%llx\n", sec_addr, nsec_addr);
 	}
 #endif
-
+#ifdef NSS_DP_DDRQ_SUPPORT
+	if (dp_priv->macid == NSS_DP_HAL_MAX_PORTS) {
+		pr_info("all ETH PHYs are UP\n");
+		if (!ppe_drv_isram_queue_profile_init(edma_ddrq_isq_base)) {
+			pr_err("Error in configuring ISRAM queue (%d) base for PPE ports\n", edma_ddrq_isq_base);
+		}
+	}
+#endif
 	return 0;
 
 #if defined(NSS_DP_PPE_SUPPORT)

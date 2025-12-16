@@ -10,11 +10,16 @@
 #include <linux/netdevice.h>
 #include <linux/debugfs.h>
 #include <asm/cacheflush.h>
-
+#ifdef NSS_DP_PON_SUPPORT
+#include <fal/fal_pon.h>
+#endif
 #include "nss_dp_dev.h"
 #include "edma_regs.h"
 #include "edma_debug.h"
 #include "edma.h"
+#ifdef NSS_DP_DDRQ_SUPPORT
+#include "edma_ddrq.h"
+#endif
 #include <ppe_drv_sc.h>
 #include "syn_dev.h"
 
@@ -473,8 +478,21 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 #if defined(NSS_DP_HIGHMEM_SUPP)
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+#ifdef NSS_DP_DDRQ_SUPPORT
+		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
+		} else {
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
+		}
 
+		if (edma_passthrough_val_set) {
+			edma_warn("edma_passthrough_val: %d, word1: 0x%0x\n",
+					edma_passthrough_val, txd->word1);
+			edma_passthrough_val_set = 0;
+		}
+#else	/* !NSS_DP_DDRQ_SUPPORT */
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+#endif	/* NSS_DP_DDRQ_SUPPORT */
 		edma_dmac_clean_range_no_dsb((void *)skb_frag_address(frag),
 				(void *)(skb_frag_address(frag) + buf_len));
 
@@ -543,10 +561,32 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	if (dptxi->svp) {
 		EDMA_SRC_INFO_SET(txd, dptxi->svp);
 		EDMA_DST_INFO_SET(txd, 0);
+#ifdef NSS_DP_DDRQ_SUPPORT
+		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
+		} else {
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
+		}
+#endif
 	} else {
 		EDMA_SRC_INFO_SET(txd, 0);
 		EDMA_DST_INFO_SET(txd, dptxi->dvp);
+#ifdef NSS_DP_DDRQ_SUPPORT
+		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_0B);
+		} else {
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
+		}
+#endif
 	}
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+	if (edma_passthrough_val_set) {
+		edma_warn("edma_passthrough_val: %d, word1: 0x%0x\n",
+				edma_passthrough_val, txd->word1);
+		edma_passthrough_val_set = 0;
+	}
+#endif
 }
 
 /*
@@ -556,6 +596,10 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_pri_txdesc *txd,
 					struct sk_buff *skb, struct edma_tx_stats *stats)
 {
+#ifdef NSS_DP_DDRQ_SUPPORT
+	bool is_pt_mode_en = true;
+#endif
+
 	/*
 	 * Offload L3/L4 checksum computation
 	 */
@@ -565,11 +609,50 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 		EDMA_TXDESC_L4_CSUM_SET(txd);
 	}
 
+	EDMA_DST_INFO_SET(txd, dp_dev->macid);
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+	if (!(edma_ddrq_en_port_bm & (1 << (dp_dev->macid - 1)))) {
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+		is_pt_mode_en = false;
+	} else if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_0B);
+	} else {
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
+	}
+
+	/*
+	 * DDRQ passthrough mode enabled. Set DDRQ special service code for the
+	 * exception handling via the loopback ring
+	 */
+	if (is_pt_mode_en) {
+#ifdef NSS_DP_PON_SUPPORT
+		if (dp_dev->macid == PON_PORT_ID) {
+			EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_DDRQ_PON_PT_MODE);
+		} else {
+			EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_DDRQ_ETH_PT_MODE);
+		}
+#else
+			EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_DDRQ_ETH_PT_MODE);
+#endif
+	} else {
+		/*
+		 * Set destination information in the descriptor
+		 */
+		EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
+	}
+
+	if (edma_passthrough_val_set) {
+		edma_warn("edma_passthrough_val: %d, word1: 0x%0x, macid: %d, pt_mode: %d, edma_ddrq_en_port_bm : 0x%0x\n",
+				edma_passthrough_val, txd->word1, dp_dev->macid, is_pt_mode_en, edma_ddrq_en_port_bm);
+		edma_passthrough_val_set = 0;
+	}
+#else	/* !NSS_DP_DDRQ_SUPPORT */
 	/*
 	 * Set destination information in the descriptor
 	 */
 	EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
-	EDMA_DST_INFO_SET(txd, dp_dev->macid);
+#endif	/* NSS_DP_DDRQ_SUPPORT */
 
 	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
 
@@ -636,16 +719,29 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 
 	edma_tx_desc_init(txd);
 
+	if (skb_headroom(skb) < EDMA_DDRQ_PREHEADER_SIZE) {
+		if (pskb_expand_head(skb, EDMA_DDRQ_PREHEADER_SIZE, 0, GFP_ATOMIC)) {
+			edma_err("Can't expand skb: %px\n", skb);
+			return NULL;
+		}
+	}
+
 	/*
 	 * Set the data pointer as the buffer address in the descriptor.
 	 */
-	buff_addr = (dma_addr_t)virt_to_phys(skb->data);
+	buff_addr = (dma_addr_t)virt_to_phys((skb->data - EDMA_DDRQ_PREHEADER_SIZE));
+#ifdef NSS_DP_PCIE_BUS_ENABLE
+	buff_addr = edma_phy_addr_trans(buff_addr);
+#endif
 	EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
 #if defined(NSS_DP_HIGHMEM_SUPP)
 	EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
+	EDMA_TXDESC_DATA_OFFSET_SET(txd, EDMA_DDRQ_PREHEADER_SIZE);
+#ifndef NSS_DP_DDRQ_SUPPORT
 	EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+#endif
 
 	/*
 	 * Set packet length in the descriptor
@@ -732,7 +828,21 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 #if defined(NSS_DP_HIGHMEM_SUPP)
 			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
+#ifdef NSS_DP_DDRQ_SUPPORT
+			if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+				EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
+			} else {
+				EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
+			}
+			if (edma_passthrough_val_set) {
+				edma_warn("edma_passthrough_val: %d, word1: 0x%0x\n",
+						edma_passthrough_val, txd->word1);
+				edma_passthrough_val_set = 0;
+			}
+#else		/* !NSS_DP_DDRQ_SUPPORT */
 			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+#endif		/* NSS_DP_DDRQ_SUPPORT */
+
 			edma_dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
 
@@ -929,6 +1039,9 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	 */
 	if (likely(!skb_is_nonlinear(skb))) {
 		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+		if (!txdesc) {
+			return EDMA_TX_FAIL;
+		}
 
 		/* Handle PTP timestamping (PHY priority, XGMAC fallback) */
 		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
@@ -983,6 +1096,9 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		}
 
 		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+		if (!txdesc) {
+			return EDMA_TX_FAIL;
+		}
 
 		/* Handle PTP timestamping (PHY priority, XGMAC fallback) */
 		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {

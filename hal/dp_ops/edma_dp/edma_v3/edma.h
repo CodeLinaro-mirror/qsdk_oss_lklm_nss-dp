@@ -25,6 +25,9 @@
 #ifdef NSS_DP_PPEDS_SUPPORT
 #include "edma_ppeds_priv.h"
 #endif
+#ifdef NSS_DP_DDRQ_SUPPORT
+#include "edma_ddrq.h"
+#endif
 
 /*
  * The driver uses kernel DMA constructs that assume an architecture
@@ -99,6 +102,7 @@
 #define EDMA_SWITCH_DEV_ID	0
 #define EDMA_PPE_QUEUE_LEVEL	0
 #define EDMA_BITS_IN_WORD	32
+#define EDMA_PORT_SRC_PROFILE	0
 
 #ifdef NSS_DP_HW_GRO
 #define EDMA_RX_RING_GRO_NUM_MAX 4
@@ -152,6 +156,8 @@
  * we need an array of 32 to maintain these pages.
  */
 #define EDMA_MAX_LOOPBACK_BUF 32
+
+#define EDMA_PASSTHROUGH_VAL_INVALID	-1
 
 /*
  * EDMA ring subtypes. Each type can have subtype which can inherit the
@@ -771,6 +777,10 @@ struct edma_gbl_ctx {
 	uint32_t edma_timer_rate;
 			/* EDMA clock's timer rate in Mhz */
 
+#ifdef NSS_DP_DDRQ_SUPPORT
+	edma_ddrq_cfg_t ddrq_def_cfg;
+#endif
+
 #ifdef CONFIG_SKB_TIMESTAMP
 	void __iomem *tstamp_sec;
 			/* EDMA timestamp value in second */
@@ -792,6 +802,35 @@ extern int edma_dp_extension_en;
 
 extern int edma_rx_ring_mode_bitmask;
 extern int edma_tx_ring_mode_bitmask;
+#ifdef NSS_DP_DDRQ_SUPPORT
+extern int32_t edma_passthrough_val;
+extern int32_t edma_passthrough_val_set;
+extern int edma_ddrq_gbl_en_sw;
+extern int edma_ddrq_gbl_en_hw;
+extern int edma_ddrq_gbl_data_offset0;
+extern int edma_ddrq_desc_pf_thres;
+extern int edma_ddrq_data_offset;
+extern int edma_ddrq_blk_num;
+extern int edma_ddrq_blk_size;
+extern int edma_ddrq_desc_wb_thres;
+extern int edma_ddrq_en_port_bm;;
+extern int edma_ddrq_vp_port_map[NSS_DP_MAX_PORTS];
+extern int edma_ddrq_ac_queue_ac_en;
+extern int edma_ddrq_ac_queue_color_aware;
+extern int edma_ddrq_ac_queue_wred_en;
+extern int edma_ddrq_ac_queue_shared_ceiling;
+extern int edma_ddrq_ac_queue_grp_id;
+extern int edma_ddrq_grp_ac_en;
+extern int edma_ddrq_grp_color_aware;
+extern int edma_ddrq_grp_drop_threshold;
+extern int edma_ddrq_grp_shared_limit;
+extern int edma_ddrq_grp_id_bm;
+extern int edma_ddrq_isq_base;
+extern int edma_ddrq_lp_queue_base;
+extern int edma_ddrq_lp_num_queues;
+extern int edma_ddrq_lp_id;
+extern int edma_ddrq_lp_fc_grp_id;
+#endif
 
 int edma_irq_init(void);
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx);

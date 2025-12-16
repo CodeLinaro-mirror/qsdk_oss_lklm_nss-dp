@@ -18,7 +18,13 @@ extern uint32_t rx_ring_sz_high_mem;
 
 #define EDMA_RX_MAX_PROCESS		32	/* Max Rx processing without
 						   replenishing RxFill ring */
-#define EDMA_RX_SKB_HEADROOM		128
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+#define EDMA_DDRQ_PREHEADER_SIZE	32
+#else
+#define EDMA_DDRQ_PREHEADER_SIZE	0
+#endif
+#define EDMA_RX_SKB_HEADROOM		(128 + EDMA_DDRQ_PREHEADER_SIZE)
 
 #define EDMA_RX_PH_SIZE		(sizeof(struct edma_rxdesc_sec_desc))	/* Rx preheader size */
 

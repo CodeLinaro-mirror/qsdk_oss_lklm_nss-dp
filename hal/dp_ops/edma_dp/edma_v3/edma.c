@@ -33,6 +33,9 @@
 #include "edma_procfs.h"
 #include "nss_dp_dev.h"
 #include "nss_dp_vp.h"
+#ifdef NSS_DP_DDRQ_SUPPORT
+#include "edma_ddrq.h"
+#endif
 
 int edma_dp_extension_en = 0;
 module_param(edma_dp_extension_en, int, 0640);
@@ -85,6 +88,113 @@ MODULE_PARM_DESC(edma_dp_host_txcmpl_map, "TX to txcmpl map rings for host");
 
 module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+int32_t edma_passthrough_val_set;
+int edma_passthrough_val = EDMA_PASSTHROUGH_VAL_INVALID;
+module_param(edma_passthrough_val, int, 0640);
+MODULE_PARM_DESC(edma_passthrough_val, "EDMA passthrough value to be set in Tx desc");
+
+int edma_ddrq_gbl_en_hw = EDMA_DDRQ_GBL_EN_HW_DEF;
+module_param(edma_ddrq_gbl_en_hw, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_gbl_en_hw, "Disable/enable DDRQ feature from EDMA hardware");
+
+int edma_ddrq_gbl_en_sw = EDMA_DDRQ_GBL_EN_SW_DEF;
+module_param(edma_ddrq_gbl_en_sw, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_gbl_en_sw, "Disable/enable DDRQ feature from EDMA module");
+
+int edma_ddrq_desc_pf_thres = EDMA_DDRQ_GBL_PF_THRES;
+module_param(edma_ddrq_desc_pf_thres, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_desc_pf_thres, "EDMA hardware's prefetch threshold for DDRQ descriptor");
+
+int edma_ddrq_data_offset = EDMA_DDRQ_DATA_OFFSET_DEF;
+module_param(edma_ddrq_data_offset, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_data_offset, "Offset bitmap beyond which the packet will be written to DDR buffer");
+
+int edma_ddrq_blk_num = NSS_DP_EDMA_DDRQ_BLK_NUM_DEF;
+module_param(edma_ddrq_blk_num, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_blk_num, "Number of blocks for DDRQ");
+
+int edma_ddrq_blk_size = NSS_DP_EDMA_DDRQ_BLK_SIZE_DEF;
+module_param(edma_ddrq_blk_size, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_blk_size, "Size of one DDRQ block");
+
+int edma_ddrq_desc_wb_thres = EDMA_DDRQ_GBL_WB_THRES;
+module_param(edma_ddrq_desc_wb_thres, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_desc_wb_thres, "EDMA hardware's writeback threshold for DDRQ descriptor");
+
+int edma_ddrq_gbl_data_offset0 = EDMA_DDRQ_GBL_DATA_OFFSET_REG0_VAL;
+module_param(edma_ddrq_gbl_data_offset0, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_gbl_data_offset0, "DDRQ data offset 0 value");
+
+int edma_ddrq_en_port_bm = NSS_DP_EDMA_DDRQ_EN_PORT_BM;
+module_param(edma_ddrq_en_port_bm, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_en_port_bm, "DDRQ enable bitmap per port");
+
+int edma_ddrq_vp_port_map[NSS_DP_MAX_PORTS] = {0x9, 0xa, 0xb, 0xc, 0xd, 0xe};
+module_param_array(edma_ddrq_vp_port_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_vp_port_map, "DDRQ virtual port mapping");
+
+int edma_ddrq_ac_queue_ac_en = EDMA_DDRQ_AC_Q_AC_EN_DEF;
+module_param(edma_ddrq_ac_queue_ac_en, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_ac_en, "DDRQ per queue AC configuration");
+
+int edma_ddrq_ac_queue_color_aware = EDMA_DDRQ_AC_Q_COLOR_AWARE_DEF;
+module_param(edma_ddrq_ac_queue_color_aware, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_color_aware, "DDRQ per queue color aware configuration");
+
+int edma_ddrq_ac_queue_wred_en = EDMA_DDRQ_AC_Q_WRED_EN_DEF;
+module_param(edma_ddrq_ac_queue_wred_en, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_wred_en, "DDRQ per queue WRED configuration");
+
+int edma_ddrq_ac_queue_shared_ceiling = EDMA_DDRQ_AC_Q_SHD_CEILING;
+module_param(edma_ddrq_ac_queue_shared_ceiling, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_shared_ceiling, "DDRQ per queue shared ceiling configuration");
+
+int edma_ddrq_ac_queue_grp_id = EDMA_DDRQ_AC_Q_GRP_ID_DEF;
+module_param(edma_ddrq_ac_queue_grp_id, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_grp_id, "DDRQ per queue group id configuration");
+
+int edma_ddrq_grp_ac_en = EDMA_DDRQ_AC_GRP_AC_EN_DEF;
+module_param(edma_ddrq_grp_ac_en, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_ac_en, "DDRQ group AC configuration");
+
+int edma_ddrq_grp_color_aware = EDMA_DDRQ_AC_GRP_COLOR_AWARE_DEF;
+module_param(edma_ddrq_grp_color_aware, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_color_aware, "DDRQ group color aware configuration");
+
+int edma_ddrq_grp_drop_threshold = EDMA_DDRQ_AC_GRP_DRP_THD;
+module_param(edma_ddrq_grp_drop_threshold, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_drop_threshold, "DDRQ group's drop threshold configuration");
+
+int edma_ddrq_grp_shared_limit = EDMA_DDRQ_AC_GRP_SHRD_LIMIT;
+module_param(edma_ddrq_grp_shared_limit, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_shared_limit, "DDRQ group's shared limit configuration");
+
+int edma_ddrq_grp_id_bm = EDMA_DDRQ_AC_GRP_ID_BM_DEF;
+module_param(edma_ddrq_grp_id_bm, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_id_bm, "DDRQ group id bitmask");
+
+int edma_ddrq_isq_base = EDMA_DDRQ_ISQ_BASE;
+module_param(edma_ddrq_isq_base, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_isq_base, "DDRQ ingress SRAM queue base");
+
+int edma_ddrq_lp_queue_base = EDMA_DDRQ_LP_QUEUE_BASE_DEF;
+module_param(edma_ddrq_lp_queue_base, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_queue_base, "DDRQ loopback queue base");
+
+int edma_ddrq_lp_num_queues = EDMA_DDRQ_LP_NUM_QUEUES_DEF;
+module_param(edma_ddrq_lp_num_queues, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_num_queues, "DDRQ loopback queue count");
+
+int edma_ddrq_lp_id = EDMA_DDRQ_LP_ID;
+module_param(edma_ddrq_lp_id, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_id, "DDRQ EDMA loopback id to be used");
+
+int edma_ddrq_lp_fc_grp_id = EDMA_DDRQ_LP_FC_GRP_ID;
+module_param(edma_ddrq_lp_fc_grp_id, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_fc_grp_id, "DDRQ EDMA loopback id's FC GRP ID to map");
+#endif
 
 /*
  * PPE-VP ring information
@@ -2036,6 +2146,14 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	}
 	edma_set_init_stage(EDMA_INIT_STAGE_HW_RESET_DONE);
 
+#ifdef NSS_DP_DDRQ_SUPPORT
+	if (edma_ddrq_init(&egc->ddrq_def_cfg) != 0) {
+		edma_err("Error in EDMA DDRQ initialization\n");
+		return -EINVAL;
+	}
+	edma_warn("DDRQ init successful\n");
+#endif
+
 	/*
 	 * Set EDMA global page mode and jumbo MRU
 	 */
@@ -2183,7 +2301,8 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	/*
 	 * Global EDMA enable and padding enable
 	 */
-	data = EDMA_PORT_PAD_EN | EDMA_PORT_EDMA_EN;
+	data = edma_reg_read(EDMA_REG_PORT_CTRL);
+	data |= EDMA_PORT_PAD_EN | EDMA_PORT_EDMA_EN;
 	edma_reg_write(EDMA_REG_PORT_CTRL, data);
 
 	/*
@@ -2297,6 +2416,29 @@ static int32_t edma_configure_clocks(void)
 	}
 
 	return 0;
+}
+#endif
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+/*
+ * edma_passthrough_handler()
+ *	API to set EDMA passthrough value dynamically
+ */
+int edma_passthrough_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	edma_passthrough_val_set = 1;
+	edma_err("### passthrough mode val set to %d, edma_passthrough_val_set: %d\n",
+			 edma_passthrough_val, edma_passthrough_val_set);
+	return ret;
 }
 #endif
 
@@ -2459,6 +2601,15 @@ static struct ctl_table edma_sub[] = {
 		.maxlen         =       sizeof(int),
 		.mode           =       0644,
 		.proc_handler   =       edma_rx_gro_max_desc_count_cfg
+	},
+#endif
+#ifdef NSS_DP_DDRQ_SUPPORT
+	{
+		.procname       =       "edma_passthrough_val",
+		.data           =       &edma_passthrough_val,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_passthrough_handler
 	},
 #endif
 	{}
