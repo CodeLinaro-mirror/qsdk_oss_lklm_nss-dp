@@ -21,6 +21,12 @@ qca-nss-dp-objs += nss_dp_eawtp.o
 endif
 endif
 
+ifeq ($(dp-ddrq),y)
+qca-nss-dp-objs += nss_dp_ddrq.o \
+		   hal/dp_ops/edma_dp/edma_v3/edma_ddrq.o
+ccflags-y += -DNSS_DP_DDRQ_SUPPORT
+endif
+
 NSS_DP_INCLUDE = -I$(obj)/include -I$(obj)/exports -I$(obj)/hal/include \
 		 -I$(obj)/hal/dp_ops/include \
 		 -I$(obj)/hal/gmac_ops/syn/xgmac
