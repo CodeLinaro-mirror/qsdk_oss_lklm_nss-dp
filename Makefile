@@ -81,6 +81,9 @@ qca-nss-dp-objs += nss_dp_vp_main.o \
 		   hal/dp_ops/edma_dp/edma_v2/edma_tx.o \
 		   hal/gmac_ops/qcom/qcom_if.o \
 		   hal/gmac_ops/syn/xgmac/syn_if.o
+ifneq ($(CONFIG_PTP_1588_CLOCK),)
+qca-nss-dp-objs += hal/gmac_ops/syn/xgmac/syn_ptp.o
+endif
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ccflags-y += -DNSS_DP_TX_SMALL_PACKET_WAR
 ifeq ($(dp-ppe-ds),y)
