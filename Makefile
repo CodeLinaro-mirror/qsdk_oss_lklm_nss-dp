@@ -22,7 +22,8 @@ endif
 endif
 
 NSS_DP_INCLUDE = -I$(obj)/include -I$(obj)/exports -I$(obj)/hal/include \
-		 -I$(obj)/hal/dp_ops/include
+		 -I$(obj)/hal/dp_ops/include \
+		 -I$(obj)/hal/gmac_ops/syn/xgmac
 
 ifeq ($(SoC),$(filter $(SoC),ipq807x ipq60xx))
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v1/edma_cfg.o \
@@ -117,6 +118,9 @@ qca-nss-dp-objs += nss_dp_vp_main.o \
 		   hal/dp_ops/edma_dp/edma_v3/edma_tx.o \
 		   hal/gmac_ops/qcom/qcom_if.o \
 		   hal/gmac_ops/syn/xgmac/syn_if.o
+ifneq ($(CONFIG_PTP_1588_CLOCK),)
+qca-nss-dp-objs += hal/gmac_ops/syn/xgmac/syn_ptp.o
+endif
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ifeq ($(dp-ppe-ds),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds.o
