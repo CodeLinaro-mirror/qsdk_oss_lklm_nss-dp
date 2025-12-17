@@ -504,6 +504,7 @@ int edma_hang_recovery_handler(struct ctl_table *table, int write, void __user *
 int edma_vlan_append_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_force_crash_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_parse_ring_fc_mapping(const char *filepath);
+bool edma_configure_fc_group_bm_cfg(uint8_t fc_group);
 
 /*
  * edma_reg_read()

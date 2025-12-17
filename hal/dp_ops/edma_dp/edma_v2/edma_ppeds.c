@@ -640,6 +640,17 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 		txdesc_ring->fc_grp_id = edma_gbl_ctx->user_fc_grp_map[txdesc_ring->id].fc_grp;
 		edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id),
 						EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id));
+
+		/*
+		 * Configuring parameters such as weight, shared_ceiling, resume_off, etc. corresponding to each of the
+		 * fc_group/bm_port which is mapped to the txdesc-ring.
+		 * Note: Parameters corresponding to fc_group 0 is configured to the given fc_group.
+		 */
+		if (!edma_configure_fc_group_bm_cfg(txdesc_ring->fc_grp_id)) {
+			edma_warn("Error in configuration of fc_group(%u) to correct parameters. txdesc ring id: %u\n",
+						txdesc_ring->fc_grp_id, txdesc_ring->id);
+			edma_warn("fc_group(%u) taking default parameter values.\n", txdesc_ring->fc_grp_id);
+		}
 	}
 
 	/*
