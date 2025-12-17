@@ -457,7 +457,7 @@ int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_napi_poll(struct napi_struct *napi, int budget);
 int edma_rxfill_napi_poll(struct napi_struct *napi, int budget);
 void edma_rxfill_intr_timer(struct timer_list *tm);
-bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buff *skb, void *sc_data);
+bool edma_rx_tstamp_buf(void *app_data, struct sk_buff *skb, void *sc_data);
 int edma_rx_napi_capwap_poll(struct napi_struct *napi, int budget);
 
 #endif	/* __EDMA_RX_H__ */
