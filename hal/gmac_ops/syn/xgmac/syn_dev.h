@@ -2,20 +2,8 @@
  **************************************************************************
  * Copyright (c) 2016,2020-2021 The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF0
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- **************************************************************************
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #ifndef __SYN_DEV_H__
@@ -24,6 +12,9 @@
 #include "syn_reg.h"
 #include <fal/fal_mib.h>
 #include <fal/fal_port_ctrl.h>
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+#include "syn_ptp.h"
+#endif
 
 /*
  * The max MTU value is maximum frame size excluding
@@ -40,6 +31,9 @@
  */
 struct syn_hal_dev {
 	struct nss_gmac_hal_dev nghd;	/* Base class */
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	struct syn_ptp_priv *ptp_priv;	/* PTP private data (NULL if PTP not initialized) */
+#endif
 };
 
 /*
@@ -143,7 +137,7 @@ static inline void syn_set_half_duplex(
 	return;
 }
 
-static int syn_get_xmib_stats(struct nss_gmac_hal_dev *nghd, fal_xgmib_info_t *stats)
+static int __maybe_unused syn_get_xmib_stats(struct nss_gmac_hal_dev *nghd, fal_xgmib_info_t *stats)
 {
 	if (fal_get_xgmib_info(0, nghd->mac_id, stats)) {
 		return -1;
@@ -151,4 +145,5 @@ static int syn_get_xmib_stats(struct nss_gmac_hal_dev *nghd, fal_xgmib_info_t *s
 
 	return 0;
 }
+
 #endif /*__SYN_DEV_H__*/
