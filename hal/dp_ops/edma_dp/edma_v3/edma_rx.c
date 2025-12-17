@@ -8,6 +8,7 @@
 #include <linux/version.h>
 #include <linux/netdevice.h>
 #include <ppe_drv_public.h>
+#include <ppe_drv_sc.h>
 #include <nss_dp_vp.h>
 #include <linux/phy.h>
 #include <linux/if_vlan.h>
@@ -19,6 +20,7 @@
 #include "edma_regs.h"
 #include "edma_cfg_rx.h"
 #include "nss_dp_dev.h"
+#include "syn_dev.h"
 
 extern nss_dp_vp_rx_cb_t nss_dp_vp_rx_reg_cb;
 extern nss_dp_vp_list_rx_cb_t nss_dp_vp_list_rx_reg_cb;
@@ -688,23 +690,21 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 	uint16_t desc_index, next_desc_index;
 	uint32_t dst_port;
 	uint8_t cpu_code, service_code;
-	bool acl_info_valid = false;
+	bool cpu_code_valid, is_ptp_sc, acl_info_valid = false;
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
 	struct ppe_drv_cc_metadata cc_info = {0};
 	struct ppe_drv_sc_metadata sc_info = {0};
 	struct ppe_drv_acl_metadata acl_info = {0};
 	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
 
-	/*
-	 * The primary descriptor has CPU code valid indication bit while
-	 * the CPU code is available in secondary descriptor.
-	 */
-	if (likely(EDMA_RXDESC_CPU_CODE_VALID_GET(rxdesc_head))) {
+	cpu_code_valid = EDMA_RXDESC_CPU_CODE_VALID_GET(rxdesc_head);
+	service_code = EDMA_RXDESC_SERVICE_CODE_GET(rxdesc_head);
+	is_ptp_sc = (service_code == PPE_DRV_SC_PTP);
+
+	if (likely(cpu_code_valid) || unlikely(is_ptp_sc)) {
 		if (unlikely(!pre_hdr_mode_en)) {
 			desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
 			rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
-
-			cpu_code = EDMA_RXDESC_CPU_CODE_GET(rxdesc_sec);
 
 			/*
 			 * Depending on the use-case, sometime PPE generate the same CPU
@@ -720,7 +720,6 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 			 * start of the packet
 			 */
 			rxdesc_sec = (struct edma_rxdesc_sec_desc *)phys_to_virt(EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_head));
-			cpu_code = EDMA_RXDESC_CPU_CODE_GET(rxdesc_sec);
 		}
 
 		edma_debug("Rx secondary descriptor contents in %d mode: \n"
@@ -731,6 +730,15 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 				rxdesc_sec->word0,rxdesc_sec->word1, rxdesc_sec->word2,
 				rxdesc_sec->word3, rxdesc_sec->word4, rxdesc_sec->word5,
 				rxdesc_sec->word6, rxdesc_sec->word7);
+	}
+
+	/*
+	 * The primary descriptor has CPU code valid indication bit while
+	 * the CPU code is available in secondary descriptor.
+	 */
+	if (likely(cpu_code_valid)) {
+		cpu_code = EDMA_RXDESC_CPU_CODE_GET(rxdesc_sec);
+
 		/*
 		 * Get the ACL id
 		 */
@@ -752,9 +760,17 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 	/*
 	 * Process if there is any service code.
 	 */
-	service_code = EDMA_RXDESC_SERVICE_CODE_GET(rxdesc_head);
 	if (likely(service_code)) {
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+		if (unlikely(is_ptp_sc)) {
+			if (likely(EDMA_RX_SDESC_TSTAMP_VALID_GET(rxdesc_sec))) {
+				/* Extract timestamp from the second descriptor */
+				sc_info.ts_nsec = EDMA_RX_SDESC_TSTAMP_LO_GET(rxdesc_sec);  /* 32-bit nanoseconds */
+				sc_info.ts_sec = EDMA_RX_SDESC_TSTAMP_HI_GET(rxdesc_sec);  /* 8-bit seconds */
+			}
 
+		}
+#endif
 		/*
 		 * Fill the service code metadata structure.
 		 */
@@ -1796,6 +1812,93 @@ next_rx_desc:
 	return work_done;
 }
 
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+/*
+ * edma_rx_hwtstamp()
+ *	Extract RX hardware timestamp from service code data.
+ *
+ * This function extracts the RX timestamp from the service code data, the RX
+ * timestamp is from RX second descriptor.
+ *
+ * RX Descriptor Format:
+ * - Word 0: TIMESTAMP_LO (32 bits nanoseconds)
+ * - Word 1 [7:0]: TIMESTAMP_HI (8 bits seconds)
+ * - Word 3 [23]: TIMESTAMP_VALID flag
+ *
+ * @skb: Socket buffer to attach timestamp to
+ * @sc_data: Pointer to service code data
+ */
+static void edma_rx_hwtstamp(struct sk_buff *skb,
+			     struct ppe_drv_sc_metadata *sc_data)
+{
+	struct skb_shared_hwtstamps *hwts;
+	struct nss_dp_dev *dp_dev;
+	struct syn_hal_dev *shd;
+	struct syn_ptp_priv *ptp_priv;
+	void __iomem *mac_base;
+	u64 ns;
+	u32 sys_sec;
+	u32 ts_sec;
+
+	if (unlikely(!sc_data)) {
+		edma_err("sc_data is null\n");
+		return;
+	}
+
+	/* Ensure skb->dev is valid before dereferencing */
+	if (unlikely(!skb || !skb->dev)) {
+		edma_err("skb or skb->dev is null\n");
+		return;
+	}
+
+	/* Get the system time in seconds (32-bit) */
+	dp_dev = netdev_priv(skb->dev);
+	if (!dp_dev || !dp_dev->gmac_hal_ctx) {
+		edma_err("dp_dev or gmac_hal_ctx is null\n");
+		/* Failed to get device context */
+		return;
+	}
+
+	shd = (struct syn_hal_dev *)dp_dev->gmac_hal_ctx;
+	ptp_priv = shd->ptp_priv;
+	if (!ptp_priv || ptp_priv->tstamp_config.rx_filter == HWTSTAMP_FILTER_NONE)
+		return;
+
+	mac_base = dp_dev->gmac_hal_ctx->mac_base;
+	if (!mac_base) {
+		edma_err("mac_base is null\n");
+		return;
+	}
+
+	/*
+	 * The EDMA RX descriptor provides only the lower 8 bits of the
+	 * seconds value. Read the current system time to determine the
+	 * upper 24 bits and reconstruct the full timestamp.
+	 */
+	sys_sec = hal_read_reg(mac_base, 0xd08);
+	ts_sec = (sys_sec & 0xFFFFFF00) | sc_data->ts_sec;
+
+	/* Handle rollover of 8 bits second:
+	 * if combined time is in future, decrement upper bits.
+	 */
+	if (ts_sec > sys_sec)
+		ts_sec -= 0x100;
+
+	/* DEBUG: Print raw timestamp values */
+	edma_debug("RX TS: ts_sec=0x%x, ts_nsec=0x%x, sys_sec=0x%x\n",
+		   sc_data->ts_sec, sc_data->ts_nsec, sys_sec);
+
+	/* Combine into 64-bit nanoseconds and store in SKB */
+	ns = ((u64)ts_sec * NSEC_PER_SEC) + sc_data->ts_nsec;
+	hwts = skb_hwtstamps(skb);
+	memset(hwts, 0, sizeof(*hwts));
+	hwts->hwtstamp = ns_to_ktime(ns);
+
+	/* Increment success counter */
+	ptp_priv->rx_ts_success++;
+}
+#endif
+
 /*
  * edma_rx_reap()
  *	Reap Rx descriptors
@@ -1984,6 +2087,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 				struct nss_dp_dev *dp_dev = netdev_priv(skb->dev);
 
 				if (likely(edma_rx_handle_linear_packets(egc, rxdesc_ring, rxdesc_desc, dp_dev, skb))) {
+
 					if (unlikely(ndev->features & NETIF_F_GRO)) {
 						skb->protocol = eth_type_trans(skb, ndev);
 						mem_debug_update_skb(skb);
@@ -2249,10 +2353,25 @@ int edma_rxfill_napi_poll(struct napi_struct *napi, int budget)
 }
 
 /*
- * edma_rx_phy_tstamp_buf()
- *	Receive skb for PHY timestamping
+ * edma_rx_mac_tstamp_consume()
+ *	Extract and attach XGMAC hardware timestamp
  */
-bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buff *skb, __attribute__((unused))void *sc_data)
+static bool edma_rx_mac_tstamp_consume(struct sk_buff *skb,
+				       struct ppe_drv_sc_metadata *sc_data)
+{
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	edma_rx_hwtstamp(skb, sc_data);
+#endif
+
+	/* Continue processing, don't consume packet */
+	return false;
+}
+
+/*
+ * edma_rx_phy_tstamp_consume()
+ *	Receive skb for PHY timestamping (internal function)
+ */
+static bool edma_rx_phy_tstamp_consume(struct sk_buff *skb)
 {
 	struct net_device *ndev = skb->dev;
 
@@ -2262,26 +2381,40 @@ bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buf
 	 * in drv->rxtstamp function.
 	 */
 	if (ndev && ndev->phydev && ndev->phydev->drv
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-			&& ndev->phydev->drv->rxtstamp
-#else
-			&& phy_has_rxtstamp(ndev->phydev)
-#endif
-			) {
+	    && phy_has_rxtstamp(ndev->phydev)) {
 		skb->protocol = eth_type_trans(skb, ndev);
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-		if (likely(ndev->phydev->drv->rxtstamp(ndev->phydev, skb, 0))) {
-#else
 		if (likely(phy_rxtstamp(ndev->phydev, skb, 0))) {
-#endif
 			return true;
 		} else {
 			__skb_push(skb, ETH_HLEN);
+			edma_debug("Timestamp is not enabled with PHY driver");
 		}
 	}
 
 	return false;
+}
+
+/*
+ * edma_rx_tstamp_buf()
+ *	Wrapper function for PTP timestamp processing
+ *	Handles both PHY and XGMAC timestamps with priority
+ */
+bool edma_rx_tstamp_buf(void *app_data, struct sk_buff *skb, void *sc_data)
+{
+	/*
+	 * Try PHY timestamping first (higher priority)
+	 * If PHY consumes the packet, return true
+	 */
+	if (edma_rx_phy_tstamp_consume(skb)) {
+		return true;
+	}
+
+	/*
+	 * PHY didn't consume packet, apply XGMAC timestamp
+	 * This always returns false (doesn't consume packet)
+	 */
+	return edma_rx_mac_tstamp_consume(skb, sc_data);
 }
 
 /*
