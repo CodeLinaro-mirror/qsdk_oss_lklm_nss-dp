@@ -2,20 +2,8 @@
  **************************************************************************
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- **************************************************************************
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/version.h>
@@ -405,6 +393,23 @@ static int nss_dp_set_priv_flags(struct net_device *dev, u32 flags)
 }
 
 /*
+ * nss_dp_get_ts_info()
+ *	Get PTP timestamping information
+ */
+static int nss_dp_get_ts_info(struct net_device *dev, struct ethtool_ts_info *info)
+{
+	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(dev);
+
+	/* Check if HAL supports get_ts_info operation */
+	if (dp_priv->gmac_hal_ops && dp_priv->gmac_hal_ops->get_ts_info) {
+		return dp_priv->gmac_hal_ops->get_ts_info(dp_priv->gmac_hal_ctx, info);
+	}
+
+	/* Fall back to default ethtool implementation */
+	return ethtool_op_get_ts_info(dev, info);
+}
+
+/*
  * nss_dp_get_ethtool_link_ksetting()
  *	get link settings
  */
@@ -515,6 +520,7 @@ struct ethtool_ops nss_dp_ethtool_ops = {
 	.set_eee = &nss_dp_set_eee,
 	.get_priv_flags = nss_dp_get_priv_flags,
 	.set_priv_flags = nss_dp_set_priv_flags,
+	.get_ts_info = nss_dp_get_ts_info,
 };
 
 /*
