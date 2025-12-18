@@ -17,6 +17,7 @@
 #include <fal/fal_qm.h>
 #include <fal/fal_rss_hash.h>
 #include <fal/fal_servcode.h>
+#include <fal/fal_bm.h>
 #include <ppe_drv_sc.h>
 #include <ppe_drv_acl.h>
 #include <ppe_drv.h>
@@ -66,6 +67,11 @@ static char edma_vlan_append_info[EDMA_VLAN_APPEND_INFO_STR_LEN];
 char *argv[] = {"/usr/bin/edma_recover.sh", NULL };
 
 const char edma_cfg_ini_filepath[] = "/etc/config/nss_cfg.ini";
+
+/*
+ * The value of this variable is 0 and is a reference to fc_group 0.
+ */
+static fal_port_t reference_fc_group = 0;
 
 /*
  * edma_recovery_work()
@@ -2670,4 +2676,36 @@ fail:
 	kfree(linebuf);
 	memset(&edma_gbl_ctx->user_fc_grp_map, 0, sizeof(edma_gbl_ctx->user_fc_grp_map));
 	return -EINVAL;
+}
+
+/*
+ * edma_configure_fc_group_bm_cfg()
+ *	Function to configure bm_port parameters.
+*/
+bool edma_configure_fc_group_bm_cfg(uint8_t fc_group)
+{
+	sw_error_t ret;
+	fal_bm_dynamic_cfg_t cfg = {0};
+
+	/*
+	 * Getting the reference fc_group's parameters stored in cfg structure.
+	 * The reference fc_group here is fc_group 0.
+	 */
+	ret = fal_bm_port_dynamic_thresh_get(EDMA_SWITCH_DEV_ID, reference_fc_group, &cfg);
+	if (ret != SW_OK) {
+		edma_err("Failed with error: %d to get parameters for fc_group %u.\n", ret, reference_fc_group);
+		return false;
+	}
+
+	/*
+	 * The parameter related to reference fc_group 0 are stored in structure cfg,
+	 * the same parameter values are now assigned to the required fc_group.
+	 */
+	ret = fal_bm_port_dynamic_thresh_set(EDMA_SWITCH_DEV_ID, fc_group, &cfg);
+	if (ret != SW_OK) {
+		edma_err("Failed with error: %d to set parameters for fc_group %u.\n", ret, fc_group);
+		return false;
+	}
+
+	return true;
 }
