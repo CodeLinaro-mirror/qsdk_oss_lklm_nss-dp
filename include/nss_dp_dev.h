@@ -28,7 +28,7 @@
 #include <linux/switch.h>
 #include <linux/version.h>
 #include <linux/ethtool.h>
-
+#include <linux/phylink.h>
 #ifdef CONFIG_QCA_MINIDUMP
 #include <soc/qcom/ctx-save.h>
 #endif
@@ -229,6 +229,8 @@ struct nss_dp_dev {
 	unsigned long drv_flags;	/* Driver specific feature flags */
 
 	/* Phy related stuff */
+	struct phylink *phylink;	/* Phylink instance */
+	bool phylink_en;		/* Use phylink or not */
 	struct phy_device *phydev;	/* Phy device */
 	struct mii_bus *miibus;		/* MII bus */
 	uint32_t phy_mii_type;		/* RGMII/SGMII/QSGMII */

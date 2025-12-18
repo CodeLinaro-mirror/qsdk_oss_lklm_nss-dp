@@ -26,6 +26,7 @@
 #include <linux/of_address.h>
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
+#include <linux/phylink.h>
 
 #if defined(NSS_DP_PPE_SUPPORT)
 #include <fal/fal_vsi.h>
@@ -369,8 +370,12 @@ static int nss_dp_close(struct net_device *netdev)
 		return -EAGAIN;
 	}
 
-	if (dp_priv->phydev)
-		phy_stop(dp_priv->phydev);
+	if (dp_priv->phylink_en && dp_priv->phylink) {
+		phylink_stop(dp_priv->phylink);
+	} else {
+		if (dp_priv->phydev)
+			phy_stop(dp_priv->phydev);
+	}
 	dp_priv->link_state = __NSS_DP_LINK_DOWN;
 
 #if defined(NSS_DP_PPE_SUPPORT)
@@ -498,7 +503,9 @@ static int nss_dp_open(struct net_device *netdev)
 
 	netif_start_queue(netdev);
 
-	if (!dp_priv->link_poll) {
+	if (dp_priv->phylink_en && dp_priv->phylink) {
+		phylink_start(dp_priv->phylink);
+	} else if (!dp_priv->link_poll) {
 		/* Notify data plane link is up */
 		if (dp_priv->data_plane_ops->link_state(dp_priv->dpc, 1)) {
 			netdev_dbg(netdev, "Data plane set link failed\n");
@@ -728,12 +735,8 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	hal_pdata->netdev = netdev;
 	hal_pdata->macid = dp_priv->macid;
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-	dp_priv->phy_mii_type = of_get_phy_mode(np);
-#else
 	if (of_get_phy_mode(np, &dp_priv->phy_mii_type))
-		return -EFAULT;
-#endif
+		dp_priv->phylink_en = true;
 
 #if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 	dp_priv->link_poll = of_property_read_bool(np, "qcom,link-poll");
@@ -1062,8 +1065,16 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		goto netdev_register_fail;
 	}
 
+	if (dp_priv->phylink_en) {
+		dp_priv->phylink = ssdk_port_phylink_setup(0, dp_priv->macid, netdev);
+		if (!dp_priv->phylink) {
+			netdev_warn(netdev, "Phylink setup failed, falling back to legacy PHY\n");
+			dp_priv->phylink_en = false;
+		}
+	}
+
 #if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
-	if (dp_priv->link_poll) {
+	if (!dp_priv->phylink_en && dp_priv->link_poll) {
 		dp_priv->miibus = nss_dp_mdio_attach(pdev);
 		if (!dp_priv->miibus) {
 			netdev_dbg(netdev, "failed to find miibus\n");
@@ -1138,6 +1149,11 @@ vsi_set_fail:
 		phy_disconnect(dp_priv->phydev);
 		dp_priv->phydev = NULL;
 	}
+
+	if (dp_priv->phylink) {
+		ssdk_port_phylink_destroy(0, dp_priv->macid);
+		dp_priv->phylink = NULL;
+	}
 #endif
 
 #if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
@@ -1175,9 +1191,14 @@ static int nss_dp_remove(struct platform_device *pdev)
 		dp_ops = dp_priv->data_plane_ops;
 		hal_ops = dp_priv->gmac_hal_ops;
 
-		if (dp_priv->phydev) {
-			phy_disconnect(dp_priv->phydev);
-			dp_priv->phydev = NULL;
+		if (dp_priv->phylink_en && dp_priv->phylink) {
+			ssdk_port_phylink_destroy(0, dp_priv->macid);
+			dp_priv->phylink = NULL;
+		} else {
+			if (dp_priv->phydev) {
+				phy_disconnect(dp_priv->phydev);
+				dp_priv->phydev = NULL;
+			}
 		}
 
 #if defined(NSS_DP_PPE_SUPPORT)
