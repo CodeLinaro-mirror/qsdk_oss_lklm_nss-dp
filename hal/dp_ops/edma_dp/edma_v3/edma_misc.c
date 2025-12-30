@@ -137,6 +137,46 @@ irqreturn_t edma_misc_handle_irq(int irq, void *ctx)
 		u64_stats_update_end(&stats->syncp);
 	}
 
+	if (EDMA_MISC_PASS_THR_ERR_FWD_STATUS_GET(misc_intr_status)) {
+		if (net_ratelimit()) {
+			edma_err("MISC pass through packet fwd error received\n");
+		}
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_misc_pass_thr_err_fwd;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (EDMA_MISC_TXQ_PASSTHR_OFFSET_MIS_STATUS_GET(misc_intr_status)) {
+		if (net_ratelimit()) {
+			edma_err("MISC TXQ pass through offset miss error received\n");
+		}
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_misc_txq_passthr_offset_miss;
+		u64_stats_update_end(&stats->syncp);
+	}
+
+	if (EDMA_MISC_TXQ_DS_CMPL_ERR_STATUS_GET(misc_intr_status)) {
+		uint32_t debug_status;
+
+		if (net_ratelimit()) {
+			/*
+			 * Write debug control value to get error code
+			 */
+			edma_reg_write(EDMA_REG_DBG_CTRL, EDMA_REG_DS_CMPL_ERR_DBG_VAL);
+
+			/*
+			 * Read the debug status register (23-bit error code)
+			 */
+			debug_status = edma_reg_read(EDMA_REG_DBG_DATA);
+			debug_status &= EDMA_REG_DBG_DATA_MASK;
+
+			edma_err("MISC TXQ DS CMPL error received, error code: 0x%x\n", debug_status);
+		}
+		u64_stats_update_begin(&stats->syncp);
+		++stats->edma_misc_txq_ds_cmpl_err;
+		u64_stats_update_end(&stats->syncp);
+	}
+
 	/*
 	 * Schedule the EDMA global context work task for deferred execution
 	 * in userspace via a helper function if nss_dp_recovery_en module param is set to 1.

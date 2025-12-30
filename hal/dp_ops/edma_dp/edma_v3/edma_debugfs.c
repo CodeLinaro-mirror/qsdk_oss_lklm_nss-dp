@@ -456,6 +456,12 @@ static int edma_debugfs_misc_stats_show(struct seq_file *m, void __attribute__((
 				pcpu_misc_stats->edma_misc_tx_timeout;
 			misc_stats->edma_misc_tx_cmpl_buf_full +=
 				pcpu_misc_stats->edma_misc_tx_cmpl_buf_full;
+			misc_stats->edma_misc_pass_thr_err_fwd +=
+				pcpu_misc_stats->edma_misc_pass_thr_err_fwd;
+			misc_stats->edma_misc_txq_passthr_offset_miss +=
+				pcpu_misc_stats->edma_misc_txq_passthr_offset_miss;
+			misc_stats->edma_misc_txq_ds_cmpl_err +=
+				pcpu_misc_stats->edma_misc_txq_ds_cmpl_err;
 		} while (edma_dp_stats_fetch_retry(&pcpu_misc_stats->syncp, start));
 	}
 
@@ -478,6 +484,12 @@ static int edma_debugfs_misc_stats_show(struct seq_file *m, void __attribute__((
 			misc_stats->edma_misc_tx_timeout);
 	seq_printf(m, "\t\t miscellaneous Tx completion buffer full = %llu\n",
 			misc_stats->edma_misc_tx_cmpl_buf_full);
+	seq_printf(m, "\t\t miscellaneous Pass through packet forward error = %llu\n",
+			misc_stats->edma_misc_pass_thr_err_fwd);
+	seq_printf(m, "\t\t miscellaneous TXQ pass through offset miss error = %llu\n",
+			misc_stats->edma_misc_txq_passthr_offset_miss);
+	seq_printf(m, "\t\t miscellaneous TXQ DS CMPL error = %llu\n",
+			misc_stats->edma_misc_txq_ds_cmpl_err);
 
 	kfree(misc_stats);
 	return 0;
