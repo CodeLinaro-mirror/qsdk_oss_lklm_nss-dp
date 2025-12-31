@@ -70,7 +70,7 @@ int edma_dp_host_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 module_param(edma_dp_host_num_tx_rings_per_core, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_tx_rings_per_core, "Number of Host TX rings");
 
-int edma_dp_host_num_txcmpl_rings = NR_CPUS;
+int edma_dp_host_num_txcmpl_rings = NR_CPUS + EDMA_MAX_TXDESC_RING_PER_PPEVP;
 module_param(edma_dp_host_num_txcmpl_rings, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_txcmpl_rings, "Number of Host TX cmpl rings");
 
@@ -85,6 +85,24 @@ MODULE_PARM_DESC(edma_dp_host_txcmpl_map, "TX to txcmpl map rings for host");
 
 module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
+
+/*
+ * PPE-VP ring information
+ */
+module_param(edma_dp_ppe_vp_num_tx_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_num_tx_rings, "Number of host ppe_vp TX rings");
+
+module_param_array(edma_dp_ppe_vp_tx_rings, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_tx_rings, "TX rings for host ppe_vp");
+
+module_param_array(edma_dp_ppe_vp_txcmpl_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_txcmpl_map, "TX cmpl rings for host ppe_vp");
+
+module_param(edma_dp_ppe_vp_num_tx_rings_per_core, int, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_num_tx_rings_per_core, "Number of host ppe_vp TX rings per core");
+
+module_param_array(edma_dp_ppe_vp_tx_ring_to_core_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_tx_ring_to_core_map, "TX to core map for host ppe_vp");
 
 /*
  * Each bit denotes the configured mode for that particular EDMA Tx/Rx rings IDs:
@@ -655,10 +673,19 @@ static int edma_validate_host_ring_info(void)
 
 	/*
 	 * Validate host SFE rings (RX and TX)
-	 * This can be extended further for host VP / GRO rings.
+	 * This can be extended further for host GRO rings.
 	 */
 	if (edma_validate_host_txrx_rings(rx_info, tx_info, rxfill_ring_bitmap, txcmpl_ring_bitmap)) {
 		edma_err("Validating host SFE rings failed\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate host PPE VP tx rings
+	 */
+	tx_info = &host_info->vp_info.tx_info;
+	if (edma_validate_host_txrx_rings(NULL, tx_info, 0, txcmpl_ring_bitmap)) {
+		edma_err("Validating host PPE VP tx rings failed\n");
 		return -EINVAL;
 	}
 
@@ -729,6 +756,26 @@ static int edma_parse_ini(void)
 		for (int j = 0; j < EDMA_MAX_TX_RINGS_PER_CORE; j++) {
 			int c = ((i * EDMA_MAX_TX_RINGS_PER_CORE) + j);
 			tx_info->tx_ring_per_core_map[i][j] = edma_dp_host_tx_ring_to_core_map[c];
+		}
+	}
+
+	/*
+	 * PPE VP configurations.
+	 */
+	tx_info = &host_info->vp_info.tx_info;
+
+	tx_info->num_tx_rings = edma_dp_ppe_vp_num_tx_rings;
+	tx_info->max_rings_per_core = edma_dp_ppe_vp_num_tx_rings_per_core;
+
+	for (int i = 0; i < tx_info->num_tx_rings; i++) {
+		tx_info->tx_map[i].tx_ring_id = edma_dp_ppe_vp_tx_rings[i];
+		tx_info->tx_map[i].tx_cmpl_ring_id = edma_dp_ppe_vp_txcmpl_map[i];
+	}
+
+	for (int i = 0; i < NR_CPUS; i++) {
+		for (int j = 0; j < EDMA_MAX_TX_RINGS_PER_CORE; j++) {
+			int c = ((i * EDMA_MAX_TX_RINGS_PER_CORE) + j);
+			tx_info->tx_ring_per_core_map[i][j] = edma_dp_ppe_vp_tx_ring_to_core_map[c];
 		}
 	}
 
@@ -1559,7 +1606,19 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 				EDMA_TX_RING_SIZE);
 
 	/*
-	 * TO-DO: Further for other host rings like VP host rings, SMD host rings,
+	 * Mark PPEVP rings.
+	 */
+	tx_rings = &host_info->vp_info.tx_info;
+
+	/*
+	 * Mark PPEVP TX descriptor rings
+	 */
+	edma_init_txdesc_rings(egc, tx_rings->tx_map, tx_rings->num_tx_rings,
+				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_VP,
+				EDMA_TX_RING_SIZE);
+
+	/*
+	 * TO-DO: SMD host rings,
 	 * simply mark them into the global pool so that these will be initialized and setup
 	 * at once. This makes it easy to add/delete a new type of host ring.
 	 */

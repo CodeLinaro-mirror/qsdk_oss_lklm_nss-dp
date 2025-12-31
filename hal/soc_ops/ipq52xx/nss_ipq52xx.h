@@ -119,6 +119,16 @@ extern int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE];
 extern int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE];
 extern int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE];
 extern int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+
+#define EDMA_MAX_TXDESC_RING_PER_PPEVP	NR_CPUS
+#define EDMA_MAX_TXCMPL_RING_PER_PPEVP	NR_CPUS
+
+extern int edma_dp_ppe_vp_num_tx_rings;
+extern int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PER_PPEVP];
+extern int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP];
+extern int edma_dp_ppe_vp_num_tx_rings_per_core;
+extern int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+
 /**
  * nss_dp_hal_gmac_stats
  *	The per-GMAC statistics structure.
