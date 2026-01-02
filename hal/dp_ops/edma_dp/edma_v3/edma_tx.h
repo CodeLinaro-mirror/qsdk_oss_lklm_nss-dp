@@ -72,6 +72,7 @@ struct edma_tx_cb {
 #define EDMA_SRC_PORT_TYPE_SET(x)	(((x) << EDMA_SRC_PORT_TYPE_SHIFT) & EDMA_SRC_PORT_TYPE_MASK)
 #define EDMA_SRC_PORT_ID_SET(x)		(((x) << EDMA_SRC_PORT_ID_SHIFT) & EDMA_SRC_PORT_ID_MASK)
 #define EDMA_SRC_INFO_SET(desc, x)	(desc->word4 |= (EDMA_SRC_PORT_TYPE_SET(EDMA_SRC_PORT_TYPE) | EDMA_SRC_PORT_ID_SET(x)))
+#define EDMA_SRC_INFO_CLEAR(desc)	(desc->word4 &= ~EDMA_SRC_PORT_ID_MASK)
 
 #define EDMA_DST_PORT_TYPE		2
 #define EDMA_DST_PORT_TYPE_SHIFT	28
@@ -121,6 +122,8 @@ struct edma_tx_cb {
 #define EDMA_TXDESC_SERVICE_CODE_SHIFT	16
 #define EDMA_TXDESC_SERVICE_CODE_MASK	(0x1FF << EDMA_TXDESC_SERVICE_CODE_SHIFT)
 #define EDMA_TXDESC_SERVICE_CODE_SET(desc, x)	((desc)->word1 |= (((x) << EDMA_TXDESC_SERVICE_CODE_SHIFT) & EDMA_TXDESC_SERVICE_CODE_MASK))
+#define EDMA_TXDESC_SERVICE_CODE_CLEAR(desc)	((desc)->word1 &= ~EDMA_TXDESC_SERVICE_CODE_MASK)
+
 #define EDMA_TXDESC_BUFFER_ADDR_SET(desc, addr)	(((desc)->word0) = (addr))
 #define EDMA_TXDESC_BUFFER_ADDR_HI_SET(desc, addr)	{ \
 	(((desc)->word1) |= (((dma_addr_t)(addr) >> 0x20) & 0x000000FF)); \
@@ -198,6 +201,8 @@ struct edma_tx_cb {
 	cpu_to_le32s(&((desc)->word7)); \
 }
 
+#define EDMA_TX_SC_GEM_LOOKUP PPE_DRV_SC_GEM_LOOKUP
+
 /*
  * edma_tx
  *	List of return values of the TX API.
@@ -206,6 +211,10 @@ enum edma_tx {
 	EDMA_TX_OK = 0,			/* Tx success */
 	EDMA_TX_FAIL_NO_DESC = 1,	/* Not enough descriptors */
 	EDMA_TX_FAIL = 2,		/* Tx failure */
+#ifdef CONFIG_IPQ_PON
+	EDMA_TX_GEM_CONSUMED = 3,	/* GEM Consumed */
+	EDMA_TX_GEM_FAIL = 4,		/* GEm Failed */
+#endif
 };
 
 /*

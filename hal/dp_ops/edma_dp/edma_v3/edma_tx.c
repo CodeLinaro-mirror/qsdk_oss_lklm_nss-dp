@@ -20,6 +20,14 @@
 #include <ppe_drv_sc.h>
 #include "syn_dev.h"
 
+#ifdef CONFIG_IPQ_PON
+#include "nss_dp_gem.h"
+
+/* Extern for GEM callbacks */
+extern nss_dp_gem_tx_cb_t nss_dp_gem_tx_reg_cb_g;
+extern void *nss_dp_gem_tx_app_data_g;
+#endif
+
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 extern int syn_ptp_get_tx_hwtstamp_by_id(struct syn_hal_dev *shd,
 					  u16 pkt_id,
@@ -618,7 +626,7 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
  */
 static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev, struct edma_txdesc_ring *txdesc_ring,
 					struct nss_dp_vp_tx_info *dptxi, struct sk_buff *skb, uint32_t *hw_next_to_use,
-					struct edma_tx_stats *stats)
+					struct edma_tx_stats *stats, void *gem_txi_info)
 {
 	uint32_t buf_len = 0;
 	struct edma_pri_txdesc *txd = NULL;
@@ -667,7 +675,26 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	} else {
 		edma_tx_fill_pp_desc(dp_dev, txd, skb, stats);
 	}
+#ifdef CONFIG_IPQ_PON
+	struct nss_dp_gem_tx_info *gem_txi = (struct nss_dp_gem_tx_info *)gem_txi_info;
 
+	/* GEM TX */
+	if (dp_dev->gem_port) {
+		/* src port */
+		if (gem_txi->src_dev_valid) {
+			int src_port_id = nss_dp_get_port_num(gem_txi->src_dev);
+			if (src_port_id != NSS_DP_INVALID_INTERFACE) {
+				EDMA_SRC_INFO_CLEAR(txd);
+				EDMA_SRC_INFO_SET(txd, src_port_id);
+			}
+		}
+		/* service code */
+		if (gem_txi->service_code == EDMA_TX_SC_GEM_LOOKUP) {
+			EDMA_TXDESC_SERVICE_CODE_CLEAR(txd);
+			EDMA_TXDESC_SERVICE_CODE_SET(txd, gem_txi->service_code);
+		}
+	}
+#endif
 	edma_dmac_clean_range_no_dsb((void *)skb->data, (void *)(skb->data + buf_len));
 
 	*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK;
@@ -889,6 +916,48 @@ static inline void edma_tx_tstamp_buf(struct nss_dp_dev *dp_dev, struct net_devi
 #endif
 }
 
+#ifdef CONFIG_IPQ_PON
+/*
+ * edma_tx_process_gem()
+ *    API to process GEM TX handling for a packet.
+ */
+enum edma_tx edma_tx_process_gem(struct sk_buff *skb,
+		struct nss_dp_gem_tx_info *gem_txi)
+{
+	nss_dp_gem_tx_cb_t gem_tx_cb;
+	void *app_data;
+	bool consumed;
+
+	/* Initialize gem structure */
+	gem_txi->src_dev       = NULL;
+	gem_txi->src_dev_valid = A_FALSE;
+	gem_txi->service_code  = PPE_DRV_SC_BYPASS_ALL; /* default */
+
+	/* If there's no GEM TX callback, nothing to do—proceed as OK. */
+	rcu_read_lock();
+	gem_tx_cb = rcu_dereference(nss_dp_gem_tx_reg_cb_g);
+	if (unlikely(!gem_tx_cb)) {
+		rcu_read_unlock();
+		return EDMA_TX_GEM_FAIL;
+	}
+
+	app_data = rcu_dereference(nss_dp_gem_tx_app_data_g);
+
+	/* Allow memory debug accounting around the callback. */
+	mem_debug_update_skb(skb);
+	consumed = gem_tx_cb(app_data, skb, gem_txi);
+	mem_debug_update_skb(skb);
+
+	if (unlikely(consumed)) {
+		rcu_read_unlock();
+		return EDMA_TX_GEM_CONSUMED;
+	}
+	rcu_read_unlock();
+
+	return EDMA_TX_OK;
+}
+#endif
+
 /*
  * edma_tx_ring_xmit()
  *	API to transmit a packet.
@@ -903,7 +972,12 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	uint32_t num_tx_desc_needed = 0, num_desc_filled = 0;
 	struct edma_pri_txdesc *txdesc = NULL;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-
+	void *gem_txi = NULL;
+#ifdef CONFIG_IPQ_PON
+	enum edma_tx ret;
+	struct nss_dp_gem_tx_info real_gem_txi = {0};
+	gem_txi = &real_gem_txi;
+#endif
 	hw_next_to_use = txdesc_ring->prod_idx;
 
 	mem_debug_update_skb(skb);
@@ -928,6 +1002,14 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		}
 	}
 
+#ifdef CONFIG_IPQ_PON
+	if (dp_dev->gem_port) {
+		ret = edma_tx_process_gem(skb, gem_txi);
+			if (unlikely(ret != EDMA_TX_OK))
+				return ret;
+	}
+#endif
+
 #if defined(CONFIG_SKB_FAST_RECYCLABLE_DEBUG_ENABLE)
 	if (likely(skb->fast_xmit) && likely(skb->is_from_recycler)) {
 		dev_check_skb_fast_recyclable(skb);
@@ -939,7 +1021,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	 * Process head skb + nr_frags + fraglist for non linear skb
 	 */
 	if (likely(!skb_is_nonlinear(skb))) {
-		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats, gem_txi);
 		if (!txdesc) {
 			return EDMA_TX_FAIL;
 		}
@@ -996,7 +1078,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 			}
 		}
 
-		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats, gem_txi);
 		if (!txdesc) {
 			return EDMA_TX_FAIL;
 		}
@@ -1007,6 +1089,7 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		}
 
 		EDMA_TXDESC_OPAQUE_SET(txdesc, skb);
+
 		num_desc_filled = edma_tx_skb_sg_fill_desc(dp_dev, txdesc_ring, &txdesc, skb, &hw_next_to_use, stats);
 	}
 
