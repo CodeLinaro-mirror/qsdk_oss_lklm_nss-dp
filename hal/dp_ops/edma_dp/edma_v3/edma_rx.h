@@ -13,9 +13,6 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RXFILL_RING_PER_CORE_MAX	1
 #define EDMA_RXDESC_RING_PER_CORE_MAX	1
 
-#define EDMA_MAX_RXDESC_RING_PER_TYPE	(NR_CPUS * 2)
-#define EDMA_MAX_RXFILL_RING_PER_TYPE	(NR_CPUS * 2)
-
 #define EDMA_RX_MAX_PROCESS		32	/* Max Rx processing without
 						   replenishing RxFill ring */
 #define EDMA_RX_SKB_HEADROOM		128

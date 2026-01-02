@@ -869,7 +869,7 @@ void edma_cfg_rx_mcast_qid_to_core_mapping(struct edma_gbl_ctx *egc, uint8_t cor
 	 * TO-DO: Update this API for IPQ9650 later as per updated mirror
 	 * functionality.
 	 */
-	desc_index = 0;
+	desc_index = edma_dp_host_rx_rings[0];
 	for (q_id = EDMA_CPU_PORT_MCAST_QUEUE_START;
 		q_id <= EDMA_CPU_PORT_MCAST_QUEUE_END;
 			q_id += EDMA_QID2RID_NUM_PER_REG) {

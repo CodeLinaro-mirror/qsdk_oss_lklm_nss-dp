@@ -21,10 +21,6 @@ extern uint32_t tx_ring_sz_high_mem;
 
 #define EDMA_MAX_TX_RINGS_PER_CORE	2
 
-#define EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE	10
-#define EDMA_MAX_TXDESC_RING_PER_TYPE	(NR_CPUS * 2)
-#define EDMA_MAX_TXCMPL_RING_PER_TYPE	(NR_CPUS * 2)
-
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 #define EDMA_TXCMPL_RING_PER_CORE_MAX	EDMA_MAX_TX_PORTS
 						/* Includes the one additional for VP */
