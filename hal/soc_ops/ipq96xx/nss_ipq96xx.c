@@ -264,7 +264,7 @@ bool nss_dp_hal_init(void)
 	/*
 	 * Bail out on not supported platform
 	 */
-	if (!of_machine_is_compatible("qcom,ipq9679")) {
+	if (!of_machine_is_compatible("qcom,ipq9650")) {
 		return false;
 	}
 
