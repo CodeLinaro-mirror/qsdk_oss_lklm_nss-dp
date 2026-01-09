@@ -238,7 +238,7 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
 	}
 
 	edma_cfg_rst = devm_reset_control_get(&pdev->dev, EDMA_CFG_RESET_ID);
-        if (IS_ERR(edma_hw_rst)) {
+        if (IS_ERR(edma_cfg_rst)) {
                 return -EINVAL;
         }
 
