@@ -5,6 +5,7 @@
 
 #include <linux/debugfs.h>
 #include "edma.h"
+#include "edma_regs.h"
 #include "edma_debug.h"
 #include "edma_debugfs.h"
 #include "nss_dp_dev.h"
@@ -726,6 +727,319 @@ const struct file_operations edma_debugfs_clear_ring_stats_ops = {
 };
 
 /*
+ * edma_debugfs_bp_counter_clk_cycle_show()
+ *	EDMA debugfs bp counter clk cycle show
+ *
+ * Show counter clk cycle.
+ * 0: 64 cycle, 1: 128, 2: 256, 3: 512, 4: 1024, 5: 2048, 6: 4096, 7: 8192
+ * Backpressure should be observed for whole duration of the configured cycle
+ * post which backpressure counter will be incremented by 1.
+ */
+static int edma_debugfs_bp_counter_clk_cycle_show(struct seq_file *seq, void *v)
+{
+	uint32_t val = edma_reg_read(EDMA_REG_DBG_CNT_TIME);
+	seq_printf(seq, "%u\n", (val & EDMA_DBG_CNT_DUR_TIME_MASK) >> EDMA_DBG_CNT_DUR_TIME_SHIFT);
+	return 0;
+}
+
+/*
+ * edma_debugfs_bp_counter_clk_cycle_open()
+ *	EDMA debugfs bp counter clk cycle open callback
+ */
+static int edma_debugfs_bp_counter_clk_cycle_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_bp_counter_clk_cycle_show, inode->i_private);
+}
+
+/*
+ * edma_debugfs_bp_counter_clk_cycle_write()
+ *	EDMA debugfs bp counter clk cycle write callback
+ *
+ * Write counter clk cycle.
+ * 0: 64 cycle, 1: 128, 2: 256, 3: 512, 4: 1024, 5: 2048, 6: 4096, 7: 8192
+ * Backpressure should be observed for whole duration of the configured cycle
+ * post which backpressure counter will be incremented by 1.
+ */
+static ssize_t edma_debugfs_bp_counter_clk_cycle_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	char buffer[16];
+	unsigned int time_val;
+	uint32_t reg;
+
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+	buffer[count] = '\0';
+
+	if (kstrtouint(strstrip(buffer), 0, &time_val))
+		return -EINVAL;
+	if (time_val > EDMA_DBG_CNT_DUR_TIME_MASK)
+		return -EINVAL;
+
+	reg = edma_reg_read(EDMA_REG_DBG_CNT_TIME);
+	reg &= ~EDMA_DBG_CNT_DUR_TIME_MASK;
+	reg |= (time_val << EDMA_DBG_CNT_DUR_TIME_SHIFT) & EDMA_DBG_CNT_DUR_TIME_MASK;
+	edma_reg_write(EDMA_REG_DBG_CNT_TIME, reg);
+
+	return count;
+}
+
+static const struct file_operations edma_debugfs_bp_counter_clk_cycle_file_ops = {
+	.open    = edma_debugfs_bp_counter_clk_cycle_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.write   = edma_debugfs_bp_counter_clk_cycle_write,
+	.release = single_release,
+};
+
+/*
+ * edma_debugfs_bp_counter_clean_bitmap_write()
+ *	EDMA debugfs debug bp counter clean bitmap write callback
+ *
+ * Write bitmap [17:0], where position of bit indicate idx of bp counter
+ * Set bit reset the corresponding bp counter
+ */
+static ssize_t edma_debugfs_bp_counter_clean_bitmap_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	char buffer[32];
+	unsigned int idx_or_bm;
+
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+	buffer[count] = '\0';
+
+	if (kstrtouint(strstrip(buffer), 0, &idx_or_bm))
+		return -EINVAL;
+
+	edma_reg_write(EDMA_REG_DBG_CNT_CLEAN, idx_or_bm & EDMA_DBG_CNT_SINGLE_CLEAN_MASK);
+	return count;
+}
+
+/*
+ * edma_debugfs_bp_counter_clean_bitmap_show()
+ *	EDMA debugfs debug bp counter clean bitmap show
+ *
+ * Show bitmap [17:0], where position of bit indicate idx of bp counter
+ * Set bit reset the corresponding bp counter
+ */
+static int edma_debugfs_bp_counter_clean_bitmap_show(struct seq_file *seq, void *v)
+{
+        seq_printf(seq, "%u\n", (edma_reg_read(EDMA_REG_DBG_CNT_CLEAN) & EDMA_DBG_CNT_SINGLE_CLEAN_MASK));
+        return 0;
+}
+
+/*
+ * edma_debugfs_bp_counter_clean_bitmap_open()
+ *	EDMA debugfs debug bp counter clean bitmap open callback
+ */
+static int edma_debugfs_bp_counter_clean_bitmap_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, edma_debugfs_bp_counter_clean_bitmap_show, inode->i_private);
+}
+
+
+static const struct file_operations edma_debugfs_bp_counter_clean_bitmap_file_ops = {
+	.open    = edma_debugfs_bp_counter_clean_bitmap_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.write   = edma_debugfs_bp_counter_clean_bitmap_write,
+	.release = single_release,
+};
+
+/*
+ * edma_debugfs_bp_counters_enable_show()
+ *	EDMA debugfs debug bp counters enable show
+ *
+ * 1 indicates enabled bp counters and 0 indicates disabled bp counters
+ */
+static int edma_debugfs_bp_counters_enable_show(struct seq_file *seq, void *v)
+{
+        seq_printf(seq, "%u\n", (edma_reg_read(EDMA_REG_DBG_TOTAL_GO) & EDMA_DBG_CNT_TOTAL_GO_MASK));
+        return 0;
+}
+
+/*
+ * edma_debugfs_bp_counters_enable_open()
+ *	EDMA debugfs debug bp counters enable open callback
+ */
+static int edma_debugfs_bp_counters_enable_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, edma_debugfs_bp_counters_enable_show, inode->i_private);
+}
+
+/*
+ * edma_debugfs_bp_counters_enable_write()
+ *	EDMA debugfs debug bp counters enable write callback
+ *
+ * Set 1 to enable bp counters and 0 to disable
+ */
+static ssize_t edma_debugfs_bp_counters_enable_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	char buffer[8];
+	unsigned int v;
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+	buffer[count] = '\0';
+	if (kstrtouint(strstrip(buffer), 0, &v))
+		return -EINVAL;
+
+	if (v)
+		edma_reg_write(EDMA_REG_DBG_TOTAL_GO, EDMA_DBG_CNT_TOTAL_GO_MASK);
+	else
+		edma_reg_write(EDMA_REG_DBG_TOTAL_GO, 0);
+
+	return count;
+}
+
+static const struct file_operations edma_debugfs_bp_counters_enable_file_ops = {
+	.open    = edma_debugfs_bp_counters_enable_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.write   = edma_debugfs_bp_counters_enable_write,
+	.release = single_release,
+};
+
+/*
+ * edma_debugfs_bp_all_counters_clean_write()
+ *	EDMA debugfs debug bp all counters clean write callback
+ *
+ * Set 1 to reset all bp counters and 0 to enable again.
+ */
+static ssize_t edma_debugfs_bp_all_counters_clean_write(struct file *file, const char __user *buf, size_t count, loff_t *ppos)
+{
+	char buffer[8];
+	unsigned int v;
+	if (count > sizeof(buffer) - 1)
+		count = sizeof(buffer) - 1;
+	if (copy_from_user(buffer, buf, count))
+		return -EFAULT;
+	buffer[count] = '\0';
+	if (kstrtouint(strstrip(buffer), 0, &v))
+		return -EINVAL;
+
+	if (v)
+		edma_reg_write(EDMA_REG_DBG_TOTAL_CLEAN, EDMA_DBG_CNT_TOTAL_CLEAN_MASK);
+	else
+		edma_reg_write(EDMA_REG_DBG_TOTAL_CLEAN, 0);
+
+	return count;
+}
+
+/*
+ * edma_debugfs_bp_all_counters_clean_show()
+ *	EDMA debugfs debug bp all counters clean show
+ *
+ * 1 indicates all bp counter are resetted, set 0 to enable again
+ */
+static int edma_debugfs_bp_all_counters_clean_show(struct seq_file *seq, void *v)
+{
+        seq_printf(seq, "%u\n", (edma_reg_read(EDMA_REG_DBG_TOTAL_CLEAN) & EDMA_DBG_CNT_TOTAL_CLEAN_MASK));
+        return 0;
+}
+
+/*
+ * edma_debugfs_bp_all_counters_clean_open()
+ *	EDMA debugfs debug bp all counters clean open callback
+ */
+static int edma_debugfs_bp_all_counters_clean_open(struct inode *inode, struct file *file)
+{
+        return single_open(file, edma_debugfs_bp_all_counters_clean_show, inode->i_private);
+}
+
+static const struct file_operations edma_debugfs_bp_all_counters_clean_file_ops = {
+	.open    = edma_debugfs_bp_all_counters_clean_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.write   = edma_debugfs_bp_all_counters_clean_write,
+	.release = single_release,
+};
+
+/*
+ * edma_debugfs_bp_counters_show()
+ *	EDMA debugfs debug bp counters show
+ *
+ * Show the BP Stats for the bp enabled ring ids.
+ */
+static int edma_debugfs_bp_counters_show(struct seq_file *seq, void *v)
+{
+	uint8_t mapped_ring_id;
+	uint8_t ring_id;
+	uint8_t idx = 0;
+
+	while (idx < EDMA_REG_RXDESC_BP_IDX_OFFSET) {
+		mapped_ring_id = edma_reg_read(EDMA_REG_DBG_CNT_PORT_MAP(idx)) & EDMA_DBG_CNT_PORT_MAP_VAL_MASK;
+		ring_id = mapped_ring_id - EDMA_REG_BP_TXCMPL_RING_ID_OFFSET;
+		seq_printf(seq, "BP Stats for txcmpl_%u = %u\n", ring_id, edma_reg_read(EDMA_REG_DBG_CNT_NUM(idx)));
+		idx++;
+	}
+
+	while (idx < EDMA_REG_RXFILL_BP_IDX_OFFSET) {
+		mapped_ring_id = edma_reg_read(EDMA_REG_DBG_CNT_PORT_MAP(idx)) & EDMA_DBG_CNT_PORT_MAP_VAL_MASK;
+		ring_id = mapped_ring_id - EDMA_REG_BP_RXDESC_RING_ID_OFFSET;
+		seq_printf(seq, "BP Stats for rxdesc_%u = %u\n", ring_id, edma_reg_read(EDMA_REG_DBG_CNT_NUM(idx)));
+		idx++;
+	}
+
+	while (idx < EDMA_REG_BP_COUNTERS_NUM) {
+		mapped_ring_id = edma_reg_read(EDMA_REG_DBG_CNT_PORT_MAP(idx)) & EDMA_DBG_CNT_PORT_MAP_VAL_MASK;
+		ring_id = mapped_ring_id - EDMA_REG_BP_RXFILL_RING_ID_OFFSET;
+		seq_printf(seq, "BP Stats for rxfill_%u = %u\n", ring_id, edma_reg_read(EDMA_REG_DBG_CNT_NUM(idx)));
+		idx++;
+	}
+
+        return 0;
+}
+
+/*
+ * edma_debugfs_bp_counters_open()
+ *	EDMA debugfs debug bp counters open callback
+ */
+static int edma_debugfs_bp_counters_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_bp_counters_show, inode->i_private);
+}
+
+static const struct file_operations edma_debugfs_bp_counters_file_ops = {
+	.open    = edma_debugfs_bp_counters_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/*
+ * edma_debugfs_bp_cnt_total_show()
+ *	EDMA debugfs debug bp cnt total show
+ *
+ * Shows the total bp counter
+ */
+static int edma_debugfs_bp_cnt_total_show(struct seq_file *seq, void *v)
+{
+	seq_printf(seq, "%u\n", edma_reg_read(EDMA_REG_DBG_CNT_TOTAL_CNT));
+	return 0;
+}
+
+/*
+ * edma_debugfs_bp_cnt_total_open()
+ *	EDMA debugfs debug bp cnt total open callback
+ */
+static int edma_debugfs_bp_cnt_total_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_bp_cnt_total_show, inode->i_private);
+}
+
+static const struct file_operations edma_debugfs_bp_cnt_total_file_ops = {
+	.open    = edma_debugfs_bp_cnt_total_open,
+	.read    = seq_read,
+	.llseek  = seq_lseek,
+	.release = single_release,
+};
+
+/*
  * edma_debugfs_init()
  *	EDMA debugfs init API
  */
@@ -740,6 +1054,48 @@ int edma_debugfs_init(void)
 	edma_gbl_ctx.stats_dentry = debugfs_create_dir("stats", edma_gbl_ctx.root_dentry);
 	if (!edma_gbl_ctx.stats_dentry) {
 		edma_err("Unable to create debugfs stats directory in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	edma_gbl_ctx.bp_stats_dentry = debugfs_create_dir("bp_stats", edma_gbl_ctx.stats_dentry);
+	if (!edma_gbl_ctx.bp_stats_dentry) {
+		edma_err("Unable to create debugfs bp stats directory in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("bp_counter_clk_cycle", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+				  NULL, &edma_debugfs_bp_counter_clk_cycle_file_ops)) {
+		edma_err("Unable to create bp counter clk cycle file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("bp_counter_clean_bitmap", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+				  NULL, &edma_debugfs_bp_counter_clean_bitmap_file_ops)) {
+		edma_err("Unable to create bp counter clean bitmap file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("bp_counters_enable", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+				  NULL, &edma_debugfs_bp_counters_enable_file_ops)) {
+		edma_err("Unable to create bp counters enable file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("bp_counters", S_IRUGO, edma_gbl_ctx.bp_stats_dentry,
+				  NULL, &edma_debugfs_bp_counters_file_ops)) {
+		edma_err("Unable to create bp counters file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("bp_all_counters_clean", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+				  NULL, &edma_debugfs_bp_all_counters_clean_file_ops)) {
+		edma_err("Unable to create bp all counters clean file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("bp_cnt_total", S_IRUGO, edma_gbl_ctx.bp_stats_dentry,
+				  NULL, &edma_debugfs_bp_cnt_total_file_ops)) {
+		edma_err("Unable to create bp cnt total file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
@@ -798,6 +1154,7 @@ debugfs_dir_failed:
 	debugfs_remove_recursive(edma_gbl_ctx.root_dentry);
 	edma_gbl_ctx.root_dentry = NULL;
 	edma_gbl_ctx.stats_dentry = NULL;
+	edma_gbl_ctx.bp_stats_dentry = NULL;
 	return -1;
 }
 
@@ -816,5 +1173,6 @@ void edma_debugfs_exit(void)
 		debugfs_remove_recursive(edma_gbl_ctx.root_dentry);
 		edma_gbl_ctx.root_dentry = NULL;
 		edma_gbl_ctx.stats_dentry = NULL;
+		edma_gbl_ctx.bp_stats_dentry = NULL;
 	}
 }

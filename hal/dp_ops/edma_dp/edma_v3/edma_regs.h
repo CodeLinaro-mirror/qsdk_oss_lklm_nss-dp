@@ -9,6 +9,20 @@
 #define EDMA_GENMASK(end, start)	(uint32_t)((((uint64_t)1 << ((end) - (start) + 1)) - 1) << (start))
 
 /*
+ * EDMA Debug Statistics Macros
+ */
+#define EDMA_REG_BP_COUNTERS_NUM		18
+#define EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX	6
+
+#define EDMA_REG_TXCMPL_BP_IDX_OFFSET	0
+#define EDMA_REG_RXDESC_BP_IDX_OFFSET	6
+#define EDMA_REG_RXFILL_BP_IDX_OFFSET	12
+
+#define EDMA_REG_BP_TXCMPL_RING_ID_OFFSET	0
+#define EDMA_REG_BP_RXDESC_RING_ID_OFFSET	20
+#define EDMA_REG_BP_RXFILL_RING_ID_OFFSET	44
+
+/*
  * EDMA register offsets
  */
 #define EDMA_REG_MAS_CTRL		0x0
@@ -40,6 +54,40 @@
 #define EDMA_REG_DBG_DATA		0x68
 #define EDMA_REG_DBG_DATA_MASK		0x7FFFFF	/* 23-bit mask */
 #define EDMA_REG_DS_CMPL_ERR_DBG_VAL	0x409c		/* Debug control value for DS CMPL error */
+#define EDMA_REG_DBG_CNT_TIME		0x1DC		/* Counter clock cycle for BP stats */
+#define EDMA_REG_DBG_CNT_CLEAN		0x1E0		/* Bitmask[0:17] to clean specific BP counters */
+#define EDMA_REG_DBG_TOTAL_GO		0x1E4		/* Enable/Disable BP counters */
+#define EDMA_REG_DBG_TOTAL_CLEAN	0x1E8		/* Clean all BP counters */
+#define EDMA_REG_DBG_CNT_TOTAL_CNT	0x1EC		/* Total BP count */
+
+/*
+ * EDMA debug counter bit fields
+ */
+#define EDMA_DBG_CNT_DUR_TIME_SHIFT	0
+#define EDMA_DBG_CNT_DUR_TIME_MASK	EDMA_GENMASK(2, 0)		/* 3-bit mask */
+
+#define EDMA_DBG_CNT_SINGLE_CLEAN_MASK	0x0003FFFFU 			/* 18-bit mask */
+
+#define EDMA_DBG_CNT_TOTAL_GO_MASK	0x1U				/* 1-bit mask */
+#define EDMA_DBG_CNT_TOTAL_CLEAN_MASK	0x1U				/* 1-bit mask */
+
+
+/*
+ * Debug counter port map registers
+ * First register absolute addr: 0x2AE1B300
+ * EDMA base is at 0x2AD00000, so relative offset = 0x11B300
+ * There are 18 registers, 32-bit stride, value field uses lower 6 bits (0..63)
+ */
+#define EDMA_REG_DBG_CNT_PORT_MAP(n)	(0x11B300 + (0x4 * (n)))
+#define EDMA_DBG_CNT_PORT_MAP_VAL_MASK	0x3FU				/* 6-bit mask */
+
+/*
+ * Debug BP counter registers
+ * First register absolute addr: 0x2AE1B400
+ * EDMA base is at 0x2AD00000, so relative offset = 0x11B400
+ * There are 18 registers
+ */
+#define EDMA_REG_DBG_CNT_NUM(n)		(0x11B400 + (0x4 * (n)))
 #define EDMA_REG_TX_TIMEOUT_THRESH	0x6c
 #define EDMA_REG_REQ0_FIFO_THRESH	0x80
 #define EDMA_REG_WB_OS_THRESH		0x84

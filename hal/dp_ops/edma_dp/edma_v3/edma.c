@@ -118,6 +118,21 @@ module_param(edma_tx_ring_mode_bitmask, int, 0640);
 MODULE_PARM_DESC(edma_tx_ring_mode_bitmask, "EDMA Tx ring mode (preheader/secondary ring) bitmask");
 
 /*
+ * Module parameters for the bp stats enabled txcmpl, rxdesc, and rxfill rings config
+ */
+int edma_bp_stats_en_txcmpl_rings[EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX] = {0,1,7,8,9,10};
+module_param_array(edma_bp_stats_en_txcmpl_rings, bp_stats_en_txcmpl_ring_id, NULL, 0640);
+MODULE_PARM_DESC(edma_bp_stats_en_txcmpl_rings, "bp_stats_en_txcmpl_rings");
+
+int edma_bp_stats_en_rxdesc_rings[EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX] = {0,1,7,8,9,10};
+module_param_array(edma_bp_stats_en_rxdesc_rings, bp_stats_en_rxdesc_ring_id, NULL, 0640);
+MODULE_PARM_DESC(edma_bp_stats_en_rxdesc_rings, "bp_stats_en_rxdesc_rings");
+
+int edma_bp_stats_en_rxfill_rings[EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX] = {0,1,7,8,9,10};
+module_param_array(edma_bp_stats_en_rxfill_rings, bp_stats_en_rxfill_ring_id, NULL, 0640);
+MODULE_PARM_DESC(edma_bp_stats_en_rxfill_rings, "bp_stats_en_rxfill_rings");
+
+/*
  * Input String length for VLAN insertion.
  */
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40
@@ -145,6 +160,141 @@ static char edma_rxfill_irq_name[EDMA_MAX_RXFILL_RINGS][EDMA_IRQ_NAME_SIZE];
 static char edma_vlan_append_info[EDMA_VLAN_APPEND_INFO_STR_LEN];
 
 char *argv[] = {"/usr/bin/edma_recover.sh", NULL };
+
+/*
+ * edma_param_set_bp_stats_en_txcmpl_ring_id()
+ *      Custom setter for the edma_bp_stats_en_txcmpl_rings module parameter.
+ */
+static int edma_param_set_bp_stats_en_txcmpl_ring_id(const char *val, const struct kernel_param *kp)
+{
+        int ret;
+        int ring_id;
+        struct kernel_param kptmp = *kp;	/* Create a temporary kp pointing to our local ring_id */
+
+        kptmp.arg = &ring_id;
+
+	/*
+	 * Use standard helper to parse string -> integer
+	 */
+        ret = param_set_int(val, &kptmp);
+        if (ret < 0)
+                return ret;
+
+	/*
+	 * Perform Range Check
+	 */
+        if (ring_id < 0 || ring_id >= EDMA_MAX_TXCMPL_RINGS) {
+                pr_err("Invalid txcmpl ring_id: %d, Valid range: [%d, %d]\n", ring_id,
+			0, EDMA_MAX_TXCMPL_RINGS - 1);
+                return -EINVAL;
+        }
+
+	/*
+	 * If valid, write to the actual location
+	 * Note: param_set_int already wrote to ring_id, now we copy it to the real array element
+	 */
+	*((int *)kp->arg) = ring_id;
+
+        return 0;
+}
+
+/*
+ * edma_param_set_bp_stats_en_rxdesc_ring_id()
+ *      Custom setter for the edma_bp_stats_en_rxdesc_rings module parameter.
+ */
+static int edma_param_set_bp_stats_en_rxdesc_ring_id(const char *val, const struct kernel_param *kp)
+{
+        int ret;
+        int ring_id;
+        struct kernel_param kptmp = *kp;	/* Create a temporary kp pointing to our local ring_id */
+
+        kptmp.arg = &ring_id;
+
+	/*
+	 * Use standard helper to parse string -> integer
+	 */
+        ret = param_set_int(val, &kptmp);
+        if (ret < 0)
+                return ret;
+
+	/*
+	 * Perform Range Check
+	 */
+        if (ring_id < 0 || ring_id >= EDMA_MAX_RXDESC_RINGS) {
+                pr_err("Invalid rxdesc ring_id: %d, Valid range: [%d, %d]\n", ring_id,
+			0, EDMA_MAX_RXDESC_RINGS - 1);
+                return -EINVAL;
+        }
+
+	/*
+	 * If valid, write to the actual location
+	 * Note: param_set_int already wrote to ring_id, now we copy it to the real array element
+	 */
+        *((int *)kp->arg) = ring_id;
+
+        return 0;
+}
+
+/*
+ * edma_param_set_bp_stats_en_rxfill_ring_id()
+ *      Custom setter for the edma_bp_stats_en_rxfill_rings module parameter.
+ */
+static int edma_param_set_bp_stats_en_rxfill_ring_id(const char *val, const struct kernel_param *kp)
+{
+        int ret;
+        int ring_id;
+        struct kernel_param kptmp = *kp;	/* Create a temporary kp pointing to our local ring_id */
+
+        kptmp.arg = &ring_id;
+
+	/*
+	 * Use standard helper to parse string -> integer
+	 */
+        ret = param_set_int(val, &kptmp);
+        if (ret < 0)
+                return ret;
+
+	/*
+	 * Perform Range Check
+	 */
+        if (ring_id < 0 || ring_id >= EDMA_MAX_RXFILL_RINGS) {
+                pr_err("Invalid rxfill ring_id: %d, Valid range: [%d, %d]\n", ring_id,
+			0, EDMA_MAX_RXFILL_RINGS - 1);
+                return -EINVAL;
+        }
+
+	/*
+	 * If valid, write to the actual location
+	 * Note: param_set_int already wrote to ring_id, now we copy it to the real array element
+	 */
+        *((int *)kp->arg) = ring_id;
+
+        return 0;
+}
+
+/*
+ * Defines the ops for the custom 'bp_stats_en_txcmpl_ring_id' parameter type.
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_txcmpl_ring_id = {
+        .set = edma_param_set_bp_stats_en_txcmpl_ring_id,
+        .get = param_get_int,	/* Use standard getter */
+};
+
+/*
+ * Defines the ops for the custom 'bp_stats_en_rxdesc_ring_id' parameter type.
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_rxdesc_ring_id = {
+        .set = edma_param_set_bp_stats_en_rxdesc_ring_id,
+        .get = param_get_int,	/* Use standard getter */
+};
+
+/*
+ * Defines the ops for the custom 'bp_stats_en_rxfill_ring_id' parameter type.
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_rxfill_ring_id = {
+        .set = edma_param_set_bp_stats_en_rxfill_ring_id,
+        .get = param_get_int,	/* Use standard getter */
+};
 
 /*
  * edma_recovery_work()
@@ -1444,6 +1594,51 @@ void edma_configure_mirror_pkt_capture_core(uint8_t core_id, void *app_data)
 }
 
 /*
+ * edma_cfg_ring_to_backpressure_mapping()
+ *      Map txcmpl, rxdesc & rxfill ring_id to backpressure counter index after adding offset.
+ */
+static void edma_cfg_ring_to_backpressure_mapping(void)
+{
+        uint8_t mapped_ring_id;
+        uint8_t ring_id;
+        for (uint8_t i = 0; i < EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX; i++) {
+                /*
+                 * Map txcmpl rings to BP idx 0-5
+                 */
+                ring_id = edma_bp_stats_en_txcmpl_rings[i];
+                if (ring_id >= EDMA_MAX_TXCMPL_RINGS) {
+                        pr_err("Invalid txcmpl ring_id: %u, hence mapping ring_id = 0\n", ring_id);
+                        ring_id = 0;
+                }
+                mapped_ring_id = ring_id + EDMA_REG_BP_TXCMPL_RING_ID_OFFSET;
+                edma_reg_write(EDMA_REG_DBG_CNT_PORT_MAP(i + EDMA_REG_TXCMPL_BP_IDX_OFFSET), mapped_ring_id & EDMA_DBG_CNT_PORT_MAP_VAL_MASK);
+
+                /*
+                 * Map rxdesc rings to BP idx 6-11
+                 */
+                ring_id = edma_bp_stats_en_rxdesc_rings[i];
+                if (ring_id >= EDMA_MAX_RXDESC_RINGS) {
+                        pr_err("Invalid rxdesc ring_id: %u, hence mapping ring_id = 0\n", ring_id);
+                        ring_id = 0;
+                }
+                mapped_ring_id = ring_id + EDMA_REG_BP_RXDESC_RING_ID_OFFSET;
+                edma_reg_write(EDMA_REG_DBG_CNT_PORT_MAP(i + EDMA_REG_RXDESC_BP_IDX_OFFSET), mapped_ring_id & EDMA_DBG_CNT_PORT_MAP_VAL_MASK);
+
+                /*
+                 * Map rxfill rings to BP idx 12-17
+                 */
+                ring_id = edma_bp_stats_en_rxfill_rings[i];
+                if (ring_id >= EDMA_MAX_RXFILL_RINGS) {
+                        pr_err("Invalid rxfill ring_id: %u, hence mapping ring_id = 0\n", ring_id);
+                        ring_id = 0;
+                }
+                mapped_ring_id = ring_id + EDMA_REG_BP_RXFILL_RING_ID_OFFSET;
+                edma_reg_write(EDMA_REG_DBG_CNT_PORT_MAP(i + EDMA_REG_RXFILL_BP_IDX_OFFSET), mapped_ring_id & EDMA_DBG_CNT_PORT_MAP_VAL_MASK);
+        }
+
+}
+
+/*
  * edma_init_rxfill_rings()
  *	Initialize the RX fill rings in global ring structure.
  */
@@ -2105,6 +2300,11 @@ int edma_init(void)
 		ppe_drv_loopback_base_queue(edma_gbl_ctx.loopback_queue_base, edma_gbl_ctx.loopback_feature_type);
 	}
 #endif
+
+	/*
+	 * Initialize the mapping of txcmpl, rxdesc and rxfill rings to bp counters
+	 */
+	edma_cfg_ring_to_backpressure_mapping();
 
 	/*
 	 * Initialize the procf entries for enabling EDMA ring stats
