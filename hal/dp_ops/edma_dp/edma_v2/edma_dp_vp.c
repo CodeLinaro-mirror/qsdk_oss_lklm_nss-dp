@@ -36,6 +36,12 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 	enum edma_tx_gso result;
 	int ret;
 
+	/*
+	 * Initialize pcpu_stat and stats
+	 */
+	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
+	stats = this_cpu_ptr(pcpu_stats->tx_stats);
+
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 #ifndef NSS_DP_EDMA_MHT_SW_WITH_VP_RING
 	/*
@@ -62,9 +68,6 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 	} else {
 		txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[0][smp_processor_id()];
 	}
-
-	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
-	stats = this_cpu_ptr(pcpu_stats->tx_stats);
 
 	/*
 	 * HW does not support TSO for packets with more than or equal to
