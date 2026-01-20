@@ -1,6 +1,6 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022-2025, Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2026, Qualcomm Innovation Center, Inc. All rights reserved.
  * SPDX-License-Identifier: ISC
  */
 
@@ -329,11 +329,10 @@ static void edma_cfg_rx_loopback_qid2rx_desc_mapping(struct edma_gbl_ctx *egc)
 	 * Each entry can hold mapping for 4 PPE queues and
 	 * entry size is 4 bytes.
 	 */
-	desc_index = (egc->rxdesc_loopback_ring_id_arr[0] & EDMA_RX_RING_ID_MASK);
-
 	for (j = 0; j < egc->num_loopback_rings; j++) {
 		start = egc->loopback_queue_base;
 		end = start + egc->loopback_num_queues;
+		desc_index = (egc->rxdesc_loopback_ring_id_arr[j] & EDMA_RX_RING_ID_MASK);
 
 		for (i = start; i <= end; i += EDMA_QID2RID_NUM_PER_REG) {
 			reg_index = i/EDMA_QID2RID_NUM_PER_REG;
@@ -343,7 +342,6 @@ static void edma_cfg_rx_loopback_qid2rx_desc_mapping(struct edma_gbl_ctx *egc)
 				EDMA_RX_RING_ID_QUEUE3_SET(desc_index);
 
 			edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
-			desc_index += EDMA_QID2RID_NUM_PER_REG;
 
 			edma_debug("Configure QID2RID(%d) reg:0x%x to 0x%x\n",
 				i, EDMA_QID2RID_TABLE_MEM(reg_index), data);
