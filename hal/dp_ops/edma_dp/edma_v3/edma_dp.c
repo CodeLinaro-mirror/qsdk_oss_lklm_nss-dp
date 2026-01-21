@@ -555,6 +555,22 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 			return NSS_DP_FAILURE;
 		}
 
+#ifdef NSS_DP_HTT_SW_PORT_MAP
+		/*
+		 * Setting the status for Huntington switch in case of IPQ52xx and IPQ96xx.
+		 */
+		if (dp_dev->nss_dp_htt_dev) {
+			if (ppe_drv_dp_htt_enable(iface, dp_dev->nss_dp_htt_dev) != PPE_DRV_RET_SUCCESS) {
+				netdev_err(netdev, "Error in setting HTT switch status for dev(%p) dev-name %s\n",
+						netdev, netdev->name);
+				ppe_drv_dp_deinit(iface);
+				ppe_drv_iface_deref(iface);
+				free_percpu(dp_dev->dp_info.pcpu_stats.rx_stats);
+				free_percpu(dp_dev->dp_info.pcpu_stats.tx_stats);
+				return NSS_DP_FAILURE;
+			}
+		}
+#endif
 		if (ppe_drv_dp_set_ppe_offload_enable_flag(iface, dp_dev->ppe_offload_disabled)) {
 			netdev_err(netdev, "Error setting PPE offload enabled bit for dev: %s",
 					netdev->name);
