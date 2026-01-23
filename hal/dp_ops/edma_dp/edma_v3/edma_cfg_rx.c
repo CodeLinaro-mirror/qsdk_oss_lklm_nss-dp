@@ -866,7 +866,7 @@ void edma_cfg_rx_mcast_qid_to_core_mapping(struct edma_gbl_ctx *egc, uint8_t cor
 
 	/*
 	 * Map PPE multicast queues to the Rx ring according to the core.
-	 * TO-DO: Update this API for IPQ9679 later as per updated mirror
+	 * TO-DO: Update this API for IPQ9650 later as per updated mirror
 	 * functionality.
 	 */
 	desc_index = 0;
