@@ -29,6 +29,27 @@ extern struct nss_dp_vp_ctx g_vp_ctx;
 #define EDMA_MAX_BULK_PAGE_ALLOC_SZ  (PAGE_SIZE *  (1 << EDMA_MAX_ORDER))
 #endif
 
+#if defined(NSS_DP_HW_GRO)
+/*
+ * edma_rx_fill_gro_mdata()
+ *	Fill GRO metadata
+ */
+static void edma_rx_fill_gro_mdata(struct edma_gbl_ctx *egc, struct nss_dp_vp_rx_info *vprxi, uint32_t ring_id, uint32_t word7)
+{
+	struct nss_vp_rx_custom_gro_mdata *gro_mdata;
+
+	if (unlikely((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN))) {
+		if (unlikely(egc->rxdesc_info[ring_id].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO)) {
+			gro_mdata = &vprxi->vp_rx_mdata.rx_mdata.gro_mdata;
+			gro_mdata->hw_gro_en = true;
+			gro_mdata->hw_gro_more = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_MORE_MASK));
+			gro_mdata->hw_gro_fin = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_FIN_MASK));
+			gro_mdata->hw_gro_psh = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_PSH_MASK));
+		}
+	}
+}
+#endif
+
 /*
  * edma_rx_process_capwap_vp()
  *	Forward capwap packet to VP module for processing.
@@ -1040,6 +1061,10 @@ process_next_scatter:
 	 */
 	if (unlikely(EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK)) {
 		mem_debug_update_skb(skb_head);
+#ifdef NSS_DP_HW_GRO
+		if (unlikely(rxdesc_ring->gro_enabled))
+			edma_rx_fill_gro_mdata(egc, &vprxi, rxdesc_ring->ring_id, rxdesc_desc->word7);
+#endif
 		edma_rx_process_vp(rxdesc_ring->pdesc_head, rxdesc_ring, skb_head, &vprxi);
 		rxdesc_ring->head = NULL;
 		rxdesc_ring->last = NULL;
@@ -1247,7 +1272,6 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	}
 
 send_to_stack:
-
 	/*
 	 * In some cases like PPE tunnel when mode 1 is enabled
 	 * the skb data will be pointing to outer header and if
@@ -1308,6 +1332,16 @@ send_to_stack:
 	 */
 	if (EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK) {
 		mem_debug_update_skb(skb);
+#ifdef NSS_DP_HW_GRO
+		if (unlikely(rxdesc_ring->gro_enabled))
+			edma_rx_fill_gro_mdata(egc, &vprxi, rxdesc_ring->ring_id, rxdesc_desc->word7);
+#endif
+
+		/*
+		 * For linear packets, last_desc is the same as rxdesc_desc (first descriptor).
+		 * For scatter-gather packets, last_desc points to the final descriptor which
+		 * contains GRO indication flags in word7.
+		 */
 		edma_rx_process_vp(rxdesc_desc, rxdesc_ring, skb, &vprxi);
 		return false;
 	}

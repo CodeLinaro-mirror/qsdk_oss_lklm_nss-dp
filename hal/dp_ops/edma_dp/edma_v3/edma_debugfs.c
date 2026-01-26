@@ -541,6 +541,21 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
 	return 0;
 }
 
+#ifdef NSS_DP_HW_GRO
+/*
+ * edma_debugfs_hw_gro_stats_show()
+ *	EDMA debugfs hw_gro stats show API
+ */
+static int edma_debugfs_hw_gro_stats_show(struct seq_file *m, void __attribute__((unused))*p)
+{
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	seq_printf(m, "\t\t EDMA HW_GRO timeout = %d\n", egc->hw_gro_ctx.gro_timeout_usecs);
+	seq_printf(m, "\t\t EDMA HW_GRO buffer len = %d\n", egc->hw_gro_ctx.gro_buffer_len);
+	seq_printf(m, "\t\t EDMA HW_GRO descriptor count = %d\n", egc->hw_gro_ctx.gro_desc_count);
+	return 0;
+}
+#endif
+
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 /*
  * edma_debugfs_loopback_stats_show()
@@ -580,11 +595,33 @@ static int edma_debugs_loopback_stats_open(struct inode *inode, struct file *fil
 }
 
 /*
- * edma_debugfs_misc_file_ops
- *	File operations for EDMA miscellaneous stats
+ * edma_debugfs_loopback_file_ops
+ *	File operations for EDMA loopback stats
  */
 const struct file_operations edma_debugfs_loopback_file_ops = {
 	.open = edma_debugs_loopback_stats_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release
+	};
+#endif
+
+#ifdef NSS_DP_HW_GRO
+/*
+ * edma_debugs_hw_gro_stats_open()
+ *	EDMA debugfs HW gro stats open callback API
+ */
+static int edma_debugs_hw_gro_stats_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_hw_gro_stats_show, inode->i_private);
+}
+
+/*
+ * edma_debugfs_hw_gro_file_ops
+ *	File operations for EDMA HW GRO stats
+ */
+const struct file_operations edma_debugfs_hw_gro_file_ops = {
+	.open = edma_debugs_hw_gro_stats_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = seq_release
@@ -788,6 +825,14 @@ int edma_debugfs_init(void)
 	if (!debugfs_create_file("mht_tx_fcgrp", S_IRUGO, edma_gbl_ctx.root_dentry,
 			NULL, &edma_debugfs_mht_tx_fcgrp_file_ops)) {
 		edma_err("Unable to create EDMA tx fcgrp on MHT ports file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+#endif
+
+#if defined(NSS_DP_HW_GRO)
+	if (!debugfs_create_file("hw_gro_config", S_IRUGO, edma_gbl_ctx.stats_dentry,
+			NULL, &edma_debugfs_hw_gro_file_ops)) {
+		edma_err("Unable to create EDMA loopback statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 #endif

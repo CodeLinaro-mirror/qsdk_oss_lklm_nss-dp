@@ -117,6 +117,38 @@ int edma_tx_ring_mode_bitmask = EDMA_TX_RING_MODE_BITMASK_DEF;
 module_param(edma_tx_ring_mode_bitmask, int, 0640);
 MODULE_PARM_DESC(edma_tx_ring_mode_bitmask, "EDMA Tx ring mode (preheader/secondary ring) bitmask");
 
+int edma_dp_gro_num_rxfill_rings = 4;
+module_param(edma_dp_gro_num_rxfill_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_num_rxfill_rings, "Number of GRO RX fill rings");
+
+int edma_dp_gro_num_rx_rings = EDMA_RX_RING_GRO_NUM_MAX;
+module_param(edma_dp_gro_num_rx_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_num_rx_rings, "Number of GRO RX rings");
+
+#if EDMA_RX_RING_GRO_NUM_MAX > 4
+#error "Number of GRO rings cannot exceed 4"
+#endif
+
+int edma_dp_gro_queues_per_ring = 1;
+module_param(edma_dp_gro_queues_per_ring, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_queues_per_ring, "Number of queues per rx rings");
+
+int edma_dp_gro_ppe_queue_base = 176;
+module_param(edma_dp_gro_ppe_queue_base, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_ppe_queue_base, "GRO PPE Queue Base");
+
+int edma_dp_gro_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {20, 21, 22, 23, -1, -1, -1, -1};
+module_param_array(edma_dp_gro_rx_rings, int, NULL, 0);
+MODULE_PARM_DESC(edma_dp_gro_rx_rings, "RX rings for gro");
+
+int edma_dp_gro_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0, 1, 2, 3, -1, -1, -1, -1};
+module_param_array(edma_dp_gro_rx_queue_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_gro_rx_queue_map, "Queue base for each RX ring");
+
+int edma_dp_gro_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {16, 17, 18, 19, -1, -1, -1, -1};
+module_param_array(edma_dp_gro_rxfill_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_gro_rxfill_map, "RX ring to RX fill ring mapping");
+
 /*
  * Input String length for VLAN insertion.
  */
@@ -693,11 +725,65 @@ static int edma_validate_host_ring_info(void)
 }
 
 /*
+ * edma_validate_gro_ring_info()
+ *	Validate GRO ring information
+ */
+static int edma_validate_gro_ring_info(void)
+{
+	int i;
+
+	/* Validate GRO module parameters */
+	if (edma_dp_gro_num_rxfill_rings <= 0 || edma_dp_gro_num_rxfill_rings > EDMA_MAX_RXFILL_RING_PER_TYPE) {
+		edma_err("Invalid GRO rxfill rings: %d (max: %d)\n",
+			 edma_dp_gro_num_rxfill_rings, EDMA_MAX_RXFILL_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	if (edma_dp_gro_num_rx_rings <= 0 || edma_dp_gro_num_rx_rings > EDMA_MAX_RXDESC_RING_PER_TYPE) {
+		edma_err("Invalid GRO rx rings: %d (max: %d)\n",
+			 edma_dp_gro_num_rx_rings, EDMA_MAX_RXDESC_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	if (edma_dp_gro_queues_per_ring <= 0) {
+		edma_err("Invalid GRO queues per ring: %d\n", edma_dp_gro_queues_per_ring);
+		return -EINVAL;
+	}
+
+	/* Validate GRO ring IDs */
+	for (i = 0; i < edma_dp_gro_num_rx_rings; i++) {
+		if ((edma_dp_gro_rx_rings[i] < 0) || (edma_dp_gro_rx_rings[i] >= EDMA_MAX_RXDESC_RINGS)) {
+			edma_err("Invalid GRO rx ring ID at index %d: %d\n", i, edma_dp_gro_rx_rings[i]);
+			return -EINVAL;
+		}
+	}
+
+	/* Validate GRO queue map */
+	for (i = 0; i < edma_dp_gro_num_rx_rings; i++) {
+		if (edma_dp_gro_rx_queue_map[i] < 0) {
+			edma_err("Invalid GRO queue map at index %d: %d\n", i, edma_dp_gro_rx_queue_map[i]);
+			return -EINVAL;
+		}
+	}
+
+	/* Validate GRO rxfill map */
+	for (i = 0; i < edma_dp_gro_num_rxfill_rings; i++) {
+		if ((edma_dp_gro_rxfill_map[i] < 0) || (edma_dp_gro_rxfill_map[i] >= EDMA_MAX_RXFILL_RINGS)) {
+			edma_err("Invalid GRO rxfill map at index %d: %d\n", i, edma_dp_gro_rxfill_map[i]);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+
+/*
  * edma_parse_ini()
  *	parse the ini file and config EDMA rings, queue, mappings, etc.
  */
 static int edma_parse_ini(void)
 {
+	int i;
 	/*
 	 * TO-DO: Remove the module params and replace them with the
 	 * parsing logic to fetch the information from INI file.
@@ -710,6 +796,9 @@ static int edma_parse_ini(void)
 	struct edma_rx_rings_info *rx_info = &host_info->sfe_info.rx_info;
 	struct edma_tx_rings_info *tx_info = &host_info->sfe_info.tx_info;
 	fal_portscheduler_resource_t cfg = {0};
+#ifdef NSS_DP_HW_GRO
+	struct edma_rx_rings_info *rx_gro_info;
+#endif
 
 	/*
 	 * Get the queue base for host queues.
@@ -720,22 +809,51 @@ static int edma_parse_ini(void)
 	}
 
 	edma_gbl_ctx.rx_queue_start = cfg.ucastq_start;
-
 	host_info->common_info.edma_num_rxfill_rings = edma_dp_host_num_rxfill_rings;
 	host_info->common_info.edma_num_txcmpl_rings = edma_dp_host_num_txcmpl_rings;
 
 	rx_info->num_rx_rings = edma_dp_host_num_rx_rings;
 	rx_info->num_queues_per_ring = edma_dp_host_queues_per_ring;
 
-	for (int i = 0; i < EDMA_MAX_RXDESC_RING_PER_TYPE; i++) {
+	for (i = 0; i < EDMA_MAX_RXDESC_RING_PER_TYPE; i++) {
 		rx_info->rx_map[i].rx_ring_id = edma_dp_host_rx_rings[i];
 		rx_info->rx_map[i].ppe_queue_base = edma_dp_host_rx_queue_map[i];
 		rx_info->rx_map[i].rx_fill_ring_id = edma_dp_host_rxfill_map[i];
 	}
 
-	for (int i = 0; i < EDMA_MAX_RXFILL_RING_PER_TYPE; i++) {
+	for (i = 0; i < EDMA_MAX_RXFILL_RING_PER_TYPE; i++) {
 		host_info->common_info.edma_rxfill_ring_map[i] = edma_dp_host_rxfill_map[i];
 	}
+
+#ifdef NSS_DP_HW_GRO
+	/*
+	 * GRO setup need to happen after SFE rings are initialized
+	 */
+	if (edma_validate_gro_ring_info() < 0) {
+		edma_err("GRO ring validation failed\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * GRO setup
+	 */
+	edma_gbl_ctx.hw_gro_ctx.rx_gro_queue_start = edma_dp_gro_ppe_queue_base;
+	edma_gbl_ctx.hw_gro_ctx.rx_gro_ring_start = edma_dp_gro_rx_rings[0];
+
+	rx_gro_info = &host_info->gro_info.rx_info;
+
+	/*
+	 * configure GRO ctx.
+	 */
+	rx_gro_info->num_rx_rings = edma_dp_gro_num_rx_rings;
+	rx_gro_info->num_queues_per_ring = edma_dp_gro_queues_per_ring;
+
+	for (i = 0; i < EDMA_MAX_RXDESC_RING_PER_TYPE; i++) {
+		rx_gro_info->rx_map[i].rx_ring_id = edma_dp_gro_rx_rings[i];
+		rx_gro_info->rx_map[i].ppe_queue_base = edma_dp_gro_rx_queue_map[i];
+		rx_gro_info->rx_map[i].rx_fill_ring_id = edma_dp_gro_rxfill_map[i];
+	}
+#endif
 
 	/*
 	 * Configure host TX ctx.
@@ -969,7 +1087,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	 */
 #if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
 	of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rx-page-mode",
-					&edma_gbl_ctx.rx_page_mode);
+						&edma_gbl_ctx.rx_page_mode);
 #endif
 
 	/*
@@ -1554,6 +1672,7 @@ static void edma_init_txcmpl_rings(struct edma_gbl_ctx *egc,
  */
 void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *init_info)
 {
+	struct edma_rx_rings_info *gro_rx_rings = &init_info->host_info.gro_info.rx_info;
 	struct edma_rx_rings_info *rx_rings = &init_info->host_info.sfe_info.rx_info;
 	struct edma_tx_rings_info *tx_rings = &init_info->host_info.sfe_info.tx_info;
 	struct edma_host_info *host_info = &init_info->host_info;
@@ -1618,11 +1737,67 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 				EDMA_TX_RING_SIZE);
 
 	/*
-	 * TO-DO: SMD host rings,
+	 * Mark the GRO RX rings into the global RX rings pool.
+	 * TODO: Parameters will be extracted from GRO structure rather than
+	 * module param
+	 */
+	edma_init_rxfill_rings(egc, edma_dp_gro_rxfill_map,
+				edma_dp_gro_num_rxfill_rings, EDMA_RING_TYPE_HOST,
+				EDMA_RING_TYPE_FLAGS_HOST_GRO, EDMA_RX_RING_SIZE,
+				alloc_size, buf_len, egc->rx_page_mode);
+
+	edma_init_rxdesc_rings(egc, gro_rx_rings->rx_map, edma_dp_gro_num_rx_rings,
+				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_GRO,
+				EDMA_RX_RING_SIZE, gro_rx_rings->num_queues_per_ring);
+
+	/*
+	 * TO-DO: Further for other host rings like VP host rings, SMD host rings,
 	 * simply mark them into the global pool so that these will be initialized and setup
 	 * at once. This makes it easy to add/delete a new type of host ring.
 	 */
 }
+
+#ifdef NSS_DP_HW_GRO
+/*
+ * edma_hw_gro_init()
+ *	HW GRO Initialization
+ */
+static int edma_hw_gro_init(struct edma_gbl_ctx *egc)
+{
+	int ret = 0;
+
+	egc->hw_gro_ctx.gro_timeout_usecs = EDMA_RX_GRO_TIMEOUT_DEFAULT;
+	egc->hw_gro_ctx.gro_buffer_len = EDMA_RX_GRO_BUFFER_LEN_DEFAULT;
+	egc->hw_gro_ctx.gro_desc_count = EDMA_RX_GRO_DESC_COUNT_DEFAULT;
+	egc->hw_gro_ctx.hw_gro_en = true;
+
+	ret = edma_rx_gro_timeout_configure(&egc->hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO timeout: %d\n", ret);
+		return ret;
+	}
+
+	ret = edma_rx_gro_buffer_len_configure(&egc->hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO buffer len: %d\n", ret);
+		return ret;
+	}
+
+	ret = edma_rx_gro_desc_count_configure(&egc->hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO desc count: %d\n", ret);
+		return ret;
+	}
+
+	ret = edma_rx_gro_slot_vld_configure(egc);
+	if (ret) {
+		edma_err("Failed to configure GRO slot vld: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+#endif
 
 /*
  * edma_hw_init()
@@ -1874,6 +2049,14 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	}
 #endif
 
+#ifdef NSS_DP_HW_GRO
+	ret = edma_hw_gro_init(egc);
+	if (ret) {
+		edma_err("HW GRO initialization failed\n");
+		return ret;
+	}
+#endif
+
 	egc->edma_initialized = true;
 
 	return 0;
@@ -1900,6 +2083,96 @@ static int32_t edma_configure_clocks(void)
 	}
 
 	return 0;
+}
+#endif
+
+#ifdef NSS_DP_HW_GRO
+/*
+ * edma_rx_gro_timeout_cfg()
+ *	Code change to configure GRO timeout
+ */
+int edma_rx_gro_max_timeout_cfg(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs > EDMA_RX_GRO_TIMEOUT_MAX) {
+    		edma_err("GRO timeout %d exceeds max %d\n", edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs, EDMA_RX_GRO_TIMEOUT_MAX);
+		return -EINVAL;
+	}
+
+	ret = edma_rx_gro_timeout_configure(&edma_gbl_ctx.hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO timeout: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+/*
+ * edma_rx_gro_buffer_len_cfg()
+ *	Code change to configure GRO total coalescing buffer len
+ */
+int edma_rx_gro_max_buffer_len_cfg(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (edma_gbl_ctx.hw_gro_ctx.gro_buffer_len >  EDMA_RX_GRO_BUFFER_LEN_MAX) {
+		edma_debug("%p: gro buffer len more than max buffer length supported\n", &edma_gbl_ctx, edma_gbl_ctx.hw_gro_ctx.gro_buffer_len);
+		return -1;
+	}
+
+	ret = edma_rx_gro_buffer_len_configure(&edma_gbl_ctx.hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO buffer len: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+
+/*
+ * edma_rx_gro_max_desc_count_cfg()
+ *	Code change to configure GRO total coalescing buffer len
+ */
+int edma_rx_gro_max_desc_count_cfg(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (edma_gbl_ctx.hw_gro_ctx.gro_desc_count > EDMA_RX_GRO_DESC_COUNT_MAX) {
+		edma_debug("%p: gro desc count more than max desc count supported\n", &edma_gbl_ctx, edma_gbl_ctx.hw_gro_ctx.gro_desc_count);
+		return -1;
+	}
+
+	ret = edma_rx_gro_desc_count_configure(&edma_gbl_ctx.hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO desc count: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
 }
 #endif
 
@@ -1950,6 +2223,30 @@ static struct ctl_table edma_sub[] = {
 		.mode           =       0644,
 		.proc_handler   =       edma_vlan_append_handler
 	},
+
+#ifdef NSS_DP_HW_GRO
+	{
+		.procname	=	"gro_timeout",
+		.data		=	&edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	edma_rx_gro_max_timeout_cfg
+	},
+	{
+		.procname       =       "gro_buffer_len",
+		.data           =       &edma_gbl_ctx.hw_gro_ctx.gro_buffer_len,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_rx_gro_max_buffer_len_cfg
+	},
+	{
+		.procname       =       "gro_desc_count",
+		.data           =       &edma_gbl_ctx.hw_gro_ctx.gro_desc_count,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_rx_gro_max_desc_count_cfg
+	},
+#endif
 	{}
 };
 
@@ -2078,6 +2375,16 @@ int edma_init(void)
 	 */
 	edma_gbl_ctx.napi_added = false;
 
+#ifdef NSS_DP_HW_GRO
+	/*
+	 * GRO ring to queue mapping
+	 */
+	for (i = 0; i < edma_dp_gro_num_rx_rings; i++) {
+		queue_start = edma_gbl_ctx.hw_gro_ctx.rx_gro_queue_start;
+		ppe_drv_gro_core2queue_mapping(i, queue_start + i);
+	}
+#endif
+
 	/*
 	 * DP module maintains queue to ring mapping, and the rings are mapped
 	 * to specific host cores. Similar mapping is needed in ppe driver to
@@ -2204,7 +2511,6 @@ int edma_irq_init(void)
 				 (edma_gbl_ctx.device_node)->name,
 				 i, edma_gbl_ctx.rxdesc_info[i].intr_num);
 	}
-
 
 	/*
 	 * Get misc IRQ number

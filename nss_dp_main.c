@@ -641,6 +641,10 @@ static netdev_features_t __attribute__((unused)) nss_dp_feature_check(struct sk_
 	}
 #endif
 
+#ifdef NSS_DP_HW_GRO
+	features |= NETIF_F_GRO_HW;
+#endif
+
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 6, 0))
 	/*
 	 * EDMA driver does not support custom checksum offload where
