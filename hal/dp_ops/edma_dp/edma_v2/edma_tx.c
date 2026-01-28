@@ -1,7 +1,7 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -731,6 +731,16 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	hw_next_to_use = txdesc_ring->prod_idx;
 
 	mem_debug_update_skb(skb);
+
+#ifdef NSS_DP_TX_SMALL_PACKET_WAR
+	if (unlikely(skb->len < NSS_DP_EDMA_TX_MIN_PKT_SZ)) {
+		if (skb_put_padto(skb, NSS_DP_EDMA_TX_MIN_PKT_SZ)) {
+			edma_debug("skb: %p padding failed to minimum length len:: %d ring: %d\n",
+					skb, skb->len, txdesc_ring->id);
+			return EDMA_TX_FAIL;
+		}
+	}
+#endif
 
 	if (unlikely(!(txdesc_ring->avail_desc)))  {
 		txdesc_ring->avail_desc = edma_tx_avail_desc(txdesc_ring, hw_next_to_use);

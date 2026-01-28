@@ -81,6 +81,7 @@ qca-nss-dp-objs += nss_dp_vp_main.o \
 		   hal/gmac_ops/qcom/qcom_if.o \
 		   hal/gmac_ops/syn/xgmac/syn_if.o
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
+ccflags-y += -DNSS_DP_TX_SMALL_PACKET_WAR
 ifeq ($(dp-ppe-ds),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v2/edma_ppeds.o
 ccflags-y += -DNSS_DP_PPEDS_SUPPORT
