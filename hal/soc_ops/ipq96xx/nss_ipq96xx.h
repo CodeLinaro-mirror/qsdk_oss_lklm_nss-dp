@@ -154,23 +154,27 @@ extern struct nss_dp_ppeds_ops edma_ppeds_ops;
 #endif
 
 static inline void edma_dmac_inv_range(const void *start, const void *end){
-
+#ifndef CONFIG_IO_COHERENCY
         dmac_inv_range(start, end);
+#endif
 }
 
 static inline void edma_dmac_inv_range_no_dsb(const void *start, const void *end){
-
+#ifndef CONFIG_IO_COHERENCY
         dmac_inv_range_no_dsb(start, end);
+#endif
 }
 
 static inline void edma_dmac_clean_range_no_dsb(const void *start, const void *end){
-
+#ifndef CONFIG_IO_COHERENCY
         dmac_clean_range_no_dsb(start, end);
+#endif
 }
 
 static inline void edma_dsb(void){
-
+#ifndef CONFIG_IO_COHERENCY
         dsb(st);
+#endif
 }
 
 #endif /* __NSS_DP_ARCH_H__ */
