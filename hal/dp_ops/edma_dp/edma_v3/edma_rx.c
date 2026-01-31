@@ -11,6 +11,9 @@
 #include <nss_dp_vp.h>
 #include <linux/phy.h>
 #include <linux/if_vlan.h>
+#ifdef NSS_DP_PON_SUPPORT
+#include <fal/fal_pon.h>
+#endif
 #include "edma.h"
 #include "edma_debug.h"
 #include "edma_regs.h"
@@ -1289,10 +1292,10 @@ static inline struct net_device *edma_rx_get_src_dev(
 	if (likely((src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK)
 				== EDMA_RXDESC_SRCINFO_TYPE_PORTID)) {
 		src_port_num = src_info & EDMA_RXDESC_PORTNUM_BITS;
-#ifdef NSS_DP_IPQ_HERMOSA
+#ifdef NSS_DP_PON_SUPPORT
 	} else if ((src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK)
 				== EDMA_RXDESC_SRCINFO_TYPE_GEM_PORT) {
-		src_port_num = 6;
+		src_port_num = PON_PORT_ID;
 #endif
 	} else {
 		if (net_ratelimit()) {
