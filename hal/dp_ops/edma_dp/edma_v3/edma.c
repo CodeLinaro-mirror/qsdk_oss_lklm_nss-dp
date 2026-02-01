@@ -53,15 +53,12 @@ int edma_dp_host_queues_per_ring = 8;
 module_param(edma_dp_host_queues_per_ring, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_queues_per_ring, "Number of queues per rx rings");
 
-int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {1,2,3,4,5,-1,-1,-1};
 module_param_array(edma_dp_host_rx_rings, int, NULL, 0);
 MODULE_PARM_DESC(edma_dp_host_rx_rings, "RX rings for host");
 
-int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0,8,16,24,32,-1,-1,-1};
 module_param_array(edma_dp_host_rx_queue_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_rx_queue_map, "Queue base for each RX ring");
 
-int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {2,3,4,5,6,-1,-1,-1};
 module_param_array(edma_dp_host_rxfill_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_rxfill_map, "RX ring to RX fill ring mapping");
 
@@ -77,19 +74,15 @@ int edma_dp_host_num_txcmpl_rings = NR_CPUS;
 module_param(edma_dp_host_num_txcmpl_rings, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_txcmpl_rings, "Number of Host TX cmpl rings");
 
-int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {1,2,3,4,5,-1,-1,-1};
 module_param_array(edma_dp_host_tx_rings, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_rings, "TX rings for host");
 
-int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {2,3,4,5,6,-1,-1,-1};
 module_param_array(edma_dp_host_txcmpl_rings, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_txcmpl_rings, "TX cmpl rings for host");
 
-int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {2,3,4,5,6,-1,-1,-1};
 module_param_array(edma_dp_host_txcmpl_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_txcmpl_map, "TX to txcmpl map rings for host");
 
-int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {1,1,2,2,3,3,4,4,5,5};
 module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
 

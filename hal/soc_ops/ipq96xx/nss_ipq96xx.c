@@ -12,6 +12,14 @@
 #include "nss_dp_hal.h"
 #include "edma.h"
 
+int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
+int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0,8,16,24,32,-1,-1,-1,-1,-1};
+int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
+int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
+int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
+int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
+int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10,11,11};
+
 /*
  * nss_dp_hal_nsm_sawf_sc_stats_read()
  *	Send nsm stats for the given service-class.
