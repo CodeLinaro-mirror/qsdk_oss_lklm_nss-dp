@@ -535,6 +535,17 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 			free_percpu(dp_dev->dp_info.pcpu_stats.tx_stats);
 			return NSS_DP_FAILURE;
 		}
+#ifdef NSS_DP_PON_SUPPORT
+		if (ppe_drv_dp_set_ppe_gem_type_enable_flag(iface, dp_dev->gem_port)) {
+			netdev_err(netdev, "Error setting GEM type enabled bit for dev: %s",
+					netdev->name);
+			ppe_drv_dp_deinit(iface);
+			ppe_drv_iface_deref(iface);
+			free_percpu(dp_dev->dp_info.pcpu_stats.rx_stats);
+			free_percpu(dp_dev->dp_info.pcpu_stats.tx_stats);
+			return NSS_DP_FAILURE;
+		}
+#endif
 	}
 
 	return NSS_DP_SUCCESS;
