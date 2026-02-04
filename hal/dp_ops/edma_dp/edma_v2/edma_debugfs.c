@@ -589,14 +589,17 @@ static int edma_debugfs_mht_tx_fcgrp_show(struct seq_file *m, void __attribute__
 			continue;
 
 		dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
-		if (!dp_dev->nss_dp_mht_dev)
+		if (!dp_dev || !dp_dev->nss_dp_mht_dev)
 			continue;
 
 		for (sw_port = 0; sw_port < NSS_DP_HAL_SW_MAX_TX_PORT; sw_port++) {
 			/* one port's tx rings maps with same fc_grp_id, print once */
 			tx_ring = dp_dev->dp_info.txr_sw_port_map[sw_port][0];
-			seq_printf(m, "\t\t%d:%d", (sw_port + 1), tx_ring->fc_grp_id);
+			if (tx_ring)
+				seq_printf(m, "\t\t%d:%d", (sw_port + 1), tx_ring->fc_grp_id);
 		}
+
+		seq_printf(m, "\n\n#switch_netdev:%s, macid:%d", netdev->name, dp_dev->macid);
 
 		seq_printf(m, "\n\n");
 	}
