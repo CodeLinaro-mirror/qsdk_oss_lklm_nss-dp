@@ -535,6 +535,7 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 			free_percpu(dp_dev->dp_info.pcpu_stats.tx_stats);
 			return NSS_DP_FAILURE;
 		}
+
 #ifdef NSS_DP_PON_SUPPORT
 		if (ppe_drv_dp_gem_enable(iface, dp_dev->gem_port)) {
 			netdev_err(netdev, "Error setting GEM type enabled bit for dev: %s",
@@ -544,6 +545,16 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 			free_percpu(dp_dev->dp_info.pcpu_stats.rx_stats);
 			free_percpu(dp_dev->dp_info.pcpu_stats.tx_stats);
 			return NSS_DP_FAILURE;
+		}
+#endif
+
+#if defined(NSS_DP_HW_GRO)
+		/*
+		 * Enable HW GRO on all ports by default
+		 */
+		if (!ppe_drv_hw_gro_feature_set(netdev, true)) {
+			netdev_warn(netdev, "Failed to enable HW GRO feature for dev: %s\n",
+					netdev->name);
 		}
 #endif
 	}
