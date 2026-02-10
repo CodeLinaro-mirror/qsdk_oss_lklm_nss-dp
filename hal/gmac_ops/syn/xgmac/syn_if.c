@@ -37,6 +37,8 @@ static const struct syn_ethtool_stats syn_gstrings_stats[] = {
 	{"rx_fraglist_packets", SYN_STAT(rx_fraglist_packets)},
 	{"rx_nr_frag_packets", SYN_STAT(rx_nr_frag_packets)},
 	{"rx_nr_frag_headroom_err", SYN_STAT(rx_nr_frag_headroom_err)},
+	{"rx_get_qdisc_dev_fail", SYN_STAT(rx_get_qdisc_dev_fail)},
+	{"rx_fail_qdisc_fast_xmit", SYN_STAT(rx_fail_qdisc_xmit)},
 	{"tx_bytes", SYN_STAT(tx_bytes)},
 	{"tx_packets", SYN_STAT(tx_packets)},
 	{"tx_dropped", SYN_STAT(tx_dropped)},
