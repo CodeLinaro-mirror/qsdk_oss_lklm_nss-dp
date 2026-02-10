@@ -2,18 +2,8 @@
  **************************************************************************
  * Copyright (c) 2016,2020 The Linux Foundation. All rights reserved.
  *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF0
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- **************************************************************************
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #ifndef __SYN_REG_H__
@@ -75,6 +65,15 @@
 #define SYN_MAC_TS_STATUS		0x0d20
 #define SYN_MAC_TX_TS_STATUS_NSECS	0x0d30
 #define SYN_MAC_TX_TS_STATUS_SECS	0x0d34
+#define SYN_MAC_TX_TS_STATUS_PKTID	0x0d38
+#define SYN_MAC_TS_INGRESS_ASYM_CORR	0x0d50
+#define SYN_MAC_TS_EGRESS_ASYM_CORR	0x0d54
+#define SYN_MAC_TS_INGR_LAT		0x0d58
+#define SYN_MAC_TS_EGR_LAT		0x0d5c
+#define SYN_MAC_TS_INGR_CORR_NS		0x0d60
+#define SYN_MAC_TS_EGR_CORR_NS		0x0d64
+#define SYN_MAC_TS_INGR_CORR_SNS	0x0d68
+#define SYN_MAC_TS_EGR_CORR_SNS		0x0d6c
 #define SYN_MAC_PPS_CTL			0x0d70
 #define SYN_MAC_MMC_CTL			0x0800
 #define SYN_MAC_MMC_RX_INT		0x0804
@@ -171,6 +170,9 @@
 /* SYN_MAC_RX_FLOW_CTL Bit definitions */
 #define SYN_MAC_RX_FLOW_ENABLE		0x00000001
 
+/* SYN_MAC_INT_ENABLE (MAC_Interrupt_Enable) Bit definitions */
+#define SYN_MAC_INT_ENABLE_TSIE		0x00001000	/* Timestamp Interrupt Enable (bit 12) */
+
 /* SYN_MAC_TX_CONFIG Bit definitions */
 #define SYN_MAC_TX_ENABLE		0x00000001
 #define SYN_MAC_TX_SPEED_SELECT		0x60000000
@@ -191,6 +193,77 @@
 
 /* SYN_MAC_MMC_CTL Bit definitions */
 #define  SYN_MAC_MMC_RSTONRD		0x00000004
+
+/* SYN_MAC_TS_CTL (MAC_Timestamp_Control) Bit definitions - Datasheet 11.1.401 */
+#define SYN_MAC_TS_CTL_TSENA		0x00000001	/* Timestamp Enable */
+#define SYN_MAC_TS_CTL_TSCFUPDT		0x00000002	/* Timestamp Fine/Coarse Update */
+#define SYN_MAC_TS_CTL_TSINIT		0x00000004	/* Timestamp Initialize */
+#define SYN_MAC_TS_CTL_TSUPDT		0x00000008	/* Timestamp Update */
+#define SYN_MAC_TS_CTL_TSTRIG		0x00000010	/* Timestamp Interrupt Trigger Enable */
+#define SYN_MAC_TS_CTL_TSADDREG		0x00000020	/* Addend Register Update */
+#define SYN_MAC_TS_CTL_TSENALL		0x00000100	/* Enable Timestamp for All Packets */
+#define SYN_MAC_TS_CTL_TSCTRLSSR	0x00000200	/* Timestamp Digital or Binary Rollover Control */
+#define SYN_MAC_TS_CTL_TSVER2ENA	0x00000400	/* Enable PTP Packet Processing for Version 2 Format */
+#define SYN_MAC_TS_CTL_TSIPENA		0x00000800	/* Enable Processing of PTP over Ethernet Packets */
+#define SYN_MAC_TS_CTL_TSIPV6ENA	0x00001000	/* Enable Processing of PTP Packets Sent over IPv6-UDP */
+#define SYN_MAC_TS_CTL_TSIPV4ENA	0x00002000	/* Enable Processing of PTP Packets Sent over IPv4-UDP */
+#define SYN_MAC_TS_CTL_TSEVENTENA	0x00004000	/* Enable Timestamp Snapshot for Event Messages */
+#define SYN_MAC_TS_CTL_TSMASTERENA	0x00008000	/* Enable Snapshot for Messages Relevant to Master */
+#define SYN_MAC_TS_CTL_SNAPTYPSEL_MASK	0x00030000	/* Select PTP packets for Taking Snapshots */
+#define SYN_MAC_TS_CTL_SNAPTYPSEL_SHIFT	16
+#define SYN_MAC_TS_CTL_TSENMACADDR	0x00040000	/* Enable MAC Address for PTP Packet Filtering */
+#define SYN_MAC_TS_CTL_CSC		0x00080000	/* Enable checksum correction during OST for PTP over UDP/IPv4 */
+#define SYN_MAC_TS_CTL_TXTSSTSM		0x01000000	/* Transmit Timestamp Status Mode */
+#define SYN_MAC_TS_CTL_AV8021ASMEN	0x10000000	/* AV 802.1AS Mode Enable */
+#define SYN_MAC_TS_CTL_ESTI		0x20000000	/* External System Time Input */
+
+/* PTP Timestamp Control configuration mask */
+#define SYN_MAC_HWTS_CFG_MASK		(SYN_MAC_TS_CTL_TSENA | \
+					 SYN_MAC_TS_CTL_TSIPV4ENA | \
+					 SYN_MAC_TS_CTL_TSIPV6ENA | \
+					 SYN_MAC_TS_CTL_TSEVENTENA | \
+					 SYN_MAC_TS_CTL_TSVER2ENA | \
+					 SYN_MAC_TS_CTL_TSIPENA | \
+					 SYN_MAC_TS_CTL_TSENALL)
+
+/* PTP rollover mode values */
+#define SYN_PTP_DIGITAL_ROLLOVER_MODE	1000000000UL	/* Digital rollover at 1 second (1ns granularity) */
+#define SYN_PTP_BINARY_ROLLOVER_MODE	0x80000000UL	/* Binary rollover at 2^31 (0.465ns granularity) */
+
+/* SYN_MAC_SUB_SEC_INCR (MAC_Sub_Second_Increment) Bit definitions - Datasheet 11.1.402 */
+#define SYN_MAC_SUB_SEC_INCR_SSINC_MASK		GENMASK(23, 16)	/* Sub-second Increment Value */
+#define SYN_MAC_SUB_SEC_INCR_SNSINC_MASK	GENMASK(15, 8)	/* Sub-nanosecond Increment Value */
+
+/* SYN_MAC_SYS_TIME_NSECS (MAC_System_Time_Nanoseconds) Bit definitions - Datasheet 11.1.404 */
+#define SYN_MAC_SYS_TIME_NSECS_MASK	0x7FFFFFFF	/* Timestamp Nanoseconds (31 bits) */
+
+/* SYN_MAC_SYS_TIME_NSECS_UPDATE (MAC_System_Time_Nanoseconds_Update) Bit definitions - Datasheet 11.1.406 */
+#define SYN_MAC_SYS_TIME_NSECS_UPDATE_TSSS_MASK	0x7FFFFFFF	/* Timestamp Sub Seconds */
+#define SYN_MAC_SYS_TIME_NSECS_UPDATE_ADDSUB	0x80000000	/* Add or Subtract Time */
+
+/* SYN_MAC_TS_STATUS (MAC_Timestamp_Status) Bit definitions - Datasheet 11.1.408 */
+#define SYN_MAC_TS_STATUS_TSSOVF	0x00000001	/* Timestamp Seconds Overflow */
+#define SYN_MAC_TS_STATUS_TSTARGT0	0x00000002	/* Timestamp Target Time Reached for Target Time PPS0 */
+#define SYN_MAC_TS_STATUS_AUXTSTRIG	0x00000004	/* Auxiliary Timestamp Trigger Snapshot */
+#define SYN_MAC_TS_STATUS_TSTRGTERR0	0x00000008	/* Timestamp Target Time Error */
+#define SYN_MAC_TS_STATUS_TTSNS_MASK	0x00007C00	/* Number of Tx Timestamp Snapshots (bits 14:10) */
+#define SYN_MAC_TS_STATUS_TTSNS_SHIFT	10
+#define SYN_MAC_TS_STATUS_TXTSSIS	0x00008000	/* Tx Timestamp Status Interrupt Status */
+#define SYN_MAC_TS_STATUS_ATSSTN_MASK	0x000F0000	/* Auxiliary Timestamp Snapshot Trigger Identifier */
+#define SYN_MAC_TS_STATUS_ATSSTN_SHIFT	16
+#define SYN_MAC_TS_STATUS_ATSSTM	0x01000000	/* Auxiliary Timestamp Snapshot Trigger Missed */
+#define SYN_MAC_TS_STATUS_ATSNS_MASK	0x3E000000	/* Number of Auxiliary Timestamp Snapshots */
+#define SYN_MAC_TS_STATUS_ATSNS_SHIFT	25
+
+/* SYN_MAC_TX_TS_STATUS_NSECS (MAC_Tx_Timestamp_Status_Nanoseconds) Bit definitions - Datasheet 11.1.409 */
+#define SYN_MAC_TX_TS_STATUS_NSECS_MASK	0x7FFFFFFF	/* Transmit Timestamp Nanoseconds */
+#define SYN_MAC_TX_TS_STATUS_TXTSSMIS	0x80000000	/* Transmit Timestamp Status Missed */
+
+/* SYN_MAC_PPS_CTL (MAC_PPS_Control) Bit definitions - Datasheet 11.1.415 */
+#define SYN_MAC_PPS_CTL_PPSCTRL_MASK	0x0000000F	/* PPS Output Frequency Control */
+#define SYN_MAC_PPS_CTL_PPSEN0		0x00000010	/* Flexible PPS Output Mode Enable */
+#define SYN_MAC_PPS_CTL_TRGTMODSEL0_MASK 0x00000060	/* Target Time Register Mode for PPS0 Output */
+#define SYN_MAC_PPS_CTL_TRGTMODSEL0_SHIFT 5
 
 /*
  *
