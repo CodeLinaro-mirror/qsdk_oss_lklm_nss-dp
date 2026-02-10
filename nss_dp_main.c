@@ -359,9 +359,12 @@ static int nss_dp_close(struct net_device *netdev)
 		return -EAGAIN;
 	}
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		phylink_stop(dp_priv->phylink);
-	} else {
+	} else
+#endif
+	{
 		if (dp_priv->phydev)
 			phy_stop(dp_priv->phydev);
 	}
@@ -492,9 +495,12 @@ static int nss_dp_open(struct net_device *netdev)
 
 	netif_start_queue(netdev);
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		phylink_start(dp_priv->phylink);
-	} else if (!dp_priv->link_poll) {
+	} else
+#endif
+	if (!dp_priv->link_poll) {
 		/* Notify data plane link is up */
 		if (dp_priv->data_plane_ops->link_state(dp_priv->dpc, 1)) {
 			netdev_dbg(netdev, "Data plane set link failed\n");
@@ -1058,6 +1064,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		goto netdev_register_fail;
 	}
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en) {
 		dp_priv->phylink = ssdk_port_phylink_setup(0, dp_priv->macid, netdev);
 		if (!dp_priv->phylink) {
@@ -1065,6 +1072,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 			dp_priv->phylink_en = false;
 		}
 	}
+#endif
 
 #if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 	if (!dp_priv->phylink_en && dp_priv->link_poll) {
@@ -1184,10 +1192,13 @@ static int nss_dp_remove(struct platform_device *pdev)
 		dp_ops = dp_priv->data_plane_ops;
 		hal_ops = dp_priv->gmac_hal_ops;
 
+#ifdef CONFIG_PHYLINK
 		if (dp_priv->phylink_en && dp_priv->phylink) {
 			ssdk_port_phylink_destroy(0, dp_priv->macid);
 			dp_priv->phylink = NULL;
-		} else {
+		} else
+#endif
+		{
 			if (dp_priv->phydev) {
 				phy_disconnect(dp_priv->phydev);
 				dp_priv->phydev = NULL;

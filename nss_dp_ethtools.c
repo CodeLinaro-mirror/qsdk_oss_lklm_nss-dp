@@ -123,10 +123,12 @@ static void nss_dp_get_pauseparam(struct net_device *netdev,
 {
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		phylink_ethtool_get_pauseparam(dp_priv->phylink, pause);
 		return;
 	}
+#endif
 
 	pause->rx_pause = dp_priv->pause & FLOW_CTRL_RX ? 1 : 0;
 	pause->tx_pause = dp_priv->pause & FLOW_CTRL_TX ? 1 : 0;
@@ -175,9 +177,11 @@ static int32_t nss_dp_set_pauseparam(struct net_device *netdev,
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising) = { 0, };
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		return phylink_ethtool_set_pauseparam(dp_priv->phylink, pause);
 	}
+#endif
 
 	/* set flow control settings */
 	dp_priv->pause = 0;
@@ -413,9 +417,11 @@ static int nss_dp_get_ethtool_link_ksetting(struct net_device *dev, struct ethto
 
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported) = { 0, };
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		return phylink_ethtool_ksettings_get(dp_priv->phylink, cmd);
 	}
+#endif
 
 	if (dp_priv->phydev) {
 		return phy_ethtool_get_link_ksettings(dev, cmd);
@@ -476,9 +482,11 @@ static int nss_dp_set_ethtool_link_ksettings(struct net_device *dev,
 {
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(dev);
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		return phylink_ethtool_ksettings_set(dp_priv->phylink, cmd);
 	}
+#endif
 
 	if (dp_priv->phydev)
 		return phy_ethtool_ksettings_set(dp_priv->phydev, cmd);
