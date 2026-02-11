@@ -123,6 +123,10 @@ qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds.o
 ccflags-y += -DNSS_DP_PPEDS_SUPPORT
 endif
 
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DNSS_DP_HW_GRO
+endif
+
 ifeq ($(dp-loopback),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_cfg_rx_loopback.o \
 		   hal/dp_ops/edma_dp/edma_v3/edma_cfg_tx_loopback.o

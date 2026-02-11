@@ -78,16 +78,39 @@
 
 
 #define EDMA_IRQ_NAME_SIZE		32
+
+#ifdef NSS_DP_HW_GRO
+#define EDMA_NETDEV_FEATURES           NETIF_F_FRAGLIST \
+                                       | NETIF_F_SG \
+                                       | NETIF_F_RXCSUM \
+                                       | NETIF_F_HW_CSUM \
+                                       | NETIF_F_TSO \
+                                       | NETIF_F_TSO6 \
+                                       | NETIF_F_GRO_HW
+#else
 #define EDMA_NETDEV_FEATURES		NETIF_F_FRAGLIST \
 					| NETIF_F_SG \
 					| NETIF_F_RXCSUM \
 					| NETIF_F_HW_CSUM \
 					| NETIF_F_TSO \
 					| NETIF_F_TSO6
+#endif
 
 #define EDMA_SWITCH_DEV_ID	0
 #define EDMA_PPE_QUEUE_LEVEL	0
 #define EDMA_BITS_IN_WORD	32
+
+#ifdef NSS_DP_HW_GRO
+#define EDMA_RX_RING_GRO_NUM_MAX 4
+
+#define EDMA_RX_GRO_TIMEOUT_MAX 0xFFFF
+#define EDMA_RX_GRO_BUFFER_LEN_MAX 0x1FFFF
+#define EDMA_RX_GRO_DESC_COUNT_MAX 0x3F
+
+#define EDMA_RX_GRO_TIMEOUT_DEFAULT 0xFFF
+#define EDMA_RX_GRO_BUFFER_LEN_DEFAULT 0x1FFFF
+#define EDMA_RX_GRO_DESC_COUNT_DEFAULT 0x20
+#endif
 
 /*
  * Maximum queue priority
@@ -138,6 +161,7 @@
  */
 #define EDMA_RING_TYPE_FLAGS_HOST_COMMON	0x1
 #define EDMA_RING_TYPE_FLAGS_HOST_VP		0x2
+#define EDMA_RING_TYPE_FLAGS_HOST_GRO		0x4
 
 /*
  * EDMA ring status flags
@@ -439,6 +463,14 @@ struct edma_ds_info {
 };
 
 /*
+ * edma_host_gro_info
+ *	GRO mode configuration information.
+ */
+struct edma_host_gro_info {
+	struct edma_rx_rings_info rx_info;	/* RX rings information */
+};
+
+/*
  * edma_host_sfe_info
  *	SFE mode configuration information.
  */
@@ -464,6 +496,7 @@ struct edma_host_info {
 	struct edma_rings_common_info common_info;
 	struct edma_host_sfe_info sfe_info;		/* Host SFE specific information. */
 	struct edma_host_vp_info vp_info;		/* Host VP specific information. */
+	struct edma_host_gro_info gro_info;		/* Host GRO specific information. */
 };
 
 /*
@@ -479,6 +512,25 @@ struct edma_init_info {
 						/* Valid flags indicating the VP,
 						 * HOST, DS context information is valid or not
 						 */
+};
+
+/*
+ * edma_hw_gro_ctx
+ *	HW gro context structure
+ */
+struct edma_hw_gro_ctx {
+	int gro_timeout_usecs;
+		/* GRO default timeout value */
+	int gro_buffer_len;
+		/* GRO default buffer lenght */
+	int gro_desc_count;
+		/* GRO default descriptor count */
+	bool hw_gro_en;
+		/* HW GRO enable */
+	uint8_t rx_gro_queue_start;
+		/* RX GRO queue start */
+	uint8_t rx_gro_ring_start;
+		/* RX GRO ring start */
 };
 
 /*
@@ -617,6 +669,8 @@ struct edma_gbl_ctx {
 #endif
 	bool edma_initialized;
 			/* Flag to check initialization status */
+	struct edma_hw_gro_ctx hw_gro_ctx;
+			/* HW GRO context */
 #ifdef NSS_DP_PPEDS_SUPPORT
 	uint32_t ppeds_node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
 	struct edma_ppeds_drv ppeds_drv;

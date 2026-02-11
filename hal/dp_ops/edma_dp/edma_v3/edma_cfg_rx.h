@@ -44,6 +44,18 @@ extern uint32_t edma_cfg_rx_rps_num_cores;
 extern uint32_t edma_cfg_rx_sec_desc_inval;
 extern uint32_t edma_cfg_rx_rps_bitmap_cores;
 
+int edma_rx_gro_slot_vld_configure(struct edma_gbl_ctx *egc);
+int edma_rx_gro_desc_count_configure(struct edma_hw_gro_ctx *gro_ctx);
+int edma_rx_gro_timeout_configure(struct edma_hw_gro_ctx *gro_ctx);
+int edma_rx_gro_buffer_len_configure(struct edma_hw_gro_ctx *gro_ctx);
+
+void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring);
+void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
+                                struct edma_rxfill_ring *rxfill_ring);
+int edma_cfg_rx_desc_ring_setup(struct edma_rxdesc_ring *rxdesc_ring);
+void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
+                                struct edma_rxdesc_ring *rxdesc_ring);
+
 void edma_cfg_rx_rings(struct edma_gbl_ctx *egc);
 #if defined(NSS_DP_POINT_OFFLOAD)
 void edma_cfg_rx_point_offload_mapping(struct edma_gbl_ctx *egc);

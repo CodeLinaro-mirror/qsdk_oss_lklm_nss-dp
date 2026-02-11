@@ -13,6 +13,9 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RXFILL_RING_PER_CORE_MAX	1
 #define EDMA_RXDESC_RING_PER_CORE_MAX	1
 
+#define EDMA_MAX_RXDESC_RING_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_RXFILL_RING_PER_TYPE	(NR_CPUS * 2)
+
 #define EDMA_RX_MAX_PROCESS		32	/* Max Rx processing without
 						   replenishing RxFill ring */
 #define EDMA_RX_SKB_HEADROOM		128
@@ -284,6 +287,19 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RXDESC_SIZE_SHIFT		5
 
 /*
+ * GRO Slot Valid Word Definitions
+ * These masks define which fields are valid for GRO coalescing
+ * for different protocol types (TCP, UDP, IP)
+ *
+ * TCP: Validates most fields including sequence numbers, flags, etc.
+ * UDP: Validates fewer fields (no sequence/ack numbers)
+ * IP:  Validates only IP header fields
+ */
+#define EDMA_GRO_SLOT_VLD_TCP_WORD 0x1FFFBFFF  /* TCP field validation mask */
+#define EDMA_GRO_SLOT_VLD_UDP_WORD 0xFFFFC000  /* UDP field validation mask */
+#define EDMA_GRO_SLOT_VLD_IP_WORD  0xFFFF8000  /* IP field validation mask */
+
+/*
  * edma_ring_usage
  *	Indices for stats
  */
@@ -424,6 +440,9 @@ struct edma_rxdesc_ring {
 	struct edma_rxfill_ring *rxfill;
 					/* RXFILL ring used */
 	bool napi_added;		/* Flag to indicate NAPI add status */
+#if defined(NSS_DP_HW_GRO)
+	bool gro_enabled;		/* Ring is GRO enabled */
+#endif
 	dma_addr_t pdma;		/* Primary descriptor ring physical address */
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	struct sk_buff *head;		/* Head of the skb list in case of scatter-gather frame */

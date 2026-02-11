@@ -34,10 +34,32 @@ struct nss_dp_vp_tx_info {
 };
 
 /*
+ * nss_vp_rx_custom_gro_mdata
+ *	VP RX custom GRO metadata
+ */
+struct nss_vp_rx_custom_gro_mdata {
+	bool hw_gro_en;			/* HW gro is enabled */
+	bool hw_gro_more;		/* HW gro more segments */
+	bool hw_gro_fin;		/* HW gro fin segments */
+	bool hw_gro_psh;		/* HW gro psh segments */
+};
+
+/*
+ * nss_vp_rx_custom_mdata
+ *	VP RX custom metadata
+ */
+struct nss_vp_rx_custom_mdata {
+	union {
+		struct nss_vp_rx_custom_gro_mdata gro_mdata;
+	} rx_mdata;
+};
+
+/*
  * nss_dp_vp_rx_info
  *	VP info struct struct
  */
 struct nss_dp_vp_rx_info {
+	struct nss_vp_rx_custom_mdata vp_rx_mdata; /* VP Rx metadata */
 	struct napi_struct *napi;	/* RX NAPI */
 	uint32_t batch_bytes;		/* Total bytes carried by batch of skbs */
 	int32_t flow_idx;		/* Flow index of a packet */
