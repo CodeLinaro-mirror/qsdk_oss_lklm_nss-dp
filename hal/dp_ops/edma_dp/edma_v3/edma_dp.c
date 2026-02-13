@@ -536,7 +536,7 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 			return NSS_DP_FAILURE;
 		}
 #ifdef NSS_DP_PON_SUPPORT
-		if (ppe_drv_dp_set_ppe_gem_type_enable_flag(iface, dp_dev->gem_port)) {
+		if (ppe_drv_dp_gem_enable(iface, dp_dev->gem_port)) {
 			netdev_err(netdev, "Error setting GEM type enabled bit for dev: %s",
 					netdev->name);
 			ppe_drv_dp_deinit(iface);
