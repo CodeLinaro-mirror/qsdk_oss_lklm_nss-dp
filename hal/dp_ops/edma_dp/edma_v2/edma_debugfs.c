@@ -221,12 +221,14 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	edma_debugfs_print_banner(m, EDMA_RX_RING_PPEDS_STATS_NODE_NAME);
 
 	for (i = 0; i < drv->num_nodes; i++) {
+		struct edma_ppeds_wifi7_cfg *ppeds_node_cfg;
 		ppeds_node = drv->ppeds_node_cfg[i].ppeds_db;
 		if (!ppeds_node) {
 			continue;
 		}
 
-		rxfill_ring = &ppeds_node->rxfill_ring;
+		ppeds_node_cfg = &ppeds_node->wifi7_cfg;
+		rxfill_ring = &ppeds_node_cfg->rxfill_ring;
 		seq_printf(m, "\t\t PPE-DS Rx fill ring empty stats & Ring id %d\n", rxfill_ring->ring_id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -238,12 +240,14 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	}
 
 	for (i = 0; i < drv->num_nodes; i++) {
+		struct edma_ppeds_wifi7_cfg *ppeds_node_cfg;
 		ppeds_node = drv->ppeds_node_cfg[i].ppeds_db;
 		if (!ppeds_node) {
 			continue;
 		}
 
-		rxdesc_ring = &ppeds_node->rx_ring;
+		ppeds_node_cfg = &ppeds_node->wifi7_cfg;
+		rxdesc_ring = &ppeds_node_cfg->rx_ring;
 		seq_printf(m, "\t\t PPE-DS Rx desc ring full utilization stats & Ring id %d\n", rxdesc_ring->ring_id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -368,12 +372,14 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	edma_debugfs_print_banner(m, EDMA_TX_RING_PPEDS_STATS_NODE_NAME);
 
 	for (i = 0; i < drv->num_nodes; i++) {
+		struct edma_ppeds_wifi7_cfg *ppeds_node_cfg;
 		ppeds_node = drv->ppeds_node_cfg[i].ppeds_db;
 		if (!ppeds_node) {
 			continue;
 		}
 
-		tx_ring = &ppeds_node->tx_ring;
+		ppeds_node_cfg = &ppeds_node->wifi7_cfg;
+		tx_ring = &ppeds_node_cfg->tx_ring;
 		seq_printf(m, "\t\t PPE-DS Tx Ring full utilization stats & Ring id %d\n", tx_ring->id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -385,12 +391,14 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	}
 
 	for (i = 0; i < drv->num_nodes; i++) {
+		struct edma_ppeds_wifi7_cfg *ppeds_node_cfg;
 		ppeds_node = drv->ppeds_node_cfg[i].ppeds_db;
 		if (!ppeds_node) {
 			continue;
 		}
 
-		txcmpl_ring = &ppeds_node->txcmpl_ring;
+		ppeds_node_cfg = &ppeds_node->wifi7_cfg;
+		txcmpl_ring = &ppeds_node_cfg->txcmpl_ring;
 		seq_printf(m, "\t\t PPE-DS Tx cmpl Ring full utilization stats & Ring id %d\n", txcmpl_ring->id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -501,15 +509,17 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
 
 #ifdef NSS_DP_PPEDS_SUPPORT
 	for (i = 0; i < drv->num_nodes; i++) {
+		struct edma_ppeds_wifi7_cfg *ppeds_node_cfg;
 		ppeds_node = drv->ppeds_node_cfg[i].ppeds_db;
 		if (!ppeds_node) {
 			continue;
 		}
 
-		memset(&ppeds_node->rxfill_ring.rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
-		memset(&ppeds_node->rx_ring.rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
-		memset(&ppeds_node->tx_ring.tx_desc_stats, 0, sizeof(struct edma_tx_desc_stats));
-		memset(&ppeds_node->txcmpl_ring.tx_cmpl_stats, 0, sizeof(struct edma_tx_cmpl_stats));
+		ppeds_node_cfg = &ppeds_node->wifi7_cfg;
+		memset(&ppeds_node_cfg->rxfill_ring.rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
+		memset(&ppeds_node_cfg->rx_ring.rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
+		memset(&ppeds_node_cfg->tx_ring.tx_desc_stats, 0, sizeof(struct edma_tx_desc_stats));
+		memset(&ppeds_node_cfg->txcmpl_ring.tx_cmpl_stats, 0, sizeof(struct edma_tx_cmpl_stats));
 	}
 #endif
 
