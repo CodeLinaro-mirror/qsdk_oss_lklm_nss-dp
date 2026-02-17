@@ -255,6 +255,18 @@ typedef enum {
 #define EDMA_RING_MODE_GET(idx, mode_bm)		(((mode_bm) & EDMA_TXRX_RING_PH_EN_MASK(idx)) >> (idx))
 
 /*
+ * Validate txcompl, rxdesc, and rxfill ring id params as integers
+ */
+#define param_check_bp_stats_en_txcmpl_ring_id(name, p) \
+        __param_check(name, p, int)
+
+#define param_check_bp_stats_en_rxdesc_ring_id(name, p) \
+        __param_check(name, p, int)
+
+#define param_check_bp_stats_en_rxfill_ring_id(name, p) \
+        __param_check(name, p, int)
+
+/*
  * EDMA Ring usage stats macro
  */
 enum edma_ring_usage_percentage {
@@ -590,6 +602,7 @@ struct edma_gbl_ctx {
 
 	struct dentry *root_dentry;	/* Root debugfs entry */
 	struct dentry *stats_dentry;	/* Statistics debugfs entry */
+	struct dentry *bp_stats_dentry;	/* Back pressure statistics debugfs entry */
 
 	struct edma_misc_stats __percpu *misc_stats;
 			/* Per CPU miscellaneous statistics */
@@ -718,6 +731,13 @@ void edma_disable_interrupts(struct edma_gbl_ctx *egc);
 void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc);
 int edma_hang_recovery_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_vlan_append_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
+
+/*
+ * Forward declarations for custom param ops used in module_param_array
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_rxfill_ring_id;
+static const struct kernel_param_ops param_ops_bp_stats_en_rxdesc_ring_id;
+static const struct kernel_param_ops param_ops_bp_stats_en_txcmpl_ring_id;
 
 /*
  * edma_reg_read()
