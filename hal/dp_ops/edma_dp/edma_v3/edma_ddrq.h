@@ -95,6 +95,22 @@ static inline void edma_reg_write(uint32_t reg_off, uint32_t val);
 #define EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_1	5
 #define EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_2	37
 
+#define EDMA_DDRQ_ACCU_STATS_RXBYTES_OFFSET	32
+#define EDMA_DDRQ_ACCU_STATS_TXBYTES_OFFSET	72
+#define EDMA_DDRQ_ACCU_STATS_RXPKTS_OFFSET	40
+#define EDMA_DDRQ_ACCU_STATS_TXPKTS_OFFSET	112
+
+#define EDMA_DDRQ_AC_DROP_CNT_GRN_PRO_DROP_BYTE_OFFSET	32
+#define EDMA_DDRQ_AC_DROP_CNT_GRN_TAIL_DROP_PKT_OFFSET	72
+#define EDMA_DDRQ_AC_DROP_CNT_GRN_TAIL_DROP_BYTE_OFFSET	104
+#define EDMA_DDRQ_AC_DROP_CNT_YEL_PRO_DROP_PKT_OFFSET	144
+#define EDMA_DDRQ_AC_DROP_CNT_YEL_PRO_DROP_BYTE_OFFSET	176
+#define EDMA_DDRQ_AC_DROP_CNT_YEL_TAIL_DROP_PKT_OFFSET	216
+#define EDMA_DDRQ_AC_DROP_CNT_YEL_TAIL_DROP_BYTE_OFFSET	248
+#define EDMA_DDRQ_AC_DROP_CNT_RED_PRO_DROP_BYTE_OFFSET	320
+#define EDMA_DDRQ_AC_DROP_CNT_RED_TAIL_DROP_PKT_OFFSET	360
+#define EDMA_DDRQ_AC_DROP_CNT_RED_TAIL_DROP_BYTE_OFFSET	392
+
 #define EDMA_LP_RING_ID_BASE			32
 
 #define EDMA_DDRQ_GRP_SHARED_LIMIT_MIN		32
@@ -376,6 +392,71 @@ static inline void edma_ddrq_dequeue_drop_disable_all(void)
 	edma_ddrq_regs_set_reset(edma_ddrq_deq_drop_reg_offsets_get(), EDMA_REG_DDRQ_DEQ_DROP_RESET_ALL);
 }
 
+/*
+ * edma_ddrq_acc_stats_t
+ *	DDRQ accumulate statistics structure
+ */
+typedef struct {
+	uint32_t accu_bytes_rx_0:32;				/* Least significant Rx byte count */
+	uint32_t accu_bytes_rx_1:8;				/* Most significant Rx byte count */
+	uint32_t accu_pkts_rx_0:24;				/* Least significant Rx packet count */
+	uint32_t accu_pkts_rx_1:8;				/* Most significant Rx packet count */
+	uint32_t accu_bytes_tx_0:24;				/* Least significant Tx byte count */
+	uint32_t accu_bytes_tx_1:16;				/* Most significant Tx byte count */
+	uint32_t accu_pkts_tx_0:16;				/* Least significant Tx packet count */
+	uint32_t accu_pkts_tx_1:16;				/* Most significant Tx packet count */
+	uint32_t ddrq_id:8;					/* Mapped DDRQ id for statistics get */
+	uint32_t _reserved_0:8;					/* Reserved */
+} edma_ddrq_acc_stats_t;
+
+/*
+ * edma_ddrq_acc_stats_u
+ *	DDRQ accumulate statistics union
+ */
+typedef union {
+	edma_ddrq_acc_stats_t ddrq_stats;			/* DDRQ accumulate statistics */
+	uint32_t val[5];					/* Helper for hardware statistics read */
+} edma_ddrq_acc_stats_u;
+
+/*
+ * edma_ddrq_ac_queue_drop_cnt_tbl_t
+ *	DDRQ AC queue drop count table structure in hardware format
+ */
+typedef struct {
+	uint32_t ac_drop_cnt_tbl_grn_pro_drop_pkt;		/* Green probabilistic packet drop count */
+	uint32_t ac_drop_cnt_tbl_grn_pro_drop_byte_0;		/* Green probabilistic byte drop count */
+	uint32_t ac_drop_cnt_tbl_grn_pro_drop_byte_1:8;		/* Green probabilistic byte drop count */
+	uint32_t ac_drop_cnt_tbl_grn_tail_drop_pkt_0:24;	/* Green tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_grn_tail_drop_pkt_1:8;		/* Green tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_grn_tail_drop_byte_0:24;	/* Green tail byte drop count */
+	uint32_t ac_drop_cnt_tbl_grn_tail_drop_byte_1:16;	/* Green tail byte drop count */
+	uint32_t ac_drop_cnt_tbl_yel_pro_drop_pkt_0:16;		/* Yellow probabilistic packet drop count */
+	uint32_t ac_drop_cnt_tbl_yel_pro_drop_pkt_1:16;		/* Yellow probabilistic packet drop count */
+	uint32_t ac_drop_cnt_tbl_yel_pro_drop_byte_0:16;	/* Yellow probabilistic byte drop count */
+	uint32_t ac_drop_cnt_tbl_yel_pro_drop_byte_1:24;	/* Yellow probabilistic byte drop count */
+	uint32_t ac_drop_cnt_tbl_yel_tail_drop_pkt_0:8;		/* Yellow tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_yel_tail_drop_pkt_1:24;	/* Yellow tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_yel_tail_drop_byte_0:8;	/* Yellow tail byte drop count */
+	uint32_t ac_drop_cnt_tbl_yel_tail_drop_byte_1;		/* Yellow tail byte drop count */
+	uint32_t ac_drop_cnt_tbl_red_pro_drop_pkt;		/* Red probabilistic packet drop count */
+	uint32_t ac_drop_cnt_tbl_red_pro_drop_byte_0;		/* Red probabilistic byte drop count */
+	uint32_t ac_drop_cnt_tbl_red_pro_drop_byte_1:8;		/* Red probabilistic byte drop count */
+	uint32_t ac_drop_cnt_tbl_red_tail_drop_pkt_0:24;	/* Red tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_red_tail_drop_pkt_1:8;		/* Red tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_red_tail_drop_byte_0:24;	/* Red tail byte drop count */
+	uint32_t ac_drop_cnt_tbl_red_tail_drop_byte_1:16;	/* Red tail byte drop count */
+	uint32_t _reserved_0:16;					/* Reserved */
+} edma_ddrq_ac_queue_drop_cnt_tbl_t;
+
+/*
+ * edma_ddrq_ac_queue_drop_cnt_tbl_u
+ *	Union for DDRQ drop statistics
+ */
+typedef union {
+	edma_ddrq_ac_queue_drop_cnt_tbl_t ddrq_drop_stats;	/* DDRQ accumulate statistics */
+	uint32_t val[14];					/* Helper for hardware statistics read */
+} edma_ddrq_ac_queue_drop_cnt_tbl_u;
+
 nss_dp_ddrq_ret_t edma_ddrq_ppe_ports_queue_profile_set(void);
 nss_dp_ddrq_ret_t edma_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_cfg_tbl_t *ddrq_cfg, uint32_t count);
 nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_cfg_tbl_t *ddrq_cfg);
@@ -391,6 +472,9 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_get(uint32_t ddrq_id, nss_
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_set(uint32_t ddrq_id, nss_dp_ddrq_occupancy_threshold_t *threshold);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_stats_t *ddrq_stats);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *status);
+nss_dp_ddrq_ret_t edma_ddrq_pending_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_pending_stats_t *ddrq_stats, uint8_t count);
+nss_dp_ddrq_ret_t edma_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats);
+nss_dp_ddrq_ret_t edma_ddrq_drop_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats);
 int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg);
 int32_t edma_ddrq_dp_dev_set(struct net_device *dev);
 #endif		/* __EDMA_DDRQ_H__ */

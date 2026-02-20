@@ -43,6 +43,16 @@ typedef enum nss_dp_ddrq_cfg_type {
 	NSS_DP_DDRQ_CFG_TYPE_LP,		/**< Configuration value is a loopback id */
 } nss_dp_ddrq_cfg_type_t;
 
+/**
+ * nss_dp_ddrq_shared_stats_oper_type
+ *	DDRQ shared statistics operation type
+ */
+typedef enum nss_dp_ddrq_shared_stats_oper_type {
+	NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_START,		/**< DDRQ shared stats start operation */
+	NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_GET,		/**< DDRQ shared stats get operation */
+	NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_STOP,		/**< DDRQ shared stats stop operation */
+	NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_MAX,		/**< DDRQ shared stats MAX operation */
+} nss_dp_ddrq_shared_stats_oper_type_t;
 
 /**
  * nss_dp_ddrq_occupancy_stats
@@ -114,6 +124,56 @@ typedef struct nss_dp_ddrq_ac_grp_cfg_tbl {
 	int8_t  ac_cfg_ac_en;			/**< DDRQ group admission control knob */
 	int8_t  ac_cfg_color_aware;		/**< DDRQ group color aware knob */
 } nss_dp_ddrq_ac_grp_cfg_tbl_t;
+
+/*
+ * nss_dp_ddrq_ac_queue_drop_cnt_tbl_t
+ *	DDRQ AC queue drop count structure in software format
+ */
+typedef struct {
+	uint64_t ac_drop_cnt_tbl_grn_pro_drop_byte;		/* Green probabilistic byte drop count */
+	uint64_t ac_drop_cnt_tbl_grn_tail_drop_byte;		/* Green tail byte drop count */
+	uint64_t ac_drop_cnt_tbl_yel_pro_drop_byte;		/* Yellow probabilistic byte drop count */
+	uint64_t ac_drop_cnt_tbl_yel_tail_drop_byte;		/* Yellow tail byte drop count */
+	uint64_t ac_drop_cnt_tbl_red_pro_drop_byte;		/* Red probabilistic byte drop count */
+	uint64_t ac_drop_cnt_tbl_red_tail_drop_byte;		/* Red tail byte drop count */
+	uint32_t ac_drop_cnt_tbl_grn_pro_drop_pkt;		/* Green probabilistic packet drop count */
+	uint32_t ac_drop_cnt_tbl_grn_tail_drop_pkt;		/* Green tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_yel_pro_drop_pkt;		/* Yellow probabilistic packet drop count */
+	uint32_t ac_drop_cnt_tbl_yel_tail_drop_pkt;		/* Yellow tail packet drop count */
+	uint32_t ac_drop_cnt_tbl_red_pro_drop_pkt;		/* Red probabilistic packet drop count */
+	uint32_t ac_drop_cnt_tbl_red_tail_drop_pkt;		/* Red tail packet drop count */
+} nss_dp_ddrq_ac_queue_drop_cnt_tbl_t;
+
+/**
+ * nss_dp_ddrq_pending_stats
+ *	DDRQ pending statistics structure
+ */
+typedef struct nss_dp_ddrq_pending_stats {
+	uint64_t ddrq_enq_stats;		/**< DDRQ enqueue statistics */
+	uint32_t ddrq_pending_stats;		/**< DDRQ pending statistics */
+	uint32_t isramq_enq_stats;		/**< ISRAMQ enqueue statistics */
+} nss_dp_ddrq_pending_stats_t;
+
+/**
+ * nss_dp_ddrq_accu_stats_info
+ *	DDRQ accumulate statistics information structure
+ */
+typedef struct nss_dp_ddrq_accu_stats_info {
+	uint8_t stats_id;			/**< statistics id to map to the DDRQ (range : 0 - 7) */
+	uint8_t stats_count;			/**< Number of statistics instance to get */
+	nss_dp_ddrq_shared_stats_oper_type_t oper_type;
+} nss_dp_ddrq_accu_stats_info_t;
+
+/**
+ * nss_dp_ddrq_accu_stats
+ *	DDRQ accumulate statistics structure
+ */
+typedef struct nss_dp_ddrq_accu_stats {
+	uint64_t ddrq_accu_rx_bytes;		/**< DDRQ Rx accumulate byte count */
+	uint64_t ddrq_accu_tx_bytes;		/**< DDRQ Tx accumulate byte count */
+	uint32_t ddrq_accu_rx_pkts;		/**< DDRQ Rx accumulate packet count */
+	uint32_t ddrq_accu_tx_pkts;		/**< DDRQ Tx accumulate packet count */
+} nss_dp_ddrq_accu_stats_t;
 
 /**
  * nss_dp_ddrq_cfg_get
@@ -325,4 +385,57 @@ nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_get(uint32_t ddrq_id, nss_dp_ddrq_
  */
 nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *status);
 
+/**
+ * nss_dp_ddrq_pending_stats_get
+ *	API to get the DDRQ pending statistic
+ *
+ * @datatypes
+ * nss_dp_ddrq_ret_t
+ * nss_dp_ddrq_obj_id_t
+ * nss_dp_ddrq_pending_stats_t
+ *
+ * @param[in] obj DDRQ object pointer
+ * @param[in] ddrq_stats DDRQ pending statistics pointer
+ * @param[in] Number of statistics instance to get
+ *
+ * @return
+ * API's completion's status
+ */
+nss_dp_ddrq_ret_t nss_dp_ddrq_pending_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_pending_stats_t *ddrq_stats, uint8_t count);
+
+/**
+ * nss_dp_ddrq_drop_cnt_stats_get
+ *	API to get the DDRQ drop count statistics
+ *
+ * @datatypes
+ * nss_dp_ddrq_ret_t
+ * nss_dp_ddrq_obj_id_t
+ * nss_dp_ddrq_ac_queue_drop_cnt_tbl_t
+ *
+ * @param[in] obj DDRQ object pointer
+ * @param[in] ddrq_drop_stats DDRQ drop count statistics pointer
+ *
+ * @return
+ * API's completion's status
+ */
+nss_dp_ddrq_ret_t nss_dp_ddrq_drop_cnt_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats);
+
+/**
+ * nss_dp_ddrq_accu_stats_get
+ *	API to get the DDRQ accumulate statistic
+ *
+ * @datatypes
+ * nss_dp_ddrq_ret_t
+ * nss_dp_ddrq_obj_id_t
+ * nss_dp_ddrq_accu_stats_info_t
+ * nss_dp_ddrq_accu_stats_t
+ *
+ * @param[in] obj DDRQ object pointer
+ * @param[in] ddrq_accu_stats_info DDRQ accumulate statistics information pointer
+ * @param[in] ddrq_stats DDRQ accumulate statistics pointer
+ *
+ * @return
+ * API's completion's status
+ */
+nss_dp_ddrq_ret_t nss_dp_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats);
 #endif	/** __NSS_DP_DDRQ_H__ */

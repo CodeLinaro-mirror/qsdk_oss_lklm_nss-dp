@@ -703,6 +703,33 @@ nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, b
 {
 	return edma_ddrq_occupancy_stats_status_get(ddrq_id, status);
 }
+
+/*
+ * nss_dp_hal_ddrq_pending_stats_get()
+ *	API to get DDRQ pending statistics
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_pending_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_pending_stats_t *ddrq_stats, uint8_t count)
+{
+	return edma_ddrq_pending_stats_get(obj, ddrq_stats, count);
+}
+
+/*
+ * nss_dp_hal_ddrq_drop_cnt_stats_get()
+ *	API to get DDRQ drop count statistics
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_drop_cnt_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats)
+{
+	return edma_ddrq_drop_stats_get(obj, ddrq_drop_stats);
+}
+
+/*
+ * nss_dp_hal_ddrq_accu_stats_get()
+ *	API to get DDRQ accumulate statistics
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats)
+{
+	return edma_ddrq_accu_stats_get(obj, ddrq_accu_stats_info, ddrq_stats);
+}
 #endif		/* NSS_DP_DDRQ_SUPPORT */
 
 /*
