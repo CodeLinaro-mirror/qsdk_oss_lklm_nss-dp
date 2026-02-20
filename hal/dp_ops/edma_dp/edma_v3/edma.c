@@ -117,6 +117,7 @@ int edma_tx_ring_mode_bitmask = EDMA_TX_RING_MODE_BITMASK_DEF;
 module_param(edma_tx_ring_mode_bitmask, int, 0640);
 MODULE_PARM_DESC(edma_tx_ring_mode_bitmask, "EDMA Tx ring mode (preheader/secondary ring) bitmask");
 
+#ifdef NSS_DP_HW_GRO
 int edma_dp_gro_num_rxfill_rings = 4;
 module_param(edma_dp_gro_num_rxfill_rings, int, 0640);
 MODULE_PARM_DESC(edma_dp_gro_num_rxfill_rings, "Number of GRO RX fill rings");
@@ -148,6 +149,7 @@ MODULE_PARM_DESC(edma_dp_gro_rx_queue_map, "Queue base for each RX ring");
 int edma_dp_gro_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {16, 17, 18, 19, -1, -1, -1, -1};
 module_param_array(edma_dp_gro_rxfill_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_gro_rxfill_map, "RX ring to RX fill ring mapping");
+#endif
 
 /*
  * Input String length for VLAN insertion.
@@ -724,6 +726,7 @@ static int edma_validate_host_ring_info(void)
 	return 0;
 }
 
+#ifdef NSS_DP_HW_GRO
 /*
  * edma_validate_gro_ring_info()
  *	Validate GRO ring information
@@ -776,6 +779,7 @@ static int edma_validate_gro_ring_info(void)
 
 	return 0;
 }
+#endif
 
 /*
  * edma_parse_ini()
@@ -1672,7 +1676,9 @@ static void edma_init_txcmpl_rings(struct edma_gbl_ctx *egc,
  */
 void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *init_info)
 {
+#ifdef NSS_DP_HW_GRO
 	struct edma_rx_rings_info *gro_rx_rings = &init_info->host_info.gro_info.rx_info;
+#endif
 	struct edma_rx_rings_info *rx_rings = &init_info->host_info.sfe_info.rx_info;
 	struct edma_tx_rings_info *tx_rings = &init_info->host_info.sfe_info.tx_info;
 	struct edma_host_info *host_info = &init_info->host_info;
