@@ -646,6 +646,9 @@ static int edma_debugfs_mht_tx_fcgrp_show(struct seq_file *m, void __attribute__
 	for (i = 0; i < EDMA_MAX_PORTS; i++) {
 		netdev = egc->netdev_arr[i];
 
+		if (!netdev)
+			continue;
+
 		dp_dev = (struct nss_dp_dev *)netdev_priv(netdev);
 		if (!dp_dev->nss_dp_mht_dev)
 			continue;
