@@ -1804,11 +1804,15 @@ void edma_cfg_rx_rings(struct edma_gbl_ctx *egc)
 	 */
 	for (i = 0; i < egc->rxfill_ring_max; i++) {
 		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+#ifdef NSS_DP_HW_GRO
 			if (egc->rxfill_info[i].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO) {
 				edma_cfg_gro_rx_fill_ring_configure(egc->rxfill_info[i].rxfill_ring);
 			} else {
 				edma_cfg_rx_fill_ring_configure(egc->rxfill_info[i].rxfill_ring);
 			}
+#else
+		edma_cfg_rx_fill_ring_configure(egc->rxfill_info[i].rxfill_ring);
+#endif
 		}
 	}
 
