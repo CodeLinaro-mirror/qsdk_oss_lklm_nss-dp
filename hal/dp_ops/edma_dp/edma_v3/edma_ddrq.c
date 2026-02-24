@@ -21,6 +21,7 @@
 #include "edma.h"
 #include "edma_regs.h"
 #include "edma_debug.h"
+#include "nss_dp_dev.h"
 #include "edma_debugfs.h"
 #include "edma_procfs.h"
 #include "edma_ddrq.h"
@@ -356,6 +357,69 @@ static int32_t edma_ddrq_dbg_cnt_threshold_set(uint32_t index, edma_ddrq_occupan
 static int32_t edma_ddrq_dbg_cnt_occ_stats_get(uint32_t index, edma_ddrq_occupancy_stats_u *occ_stats)
 {
 	return edma_ddrq_reg_dbg_cnt_occ_stats_get(index, occ_stats->val, sizeof(edma_ddrq_occupancy_stats_u)/sizeof(uint32_t));
+}
+
+/*
+ * edma_ddrq_dp_dev_set()
+ *	API to set DDRQ passthrough and SC related information in the dp_dev
+ */
+int32_t edma_ddrq_dp_dev_set(struct net_device *dev, uint32_t mac_id)
+{
+	struct nss_dp_dev *dp_dev;
+
+	if (!dev) {
+		edma_err("Invalid netdevice passed (for port: %d) for DDRQ DP dev information set\n", mac_id);
+		return -EINVAL;
+	}
+
+	if (mac_id > (NSS_DP_HAL_MAX_PORTS + 2)) {
+		edma_err("Invalid mac_id (%d) passed for DDRQ dp dev set operation\n", mac_id);
+		return -EINVAL;
+	}
+
+	dp_dev = netdev_priv(dev);
+	/*
+	 * Set DDRQ related datapath informations in the NSS-DP ETH port's DP DEV
+	 */
+	if (mac_id <= NSS_DP_HAL_MAX_PORTS) {
+		/*
+		 * DDRQs on the particular port is set
+		 */
+		if (edma_ddrq_en_port_bm & (1 << (mac_id - 1))) {
+			if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+				dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_0B;
+			} else {
+				dp_dev->pt_info.dst_pt_mode_val = edma_passthrough_val;
+			}
+
+			if (dp_dev->macid == PON_PORT_ID) {
+				dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_PON_PT_MODE;
+			} else {
+				dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_ETH_PT_MODE;
+			}
+		} else {
+			/*
+			 * DDRQs on the particular port is not set
+			 */
+			dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+			dp_dev->pt_info.sc = PPE_DRV_SC_BYPASS_ALL;
+		}
+	} else {
+		/*
+		 * TODO:
+		 * Currently assigning full packet passthrough mode to any
+		 * of the DP VP interfaces.
+		 */
+		dp_dev->pt_info.src_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+		dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+	}
+
+	edma_warn("Updated PT info for port: %d, src_pt_val: %d, dst_pt_val: %d, sc: %d\n", mac_id,
+						 dp_dev->pt_info.src_pt_mode_val,
+						 dp_dev->pt_info.dst_pt_mode_val,
+						 dp_dev->pt_info.sc);
+
+	return 0;
 }
 
 /*
@@ -936,10 +1000,28 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 		}
 
 		if (ddrq_cfg->ddrq_state != NSS_DP_DDRQ_INV_VAL) {
+			struct net_device *dev;
+
+			/*
+			 * Update the global DDRQ port bitmap
+			 */
 			edma_warn("ddrq_en_port_bm before change: 0x%0x\n", edma_ddrq_en_port_bm);
 			edma_ddrq_en_port_bm = ((edma_ddrq_en_port_bm & ~(1 << (obj->cfg_id - 1))) |
 					 (ddrq_cfg->ddrq_state << (obj->cfg_id - 1)));
 			edma_warn("ddrq_en_port_bm after change: 0x%0x\n", edma_ddrq_en_port_bm);
+
+			/*
+			 * Update the port's dp dev information as per the updated DDRQ state change
+			 */
+			dev = edma_gbl_ctx.netdev_arr[obj->cfg_id - 1];
+			if (!dev) {
+				edma_err("Not able to find the netdev for %d port\n", (obj->cfg_id - 1));
+				return DDRQ_RET_ERR;
+			}
+			if (edma_ddrq_dp_dev_set(dev, obj->cfg_id)) {
+				edma_err("Error in setting DP DEV information for %d port\n", obj->cfg_id);
+				return DDRQ_RET_ERR;
+			}
 		}
 	} else if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_LP) {
 		if (edma_ddrq_ac_queue_cfg_tbl_get(obj->cfg_id, &ddrq_cfg_l)) {

@@ -278,4 +278,5 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_set(uint32_t ddrq_id, nss_
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_stats_t *ddrq_stats);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *status);
 int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg);
+int32_t edma_ddrq_dp_dev_set(struct net_device *dev, uint32_t mac_id);
 #endif		/* __EDMA_DDRQ_H__ */

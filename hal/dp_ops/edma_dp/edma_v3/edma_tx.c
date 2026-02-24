@@ -17,9 +17,6 @@
 #include "edma_regs.h"
 #include "edma_debug.h"
 #include "edma.h"
-#ifdef NSS_DP_DDRQ_SUPPORT
-#include "edma_ddrq.h"
-#endif
 #include <ppe_drv_sc.h>
 #include "syn_dev.h"
 
@@ -430,7 +427,7 @@ static inline bool edma_tx_is_tso_eligible(struct sk_buff *skb)
  *	Process Tx for skb with nr_frags
  */
 static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struct edma_pri_txdesc **txdesc,
-		struct sk_buff *skb, uint32_t *hw_next_to_use)
+		struct nss_dp_dev *dp_dev, struct sk_buff *skb, uint32_t *hw_next_to_use)
 {
 	uint8_t i = 0;
 	uint32_t nr_frags = 0, buf_len = 0, num_descs = 0, start_idx = 0, end_idx = 0;
@@ -478,21 +475,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 #if defined(NSS_DP_HIGHMEM_SUPP)
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-#ifdef NSS_DP_DDRQ_SUPPORT
-		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
-		} else {
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
-		}
-
-		if (edma_passthrough_val_set) {
-			edma_warn("edma_passthrough_val: %d, word1: 0x%0x\n",
-					edma_passthrough_val, txd->word1);
-			edma_passthrough_val_set = 0;
-		}
-#else	/* !NSS_DP_DDRQ_SUPPORT */
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
-#endif	/* NSS_DP_DDRQ_SUPPORT */
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
 		edma_dmac_clean_range_no_dsb((void *)skb_frag_address(frag),
 				(void *)(skb_frag_address(frag) + buf_len));
 
@@ -561,32 +544,12 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	if (dptxi->svp) {
 		EDMA_SRC_INFO_SET(txd, dptxi->svp);
 		EDMA_DST_INFO_SET(txd, 0);
-#ifdef NSS_DP_DDRQ_SUPPORT
-		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
-		} else {
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
-		}
-#endif
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.src_pt_mode_val);
 	} else {
 		EDMA_SRC_INFO_SET(txd, 0);
 		EDMA_DST_INFO_SET(txd, dptxi->dvp);
-#ifdef NSS_DP_DDRQ_SUPPORT
-		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_0B);
-		} else {
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
-		}
-#endif
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
 	}
-
-#ifdef NSS_DP_DDRQ_SUPPORT
-	if (edma_passthrough_val_set) {
-		edma_warn("edma_passthrough_val: %d, word1: 0x%0x\n",
-				edma_passthrough_val, txd->word1);
-		edma_passthrough_val_set = 0;
-	}
-#endif
 }
 
 /*
@@ -596,10 +559,6 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_pri_txdesc *txd,
 					struct sk_buff *skb, struct edma_tx_stats *stats)
 {
-#ifdef NSS_DP_DDRQ_SUPPORT
-	bool is_pt_mode_en = true;
-#endif
-
 	/*
 	 * Offload L3/L4 checksum computation
 	 */
@@ -610,50 +569,8 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	}
 
 	EDMA_DST_INFO_SET(txd, dp_dev->macid);
-
-#ifdef NSS_DP_DDRQ_SUPPORT
-	if (!(edma_ddrq_en_port_bm & (1 << (dp_dev->macid - 1)))) {
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
-		is_pt_mode_en = false;
-	} else if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_0B);
-	} else {
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
-	}
-
-	/*
-	 * DDRQ passthrough mode enabled. Set DDRQ special service code for the
-	 * exception handling via the loopback ring
-	 */
-	if (is_pt_mode_en) {
-#ifdef NSS_DP_PON_SUPPORT
-		if (dp_dev->macid == PON_PORT_ID) {
-			EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_DDRQ_PON_PT_MODE);
-		} else {
-			EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_DDRQ_ETH_PT_MODE);
-		}
-#else
-			EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_DDRQ_ETH_PT_MODE);
-#endif
-	} else {
-		/*
-		 * Set destination information in the descriptor
-		 */
-		EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
-	}
-
-	if (edma_passthrough_val_set) {
-		edma_warn("edma_passthrough_val: %d, word1: 0x%0x, macid: %d, pt_mode: %d, edma_ddrq_en_port_bm : 0x%0x\n",
-				edma_passthrough_val, txd->word1, dp_dev->macid, is_pt_mode_en, edma_ddrq_en_port_bm);
-		edma_passthrough_val_set = 0;
-	}
-#else	/* !NSS_DP_DDRQ_SUPPORT */
-	/*
-	 * Set destination information in the descriptor
-	 */
-	EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
-#endif	/* NSS_DP_DDRQ_SUPPORT */
-
+	EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
+	EDMA_TXDESC_SERVICE_CODE_SET(txd, dp_dev->pt_info.sc);
 	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
 
 	/*
@@ -719,7 +636,7 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 
 	edma_tx_desc_init(txd);
 
-	if (skb_headroom(skb) < EDMA_DDRQ_PREHEADER_SIZE) {
+	if (unlikely(skb_headroom(skb) < EDMA_DDRQ_PREHEADER_SIZE)) {
 		if (pskb_expand_head(skb, EDMA_DDRQ_PREHEADER_SIZE, 0, GFP_ATOMIC)) {
 			edma_err("Can't expand skb: %px\n", skb);
 			return NULL;
@@ -739,9 +656,6 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 #endif
 
 	EDMA_TXDESC_DATA_OFFSET_SET(txd, EDMA_DDRQ_PREHEADER_SIZE);
-#ifndef NSS_DP_DDRQ_SUPPORT
-	EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
-#endif
 
 	/*
 	 * Set packet length in the descriptor
@@ -784,7 +698,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 	 * Process skb with nr_frags
 	 */
 	if (unlikely(skb_shinfo(skb)->nr_frags)) {
-		num_descs += edma_tx_skb_nr_frags(txdesc_ring, &txd, skb, hw_next_to_use);
+		num_descs += edma_tx_skb_nr_frags(txdesc_ring, &txd, dp_dev, skb, hw_next_to_use);
 		u64_stats_update_begin(&stats->syncp);
 		stats->tx_nr_frag_pkts++;
 		u64_stats_update_end(&stats->syncp);
@@ -828,20 +742,6 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 #if defined(NSS_DP_HIGHMEM_SUPP)
 			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-#ifdef NSS_DP_DDRQ_SUPPORT
-			if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-				EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
-			} else {
-				EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_passthrough_val);
-			}
-			if (edma_passthrough_val_set) {
-				edma_warn("edma_passthrough_val: %d, word1: 0x%0x\n",
-						edma_passthrough_val, txd->word1);
-				edma_passthrough_val_set = 0;
-			}
-#else		/* !NSS_DP_DDRQ_SUPPORT */
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
-#endif		/* NSS_DP_DDRQ_SUPPORT */
 
 			edma_dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
@@ -865,7 +765,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 			 */
 skip_primary:
 			if (unlikely(skb_shinfo(iter_skb)->nr_frags)) {
-				num_nr_frag = edma_tx_skb_nr_frags(txdesc_ring, &txd, iter_skb, hw_next_to_use);
+				num_nr_frag = edma_tx_skb_nr_frags(txdesc_ring, &txd, dp_dev, iter_skb, hw_next_to_use);
 				num_descs += num_nr_frag;
 				num_sg_frag_list += num_nr_frag;
 

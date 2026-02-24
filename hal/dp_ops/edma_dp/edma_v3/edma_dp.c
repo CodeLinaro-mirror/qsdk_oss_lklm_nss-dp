@@ -16,6 +16,9 @@
 #if defined(NSS_DP_VP_SUPPORT)
 #include "edma_dp_vp.h"
 #endif
+#ifdef NSS_DP_DDRQ_SUPPORT
+#include "edma_ddrq.h"
+#endif
 
 /*
  * edma_dp_open()
@@ -486,6 +489,24 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 		free_percpu(dp_dev->dp_info.pcpu_stats.rx_stats);
 		return NSS_DP_FAILURE;
 	}
+#ifdef NSS_DP_DDRQ_SUPPORT
+	/*
+	 * Store DDRQ datapath related information in the DP DEV
+	 */
+	if (edma_ddrq_dp_dev_set(netdev, dp_dev->macid)) {
+		netdev_err(netdev, "Failed to set DDRQ DP dev info for port %d\n", dp_dev->macid);
+		free_percpu(dp_dev->dp_info.pcpu_stats.rx_stats);
+		free_percpu(dp_dev->dp_info.pcpu_stats.tx_stats);
+		return NSS_DP_FAILURE;
+	}
+#else
+	/*
+	 * DDRQ feature is not enabled, set default configurations
+	 */
+	dp_dev->pt_info.src_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+	dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+	dp_dev->pt_info.sc = PPE_DRV_SC_BYPASS_ALL;
+#endif
 
 	/*
 	 * Configure the data plane
