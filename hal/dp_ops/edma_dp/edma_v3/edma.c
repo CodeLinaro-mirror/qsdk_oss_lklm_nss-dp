@@ -134,7 +134,6 @@ int edma_dp_gro_queues_per_ring = 1;
 module_param(edma_dp_gro_queues_per_ring, int, 0640);
 MODULE_PARM_DESC(edma_dp_gro_queues_per_ring, "Number of queues per rx rings");
 
-int edma_dp_gro_ppe_queue_base = 176;
 module_param(edma_dp_gro_ppe_queue_base, int, 0640);
 MODULE_PARM_DESC(edma_dp_gro_ppe_queue_base, "GRO PPE Queue Base");
 
