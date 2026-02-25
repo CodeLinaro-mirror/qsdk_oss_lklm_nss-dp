@@ -128,6 +128,11 @@ extern int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP];
 extern int edma_dp_ppe_vp_num_tx_rings_per_core;
 extern int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
 
+#ifdef NSS_DP_HW_GRO
+#define EDMA_GRO_PPE_QUEUE_BASE			176
+extern int edma_dp_gro_ppe_queue_base;
+#endif
+
 /**
  * nss_dp_hal_gmac_stats
  *	The per-GMAC statistics structure.
