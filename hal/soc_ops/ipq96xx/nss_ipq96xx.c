@@ -29,6 +29,10 @@ int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP] = {2,3,4,5,6};
 int edma_dp_ppe_vp_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5, 6, 6};
 
+#ifdef NSS_DP_HW_GRO
+int edma_dp_gro_ppe_queue_base = EDMA_GRO_PPE_QUEUE_BASE;
+#endif
+
 /*
  * nss_dp_hal_nsm_sawf_sc_stats_read()
  *	Send nsm stats for the given service-class.
