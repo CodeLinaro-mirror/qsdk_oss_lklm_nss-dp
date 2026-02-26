@@ -32,6 +32,7 @@
 #include <init/ssdk_init.h>
 #endif
 #include "nss_dp_hal.h"
+#include <ppe_drv.h>
 
 #define JUMBO_MRU_3K 3072
 #define NSS_DP_CAPWAP_VP_RX_CORE_INVALID 0XFFFF
@@ -622,6 +623,23 @@ static u16 __attribute__((unused)) nss_dp_select_queue(struct net_device *netdev
 	return cpu;
 }
 
+/*
+ * nss_dp_features_set()
+ *	DP feature set ops
+ */
+static int nss_dp_features_set(struct net_device *dev,
+                             netdev_features_t features)
+{
+#if defined(NSS_DP_HW_GRO)
+        netdev_features_t changed = dev->features ^ features;
+	if (changed & NETIF_F_GRO_HW) {
+		ppe_drv_hw_gro_feature_set(dev, !!(features & NETIF_F_GRO_HW));
+	}
+#endif
+
+	return 0;
+}
+
 static netdev_features_t __attribute__((unused)) nss_dp_feature_check(struct sk_buff *skb,
 									struct net_device *dev,
 									netdev_features_t features)
@@ -685,7 +703,7 @@ struct net_device_ops nss_dp_netdev_ops = {
 #endif
 
 	.ndo_features_check = nss_dp_feature_check,
-
+	.ndo_set_features = nss_dp_features_set,
 #ifndef NSS_DP_IPQ50XX
 	.ndo_select_queue = nss_dp_select_queue,
 #endif

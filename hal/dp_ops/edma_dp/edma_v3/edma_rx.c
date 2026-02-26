@@ -990,12 +990,30 @@ process_next_scatter:
 	 * the skb data will be pointing to outer header and if
 	 * packet decap is successful then data offset will point
 	 * to inner payload.
+	 *
+	 * In case of HW GRO coalescing, suppose if there are two packets that are coalesced
+	 * then data offset of first packet is equal to PAYLOAD_OFFSET(32) while for second
+	 * packets(or onwards) data offset will be pointed to the start of L4 payload.
+	 * To make SW architecture common, for HW GRO packets also only PAYLOAD_OFFSET(32) worth
+	 * of data will be pulled.
 	 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-	if (unlikely(!__pskb_pull(skb_head, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_ring->pdesc_head)))) {
-#else
-	if (unlikely(!pskb_pull(skb_head, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_ring->pdesc_head)))) {
-#endif
+	if (unlikely(rxdesc_ring->gro_enabled) && unlikely(!pskb_pull(skb_head, EDMA_RXDESC_PH_PAYLOAD_OFFSET))) {
+		/*
+		 * Discard the SKB that we have been building,
+		 * in addition to the SKB linked to current descriptor.
+		 */
+		mem_debug_update_skb(skb_head);
+		dev_kfree_skb_any(skb_head);
+		rxdesc_ring->head = NULL;
+		rxdesc_ring->last = NULL;
+		rxdesc_ring->pdesc_head = NULL;
+
+		u64_stats_update_begin(&rx_stats->syncp);
+		rx_stats->rx_nr_frag_headroom_err++;
+		u64_stats_update_end(&rx_stats->syncp);
+
+		return;
+	} else if (unlikely(!pskb_pull(skb_head, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_ring->pdesc_head)))) {
 		/*
 		 * Discard the SKB that we have been building,
 		 * in addition to the SKB linked to current descriptor.
@@ -1161,14 +1179,24 @@ void edma_rx_handle_capwap_linear_packets(struct edma_gbl_ctx *egc,
 	skb_put(skb, pkt_length);
 
 send_to_vp:
-
 	/*
-	 * In some cases like PPE tunnel when mode 1 is enabled
-	 * the skb data will be pointing to outer header and if
-	 * packet decap is successful then data offset will point
-	 * to inner payload.
+	 * In case of HW GRO coalescing, suppose if there are two packets that are coalesced
+	 * then data offset of first packet is equal to PAYLOAD_OFFSET(32) while for second
+	 * packets(or onwards) data offset will be pointed to the start of L4 payload.
+	 * To make SW architecture common, for HW GRO packets also only PAYLOAD_OFFSET(32) worth
+	 * of data will be pulled.
 	 */
-	__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	if (unlikely(rxdesc_ring->gro_enabled)) {
+		__skb_pull(skb, EDMA_RXDESC_PH_PAYLOAD_OFFSET);
+	} else {
+		/*
+		 * In some cases like PPE tunnel when mode 1 is enabled
+		 * the skb data will be pointing to outer header and if
+		 * packet decap is successful then data offset will point
+		 * to inner payload.
+		 */
+		__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	}
 
 	/*
 	 * TODO: Do a batched update of the stats per netdevice.
@@ -1273,12 +1301,23 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 
 send_to_stack:
 	/*
-	 * In some cases like PPE tunnel when mode 1 is enabled
-	 * the skb data will be pointing to outer header and if
-	 * packet decap is successful then data offset will point
-	 * to inner payload.
+	 * In case of HW GRO coalescing, suppose if there are two packets that are coalesced
+	 * then data offset of first packet is equal to PAYLOAD_OFFSET(32) while for second
+	 * packets(or onwards) data offset will be pointed to the start of L4 payload.
+	 * To make SW architecture common, for HW GRO packets also only PAYLOAD_OFFSET(32) worth
+	 * of data will be pulled.
 	 */
-	__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	if (rxdesc_ring->gro_enabled) {
+		__skb_pull(skb, EDMA_RXDESC_PH_PAYLOAD_OFFSET);
+	} else {
+		/*
+		 * In some cases like PPE tunnel when mode 1 is enabled
+		 * the skb data will be pointing to outer header and if
+		 * packet decap is successful then data offset will point
+		 * to inner payload.
+		 */
+		__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	}
 
 	/*
 	 * Check Rx checksum offload status.
