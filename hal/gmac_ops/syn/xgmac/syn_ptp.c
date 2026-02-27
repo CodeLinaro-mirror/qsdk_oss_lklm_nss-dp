@@ -1265,17 +1265,7 @@ static void syn_ptp_debugfs_exit(struct syn_ptp_priv *ptp_priv)
 static int syn_ptp_hw_init(struct syn_ptp_priv *ptp_priv)
 {
 	void __iomem *mac_base = ptp_priv->shd->nghd.mac_base;
-	struct clk *ptp_clk;
 	int ret;
-
-	/* Get PTP reference clock rate */
-	ptp_clk = devm_clk_get_enabled(ptp_priv->dev, "ptp");
-	if (IS_ERR(ptp_clk)) {
-		dev_err(ptp_priv->dev, "Failed to get PTP clock\n");
-		return PTR_ERR(ptp_clk);
-	}
-
-	ptp_priv->ptp_clock_rate = clk_get_rate(ptp_clk);
 
 	/* Step 1: Mask timestamp trigger interrupt (bit 12) */
 	hal_clear_reg_bits(mac_base, SYN_MAC_INT_ENABLE, SYN_MAC_INT_ENABLE_TSIE);
@@ -1336,7 +1326,21 @@ int syn_ptp_init(struct syn_hal_dev *shd, struct platform_device *pdev)
 {
 	struct syn_ptp_priv *ptp_priv;
 	struct device *dev = &pdev->dev;
+	struct clk *ptp_clk;
 	int ret;
+
+	/* Check PTP reference clock rate available or not. */
+	ptp_clk = devm_clk_get_optional_enabled(dev, "ptp");
+	if (IS_ERR(ptp_clk)) {
+		dev_err(dev, "Failed to get PTP clock\n");
+		return PTR_ERR(ptp_clk);
+	}
+
+	/* PTP is optional to be enabled. */
+	if (!ptp_clk) {
+		dev_dbg(dev, "PTP is not enabled\n");
+		return 0;
+	}
 
 	/* Allocate PTP private data structure */
 	ptp_priv = devm_kzalloc(dev, sizeof(*ptp_priv), GFP_KERNEL);
@@ -1344,6 +1348,9 @@ int syn_ptp_init(struct syn_hal_dev *shd, struct platform_device *pdev)
 		dev_err(dev, "Failed to allocate PTP private data\n");
 		return -ENOMEM;
 	}
+
+	/* Get the PTP reference clock rate. */
+	ptp_priv->ptp_clock_rate = clk_get_rate(ptp_clk);
 
 	/* Store back pointer to HAL device */
 	ptp_priv->shd = shd;
