@@ -10,11 +10,15 @@
 #include <linux/atomic.h>
 #include <linux/bitops.h>
 
-#define EDMA_PPEDS_MAX_NODES	4	/* Maximum number of supported PPE-DS nodes */
 #define EDMA_PPEDS_RX_WEIGHT	1	/* PPE-DS Rx processing budget */
 #define EDMA_PPEDS_SERVICE_STOP_BIT 0
 #define EDMA_PPEDS_TXCOMP_NAPI_BIT 1
 #define EDMA_PPEDS_MAX_RINGS_PER_NODE	2
+
+#define EDMA_PPEDS_MAX_RX_RINGS	2
+#define EDMA_PPEDS_MAX_TX_RINGS	2
+
+#define EDMA_IRQ_NAME_SIZE		32
 
 /*
  * Rx rings flow control threshold values
@@ -68,21 +72,61 @@ enum {
 	EDMA_PPEDS_IRQ_NUM
 };
 
+struct edma_ppeds_hw_buf_mgmt {
+	struct edma_rxfill_ring rxfill_ring;	/* PPE-DS EDMA Rxfill ring */
+	struct edma_txcmpl_ring txcmpl_ring;	/* PPE-DS EDMA Tx complete ring */
+};
+
 /*
- * PPE-DS EDMA node descriptor
+ * edma_ppeds_node_wifi8
+ *	ppeds wifi8 node information.
  */
-struct edma_ppeds {
-	const struct nss_dp_ppeds_cb *ops;	/* PPE-DS EDMA callback pointer */
+struct edma_ppeds_node_wifi8 {
+	struct edma_rxfill_ring rxfill_ring;	/* PPE-DS EDMA Rxfill ring */
+	struct edma_txcmpl_ring txcmpl_ring;	/* PPE-DS EDMA Tx complete ring */
+	struct edma_ppeds_hw_buf_mgmt hw_buf_mgmt;
+	struct edma_rxdesc_ring rx_ring[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/* PPE-DS EDMA Rx ring */
+	struct edma_txdesc_ring tx_ring[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/* PPE-DS EDMA Tx ring */
+	uint32_t ppe_qid[EDMA_PPEDS_MAX_RINGS_PER_NODE];			/* PPE-DS node start queue id */
+	uint32_t ppe_num_queues[EDMA_PPEDS_MAX_RINGS_PER_NODE];		/* PPE-DS node queue count */
+	uint32_t txcmpl_intr;			/* PPE-DS EDMA Tx complete IRQ */
+	uint32_t rxfill_intr;			/* PPE-DS EDMA Rxfill IRQ */
+	uint32_t rxdesc_intr[EDMA_PPEDS_MAX_RINGS_PER_NODE];			/* PPE-DS EDMA Rx IRQ */
+	char txcmpl_irq_name[EDMA_IRQ_NAME_SIZE];
+	char rxfill_irq_name[EDMA_IRQ_NAME_SIZE];
+	char rxdesc_irq_name[EDMA_IRQ_NAME_SIZE];
+};
+
+/*
+ * edma_ppeds_node_wifi7
+ *	ppeds wifi7 node information.
+ */
+struct edma_ppeds_node_wifi7 {
 	struct edma_rxfill_ring rxfill_ring;	/* PPE-DS EDMA Rxfill ring */
 	struct edma_txcmpl_ring txcmpl_ring;	/* PPE-DS EDMA Tx complete ring */
 	struct edma_rxdesc_ring rx_ring;	/* PPE-DS EDMA Rx ring */
 	struct edma_txdesc_ring tx_ring;	/* PPE-DS EDMA Tx ring */
-	struct net_device napi_ndev;		/* Dummy net_device for NAPI */
 	uint32_t ppe_qid;			/* PPE-DS node start queue id */
 	uint32_t ppe_num_queues;		/* PPE-DS node queue count */
 	uint32_t txcmpl_intr;			/* PPE-DS EDMA Tx complete IRQ */
 	uint32_t rxfill_intr;			/* PPE-DS EDMA Rxfill IRQ */
 	uint32_t rxdesc_intr;			/* PPE-DS EDMA Rx IRQ */
+	char txcmpl_irq_name[EDMA_IRQ_NAME_SIZE];
+	char rxfill_irq_name[EDMA_IRQ_NAME_SIZE];
+	char rxdesc_irq_name[EDMA_IRQ_NAME_SIZE];
+};
+
+/*
+ * PPE-DS EDMA node descriptor
+ */
+struct edma_ppeds {
+	const struct nss_dp_ppeds_cb *ops;	/* PPE-DS EDMA callback pointer */
+	struct net_device napi_ndev;		/* Dummy net_device for NAPI */
+	enum edma_ppeds_wifi_arch_mode wifi_arch_mode;	/* WiFi architecture mode */
+	union {
+		struct edma_ppeds_node_wifi7 wifi7_cfg;
+		struct edma_ppeds_node_wifi8 wifi8_cfg;
+	};
 	uint8_t db_idx;				/* PPE-DS node index */
 	nss_dp_ppeds_handle_t ppeds_handle;	/* PPE-DS handle */
 	uint32_t umac_reset_inprogress;		/* Umac reset progress status */
@@ -116,4 +160,13 @@ struct edma_ppeds_drv {
 
 int edma_ppeds_init(struct edma_ppeds_drv* drv);
 void edma_ppeds_deinit(struct edma_ppeds_drv *drv);
+int edma_ppeds_rx_fill_ring_alloc(struct edma_rxfill_ring *rxfill_ring, bool hw_buf_mgmt);
+void edma_ppeds_rx_fill_ring_free(struct edma_rxfill_ring *rxfill_ring);
+int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring, bool hw_buf_mgmt);
+void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring);
+int edma_ppeds_tx_secondary_alloc(struct edma_txdesc_ring *txdesc_ring);
+void edma_ppeds_service_status_update(nss_dp_ppeds_handle_t *ppeds_handle, bool enable);
+
+extern void *edma_ppeds_tx_ring_sec_mem;
+extern int edma_ppeds_tx_ring_entries;
 #endif	/* __EDMA_PPEDS_PRIV__ */

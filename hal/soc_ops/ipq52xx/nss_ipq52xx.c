@@ -21,12 +21,21 @@ int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,2,3,4,5
 int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
 int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10};
 
+int edma_dp_ppe_ds_rx_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+int edma_dp_ppe_ds_rx_queue_map[EDMA_PPEDS_MAX_NODES] = {210, 218};
+int edma_dp_ppe_ds_num_rx_queue[EDMA_PPEDS_MAX_NODES] = {8, 8};
+int edma_dp_ppe_ds_num_rxdesc_per_node[EDMA_PPEDS_MAX_NODES] = {1, 1};
+int edma_dp_ppe_ds_rxfill_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+int edma_dp_ppe_ds_tx_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+int edma_dp_ppe_ds_num_txdesc_per_node[EDMA_PPEDS_MAX_NODES] = {1, 1};
+int edma_dp_ppe_ds_txcmpl_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+
 /*
  * PPEVP ring info
  */
-int edma_dp_ppe_vp_num_tx_rings = EDMA_MAX_TXDESC_RING_PER_PPEVP;
-int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PER_PPEVP] = {2,3,4,5};
-int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_num_tx_rings = EDMA_MAX_TXDESC_RING_PPEVP;
+int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP] = {2,3,4,5};
 int edma_dp_ppe_vp_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5};
 
@@ -329,13 +338,17 @@ void nss_dp_hal_cleanup(void)
 }
 
 /*
- * nss_dp_ppeds_ops_get()
+ * nss_dp_ppeds_wifi_arch_mode_ops_get()
  *	API to get PPE-DS operations()
  */
-struct nss_dp_ppeds_ops *nss_dp_ppeds_ops_get(void)
+struct nss_dp_ppeds_ops *nss_dp_ppeds_wifi_arch_mode_ops_get(uint32_t mode)
 {
 #ifdef NSS_DP_PPEDS_SUPPORT
-	return &edma_ppeds_ops;
+	if (mode == EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8) {
+		return &edma_ppeds_ops_wifi8;
+	} else {
+		return &edma_ppeds_ops_wifi7;
+	}
 #else
 	return NULL;
 #endif

@@ -22,6 +22,7 @@ void edma_cfg_tx_napi_disable(struct edma_gbl_ctx *egc);
 void edma_cfg_tx_napi_delete(struct edma_gbl_ctx *egc);
 void edma_cfg_tx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev, uint32_t macid);
 void edma_cfg_tx_mapping(struct edma_gbl_ctx *egc);
+void edma_cfg_tx_map_tx_ring_to_txcmpl(uint32_t tx_ring_id, uint32_t txcmpl_ring_id);
 void edma_cfg_tx_cmpl_mapping_fill(struct edma_gbl_ctx *egc);
 void edma_cfg_tx_rings_enable(struct edma_gbl_ctx *egc);
 void edma_cfg_tx_rings_disable(struct edma_gbl_ctx *egc);

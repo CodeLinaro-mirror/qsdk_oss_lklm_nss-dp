@@ -76,6 +76,9 @@ bool edma_cfg_rx_ring_en_mapped_queues(struct edma_gbl_ctx *egc, uint32_t queue_
 int edma_cfg_rx_fc_enable_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
 void edma_cfg_rx_page_mode_and_jumbo(struct edma_gbl_ctx *egc);
+void edma_cfg_rx_qid_to_rid_mapping(uint32_t queue_base, uint32_t max_q, uint32_t ring_id);
+void edma_cfg_rx_desc_ring_to_queue_mapping_conf(struct edma_rxdesc_ring *rxdesc_ring, uint32_t enable);
+int edma_cfg_rxdesc_to_rxfill_mapping(struct edma_gbl_ctx *egc, uint32_t rxfill_ring_id, uint32_t rx_ring_id);
 int edma_cfg_rx_queue_tail_drop_handler(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_cfg_rx_rps(struct ctl_table *table, int write,

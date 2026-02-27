@@ -483,12 +483,56 @@ void edma_cfg_tx_rings_disable(struct edma_gbl_ctx *egc)
 }
 
 /*
+ * edma_cfg_tx_map_tx_ring_to_txcmpl()
+ *	API to map a single TX ring to TX complete ring
+ */
+void edma_cfg_tx_map_tx_ring_to_txcmpl(uint32_t tx_ring_id, uint32_t txcmpl_ring_id)
+{
+	uint32_t reg, data;
+
+	/*
+	 * Setup TxDesc to TxComplete mapping.
+	 * 6 registers to hold the completion mapping for total 32
+	 * TX desc rings (0-5, 6-11, 12-17, 18-23, 24-29 and rest).
+	 * In each entry 5 bits hold the mapping for a particular TX desc ring.
+	 */
+	if ((tx_ring_id >= 0) && (tx_ring_id <= 5)) {
+		reg = EDMA_REG_TXDESC2CMPL_MAP_0;
+	} else if ((tx_ring_id >= 6) && (tx_ring_id <= 11)) {
+		reg = EDMA_REG_TXDESC2CMPL_MAP_1;
+	} else if ((tx_ring_id >= 12) && (tx_ring_id <= 17)) {
+		reg = EDMA_REG_TXDESC2CMPL_MAP_2;
+	} else if ((tx_ring_id >= 18) && (tx_ring_id <= 23)) {
+		reg = EDMA_REG_TXDESC2CMPL_MAP_3;
+	} else {
+		edma_err("Invalid tx_ring_id: %d\n", tx_ring_id);
+		return;
+	}
+
+	edma_debug("Configure TXDESC:%u to use TXCMPL:%u\n", tx_ring_id, txcmpl_ring_id);
+
+	/*
+	 * Set the Tx complete descriptor ring number in the mapping register.
+	 * E.g. If (txcmpl ring)txcmpl_ring_id = 19, (txdesc ring)tx_ring_id = 19.
+	 * 	reg = EDMA_REG_TXDESC2CMPL_MAP_3
+	 * 	data |= (txcmpl_ring_id & 0x1F) << ((tx_ring_id % 6) * 5);
+	 * 	data |= (0x1F << 5); -
+	 * 	This sets 10011 at 5th bit of register EDMA_REG_TXDESC2CMPL_MAP_3
+	 */
+	data = edma_reg_read(reg);
+	data |= (txcmpl_ring_id & EDMA_TXDESC2CMPL_MAP_TXDESC_MASK) <<
+		 ((tx_ring_id % EDMA_TXDESC2CMPL_MAP_NUM_IN_SINGLE_REG) *
+		   EDMA_TXDESC2CMPL_MAP_TXDESC_ID_BIT_COUNT);
+	edma_reg_write(reg, data);
+}
+
+/*
  * edma_cfg_tx_mapping()
  *	API to map TX to TX complete rings
  */
 void edma_cfg_tx_mapping(struct edma_gbl_ctx *egc)
 {
-	uint32_t desc_index, i;
+	uint32_t txcmpl_ring_id, tx_ring_id;
 
 	/*
 	 * Clear the TXDESC2CMPL_MAP_xx reg before setting up
@@ -501,38 +545,12 @@ void edma_cfg_tx_mapping(struct edma_gbl_ctx *egc)
 	edma_reg_write(EDMA_REG_TXDESC2CMPL_MAP_3, 0);
 
 	/*
-	 * 6 registers to hold the completion mapping for total 32
-	 * TX desc rings (0-5, 6-11, 12-17, 18-23, 24-29 and rest).
-	 * In each entry 5 bits hold the mapping for a particular TX desc ring.
+	 * Map each TX ring to its completion ring
 	 */
-	for (i = 0; i < egc->txdesc_ring_max; i++) {
-		if (egc->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
-			uint32_t reg, data;
-
-			desc_index = egc->txdesc_info[i].txcmpl_ring_id;
-			if ((i >= 0) && (i <= 5)) {
-				reg = EDMA_REG_TXDESC2CMPL_MAP_0;
-			} else if ((i >= 6) && (i <= 11)) {
-				reg = EDMA_REG_TXDESC2CMPL_MAP_1;
-			} else if ((i >= 12) && (i <= 17)) {
-				reg = EDMA_REG_TXDESC2CMPL_MAP_2;
-			} else if ((i >= 18) && (i <= 23)) {
-				reg = EDMA_REG_TXDESC2CMPL_MAP_3;
-			}
-
-			edma_debug("Configure TXDESC:%u to use TXCMPL:%u\n", i, desc_index);
-
-			/*
-			 * Set the Tx complete descriptor ring number in the mapping register.
-			 * E.g. If (txcmpl ring)desc_index = 19, (txdesc ring)i = 19.
-			 * 	reg = EDMA_REG_TXDESC2CMPL_MAP_3
-			 * 	data |= (desc_index & 0x1F) << ((i % 6) * 5);
-			 * 	data |= (0x1F << 5); -
-			 * 	This sets 10011 at 5th bit of register EDMA_REG_TXDESC2CMPL_MAP_3
-			 */
-			data = edma_reg_read(reg);
-			data |= (desc_index & EDMA_TXDESC2CMPL_MAP_TXDESC_MASK) << ((i % 6) * 5);
-			edma_reg_write(reg, data);
+	for (tx_ring_id = 0; tx_ring_id < egc->txdesc_ring_max; tx_ring_id++) {
+		if (egc->txdesc_info[tx_ring_id].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			txcmpl_ring_id = egc->txdesc_info[tx_ring_id].txcmpl_ring_id;
+			edma_cfg_tx_map_tx_ring_to_txcmpl(tx_ring_id, txcmpl_ring_id);
 		}
 	}
 

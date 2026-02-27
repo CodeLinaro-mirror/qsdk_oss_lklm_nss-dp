@@ -227,7 +227,11 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 		}
 
-		rxfill_ring = &ppeds_node->rxfill_ring;
+		if (ppeds_node->wifi_arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+			continue;
+		}
+
+		rxfill_ring = &ppeds_node->wifi7_cfg.rxfill_ring;
 		seq_printf(m, "\t\t PPE-DS Rx fill ring empty stats & Ring id %d\n", rxfill_ring->ring_id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -244,7 +248,11 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 		}
 
-		rxdesc_ring = &ppeds_node->rx_ring;
+		if (ppeds_node->wifi_arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+			continue;
+		}
+
+		rxdesc_ring = &ppeds_node->wifi7_cfg.rx_ring;
 		seq_printf(m, "\t\t PPE-DS Rx desc ring full utilization stats & Ring id %d\n", rxdesc_ring->ring_id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -384,7 +392,11 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 		}
 
-		tx_ring = &ppeds_node->tx_ring;
+		if (ppeds_node->wifi_arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+			continue;
+		}
+
+		tx_ring = &ppeds_node->wifi7_cfg.tx_ring;
 		seq_printf(m, "\t\t PPE-DS Tx Ring full utilization stats & Ring id %d\n", tx_ring->id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -401,7 +413,11 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 		}
 
-		txcmpl_ring = &ppeds_node->txcmpl_ring;
+		if (ppeds_node->wifi_arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+			continue;
+		}
+
+		txcmpl_ring = &ppeds_node->wifi7_cfg.txcmpl_ring;
 		seq_printf(m, "\t\t PPE-DS Tx cmpl Ring full utilization stats & Ring id %d\n", txcmpl_ring->id);
 
 		for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
@@ -531,10 +547,14 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
 			continue;
 		}
 
-		memset(&ppeds_node->rxfill_ring.rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
-		memset(&ppeds_node->rx_ring.rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
-		memset(&ppeds_node->tx_ring.tx_desc_stats, 0, sizeof(struct edma_tx_desc_stats));
-		memset(&ppeds_node->txcmpl_ring.tx_cmpl_stats, 0, sizeof(struct edma_tx_cmpl_stats));
+		if (ppeds_node->wifi_arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+			continue;
+		}
+
+		memset(&ppeds_node->wifi7_cfg.rxfill_ring.rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
+		memset(&ppeds_node->wifi7_cfg.rx_ring.rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
+		memset(&ppeds_node->wifi7_cfg.tx_ring.tx_desc_stats, 0, sizeof(struct edma_tx_desc_stats));
+		memset(&ppeds_node->wifi7_cfg.txcmpl_ring.tx_cmpl_stats, 0, sizeof(struct edma_tx_cmpl_stats));
 	}
 #endif
 

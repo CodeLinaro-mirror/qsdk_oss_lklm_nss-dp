@@ -38,6 +38,8 @@
 #define NSS_DP_EDMA_MAX_TXCMPL_RINGS		20	/* Max TxCmpl rings */
 #define NSS_DP_EDMA_MAX_TXDESC_RINGS		24	/* Max TxDesc rings */
 
+#define EDMA_PPEDS_MAX_NODES	2	/* Maximum number of supported PPE-DS nodes */
+
 /*
  * TX/RX NAPI budget
  */
@@ -111,6 +113,9 @@
 #define EDMA_MAX_RXDESC_RING_PER_TYPE	(NR_CPUS * 2)
 #define EDMA_MAX_RXFILL_RING_PER_TYPE	(NR_CPUS * 2)
 
+#define EDMA_MAX_TXDESC_RING_PPEVP	NR_CPUS
+#define EDMA_MAX_TXCMPL_RING_PPEVP	NR_CPUS
+
 extern int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE];
 extern int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE];
 extern int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE];
@@ -119,12 +124,9 @@ extern int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE];
 extern int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE];
 extern int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
 
-#define EDMA_MAX_TXDESC_RING_PER_PPEVP	NR_CPUS
-#define EDMA_MAX_TXCMPL_RING_PER_PPEVP	NR_CPUS
-
 extern int edma_dp_ppe_vp_num_tx_rings;
-extern int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PER_PPEVP];
-extern int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP];
+extern int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP];
+extern int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP];
 extern int edma_dp_ppe_vp_num_tx_rings_per_core;
 extern int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
 
@@ -132,6 +134,15 @@ extern int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TY
 #define EDMA_GRO_PPE_QUEUE_BASE			176
 extern int edma_dp_gro_ppe_queue_base;
 #endif
+
+extern int edma_dp_ppe_ds_rx_rings[EDMA_PPEDS_MAX_NODES];
+extern int edma_dp_ppe_ds_rx_queue_map[EDMA_PPEDS_MAX_NODES];
+extern int edma_dp_ppe_ds_num_rx_queue[EDMA_PPEDS_MAX_NODES];
+extern int edma_dp_ppe_ds_num_rxdesc_per_node[EDMA_PPEDS_MAX_NODES];
+extern int edma_dp_ppe_ds_rxfill_rings[EDMA_PPEDS_MAX_NODES];
+extern int edma_dp_ppe_ds_tx_rings[EDMA_PPEDS_MAX_NODES];
+extern int edma_dp_ppe_ds_num_txdesc_per_node[EDMA_PPEDS_MAX_NODES];
+extern int edma_dp_ppe_ds_txcmpl_rings[EDMA_PPEDS_MAX_NODES];
 
 /**
  * nss_dp_hal_gmac_stats
@@ -178,7 +189,8 @@ extern int32_t nss_dp_hal_configure_clocks(void *ctx);
 extern int nss_dp_hal_cache_info_setup(void *ctx);
 extern int32_t nss_dp_hal_hw_reset(void *ctx);
 #ifdef NSS_DP_PPEDS_SUPPORT
-extern struct nss_dp_ppeds_ops edma_ppeds_ops;
+extern struct nss_dp_ppeds_ops edma_ppeds_ops_wifi7;
+extern struct nss_dp_ppeds_ops edma_ppeds_ops_wifi8;
 #endif
 
 static inline void edma_dmac_inv_range(const void *start, const void *end){
