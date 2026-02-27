@@ -2,20 +2,8 @@
  **************************************************************************
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- **************************************************************************
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/delay.h>
@@ -360,6 +348,27 @@ static void syn_send_pause_frame(struct nss_gmac_hal_dev *nghd)
 	syn_send_tx_pause_frame(nghd);
 }
 
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+/*
+ * syn_get_ts_info()
+ *	Get PTP timestamping information
+ *
+ * This function retrieves PTP timestamping capabilities from the
+ * hardware and populates the ethtool_ts_info structure.
+ */
+static int32_t syn_get_ts_info(struct nss_gmac_hal_dev *nghd,
+				struct ethtool_ts_info *info)
+{
+	struct syn_hal_dev *shd = (struct syn_hal_dev *)nghd;
+
+	BUG_ON(nghd == NULL);
+	BUG_ON(info == NULL);
+
+	/* Call PTP-specific function to populate timestamp info */
+	return syn_ptp_get_ts_info(shd, info);
+}
+#endif
+
 /*
  * syn_init()
  */
@@ -426,6 +435,16 @@ static void *syn_init(struct nss_gmac_hal_platform_data *gmacpdata)
 		netdev_dbg(ndev, "MIB stats Reset fail.\n");
 	}
 
+	/*
+	 * Initialize PTP Hardware Clock support (optional)
+	 * PTP init failure should not prevent driver initialization
+	 */
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	if (syn_ptp_init(shd, dp_priv->pdev)) {
+		netdev_warn(ndev, "PTP initialization failed, continuing without PTP support\n");
+	}
+#endif
+
 	return (struct nss_gmac_hal_dev *)shd;
 }
 
@@ -477,6 +496,13 @@ static void syn_exit(struct nss_gmac_hal_dev *nghd)
 
 	netdev_dbg(nghd->netdev, "Freeing up dev memory.\n");
 
+	/*
+	 * Cleanup PTP Hardware Clock support before releasing hardware resources
+	 */
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	syn_ptp_cleanup(shd);
+#endif
+
 	dp_priv = netdev_priv(nghd->netdev);
 	devm_iounmap(&dp_priv->pdev->dev,
 			(void *)nghd->mac_base);
@@ -509,4 +535,9 @@ struct nss_gmac_hal_ops syn_gmac_ops = {
 	.getstrings = &syn_get_strings,
 	.getethtoolstats = &syn_get_eth_stats,
 	.sendpause = &syn_send_pause_frame,
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	.get_ts_info = &syn_get_ts_info,
+	.hwtstamp_set = &syn_ptp_hwtstamp_set,
+	.hwtstamp_get = &syn_ptp_hwtstamp_get,
+#endif
 };

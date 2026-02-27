@@ -16,6 +16,7 @@
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
 #include <linux/phylink.h>
+#include <linux/net_tstamp.h>
 
 #if defined(NSS_DP_PPE_SUPPORT)
 #include <fal/fal_vsi.h>
@@ -182,23 +183,67 @@ module_param(tx_ring_sz_high_mem, int, 0640);
 MODULE_PARM_DESC(tx_ring_sz_high_mem, "edma tx ring size for high memory");
 
 /*
+ * nss_dp_eth_ioctl()
+ *	Handle ethernet ioctls with PHY priority for PTP
+ */
+static int nss_dp_eth_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
+{
+	struct nss_dp_dev *dp_priv;
+	int ret;
+
+	if (!netdev || !ifr)
+		return -EINVAL;
+
+	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
+	if (!dp_priv)
+		return -EINVAL;
+
+	/*
+	 * Try PHY-level PTP first (higher priority, more accurate)
+	 * PHY timestamping is closer to the wire and typically more precise
+	 */
+	ret = phy_do_ioctl_running(netdev, ifr, cmd);
+	if (!ret)
+		return ret;
+
+	/*
+	 * Fall back to MAC-level PTP (XGMAC) if PHY doesn't support it
+	 */
+	if (dp_priv->gmac_hal_ops) {
+		switch (cmd) {
+		case SIOCSHWTSTAMP:
+			if (dp_priv->gmac_hal_ops->hwtstamp_set)
+				return dp_priv->gmac_hal_ops->hwtstamp_set(dp_priv->gmac_hal_ctx, ifr);
+			break;
+		case SIOCGHWTSTAMP:
+			if (dp_priv->gmac_hal_ops->hwtstamp_get)
+				return dp_priv->gmac_hal_ops->hwtstamp_get(dp_priv->gmac_hal_ctx, ifr);
+			break;
+		}
+	}
+
+	return -EOPNOTSUPP;
+}
+
+/*
  * nss_dp_do_ioctl()
+ *	Legacy ioctl handler for older kernels
  */
 static int32_t nss_dp_do_ioctl(struct net_device *netdev, struct ifreq *ifr,
 						   int32_t cmd)
 {
-	int ret = -EINVAL;
 	struct nss_dp_dev *dp_priv;
 
 	if (!netdev || !ifr)
-		return ret;
+		return -EINVAL;
 
 	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 
+	/* Only handle PHY MII ioctls */
 	if (dp_priv->phydev)
 		return phy_mii_ioctl(dp_priv->phydev, ifr, cmd);
 
-	return ret;
+	return -EOPNOTSUPP;
 }
 
 /*
@@ -693,7 +738,7 @@ struct net_device_ops nss_dp_netdev_ops = {
 	.ndo_change_mtu = nss_dp_change_mtu,
 	.ndo_do_ioctl = nss_dp_do_ioctl,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-	.ndo_eth_ioctl = phy_do_ioctl_running,
+	.ndo_eth_ioctl = nss_dp_eth_ioctl,
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
