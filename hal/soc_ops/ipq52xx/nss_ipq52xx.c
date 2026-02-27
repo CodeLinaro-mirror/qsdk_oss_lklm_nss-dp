@@ -145,8 +145,8 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
 		return -1;
 	}
 
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSCNOC_ATB_CLK,
-					NSS_DP_EDMA_NSSCNOC_ATB_CLK_FREQ);
+	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_ATB_CLK,
+					NSS_DP_EDMA_NSSNOC_ATB_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
@@ -189,42 +189,6 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_XO_DCD_CLK,
 					NSS_DP_EDMA_NSSNOC_XO_DCD_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_IMEM_QSB_CLK,
-					NSS_DP_EDMA_IMEM_QSB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_IMEM_QSB_CLK,
-					NSS_DP_EDMA_NSSNOC_IMEM_QSB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_IMEM_AHB_CLK,
-					NSS_DP_EDMA_IMEM_AHB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_IMEM_AHB_CLK,
-					NSS_DP_EDMA_NSSNOC_IMEM_AHB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK,
-					NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_TBU_CLK,
-					NSS_DP_EDMA_TBU_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
