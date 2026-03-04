@@ -1595,15 +1595,17 @@ tx_alloc_fail:
  */
 static inline int edma_hw_reset(struct edma_gbl_ctx *egc)
 {
+	int hw_reset = 0;
 
 	/*
 	 * Soc Specific Reset
 	 */
-	nss_dp_hal_hw_reset(egc->pdev);
+	hw_reset = nss_dp_hal_hw_reset(egc->pdev);
 
-	edma_info("EDMA HW Reset completed succesfully\n");
-
-	return 0;
+	if (hw_reset == 0) {
+		edma_info("EDMA HW Reset completed succesfully\n");
+	}
+	return hw_reset;
 }
 
 /*
