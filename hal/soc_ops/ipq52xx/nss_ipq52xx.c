@@ -123,86 +123,101 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_CSR_CLK, NSS_DP_EDMA_CSR_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_CSR_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_CSR_CLK, NSS_DP_EDMA_NSSNOC_CSR_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_CSR_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_TS_CLK, NSS_DP_EDMA_TS_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_TS_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSCC_CLK, NSS_DP_EDMA_NSSCC_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSCC_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSCFG_CLK, NSS_DP_EDMA_NSSCFG_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSCC_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_ATB_CLK,
 					NSS_DP_EDMA_NSSNOC_ATB_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_ATB_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_NSSCC_CLK,
 					NSS_DP_EDMA_NSSNOC_NSSCC_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_NSSCC_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK,
 					NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK,
 					NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_SNOC_1_CLK,
 					NSS_DP_EDMA_NSSNOC_SNOC_1_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_SNOC_1_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_SNOC_CLK,
 					NSS_DP_EDMA_NSSNOC_SNOC_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_SNOC_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK,
 					NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_XO_DCD_CLK,
 					NSS_DP_EDMA_NSSNOC_XO_DCD_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_XO_DCD_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK,
 					NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK);
 		return -1;
 	}
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_MEMNOC_CLK,
 					NSS_DP_EDMA_NSSNOC_MEMNOC_CLK_FREQ);
 	if (err) {
+		edma_err("Error: HAL failed to configure %s clock\n", NSS_DP_EDMA_NSSNOC_MEMNOC_CLK);
 		return -1;
 	}
 
