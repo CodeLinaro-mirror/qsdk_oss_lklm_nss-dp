@@ -3116,7 +3116,7 @@ static int edma_recovery_setup(void)
 		goto edma_init_remap_fail;
 	}
 
-#if !defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX)
+#if !defined(NSS_DP_IPQ96XX)
 	/*
 	 * Configure the EDMA common clocks
 	 */
