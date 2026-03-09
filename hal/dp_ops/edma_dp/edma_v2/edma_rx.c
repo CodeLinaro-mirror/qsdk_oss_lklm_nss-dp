@@ -1535,10 +1535,26 @@ static void edma_rx_hwtstamp(struct sk_buff *skb,
 		return;
 	}
 
+	/*
+	 * Only syn_hal_dev (XGMAC) supports PTP hardware timestamping.
+	 * qcom_hal_dev does NOT have ptp_priv at the same struct offset
+	 */
+	if (!dp_dev->gmac_hal_ops || !dp_dev->gmac_hal_ops->hwtstamp_set) {
+		edma_debug("HAL does not support PTP timestamping\n");
+		return;
+	}
+
 	shd = (struct syn_hal_dev *)dp_dev->gmac_hal_ctx;
 	ptp_priv = shd->ptp_priv;
-	if (!ptp_priv || ptp_priv->tstamp_config.rx_filter == HWTSTAMP_FILTER_NONE)
+	if (!ptp_priv) {
+		edma_debug("PTP clock is not defined\n");
 		return;
+	}
+
+	if (ptp_priv->tstamp_config.rx_filter == HWTSTAMP_FILTER_NONE) {
+		edma_debug("PTP function is not enabled\n");
+		return;
+	}
 
 	mac_base = dp_dev->gmac_hal_ctx->mac_base;
 	if (!mac_base) {
