@@ -78,16 +78,39 @@
 
 
 #define EDMA_IRQ_NAME_SIZE		32
+
+#ifdef NSS_DP_HW_GRO
+#define EDMA_NETDEV_FEATURES           NETIF_F_FRAGLIST \
+                                       | NETIF_F_SG \
+                                       | NETIF_F_RXCSUM \
+                                       | NETIF_F_HW_CSUM \
+                                       | NETIF_F_TSO \
+                                       | NETIF_F_TSO6 \
+                                       | NETIF_F_GRO_HW
+#else
 #define EDMA_NETDEV_FEATURES		NETIF_F_FRAGLIST \
 					| NETIF_F_SG \
 					| NETIF_F_RXCSUM \
 					| NETIF_F_HW_CSUM \
 					| NETIF_F_TSO \
 					| NETIF_F_TSO6
+#endif
 
 #define EDMA_SWITCH_DEV_ID	0
 #define EDMA_PPE_QUEUE_LEVEL	0
 #define EDMA_BITS_IN_WORD	32
+
+#ifdef NSS_DP_HW_GRO
+#define EDMA_RX_RING_GRO_NUM_MAX 4
+
+#define EDMA_RX_GRO_TIMEOUT_MAX 0xFFFF
+#define EDMA_RX_GRO_BUFFER_LEN_MAX 0x1FFFF
+#define EDMA_RX_GRO_DESC_COUNT_MAX 0x3F
+
+#define EDMA_RX_GRO_TIMEOUT_DEFAULT 0xFFF
+#define EDMA_RX_GRO_BUFFER_LEN_DEFAULT 0x1FFFF
+#define EDMA_RX_GRO_DESC_COUNT_DEFAULT 0x20
+#endif
 
 /*
  * Maximum queue priority
@@ -105,6 +128,11 @@
  * A bitmap for 300 PPE queues requires 10 32bit integers
  */
 #define EDMA_RING_MAPPED_QUEUE_BM_WORD_COUNT	10
+
+#define EDMA_RX_RING_MODE_BITMASK_DEF		0xF00000
+#define EDMA_TX_RING_MODE_BITMASK_DEF		0x0
+
+#define EDMA_RING_MODE_NOT_SET			-1
 
 /*
  * QID to RID Table
@@ -133,6 +161,7 @@
  */
 #define EDMA_RING_TYPE_FLAGS_HOST_COMMON	0x1
 #define EDMA_RING_TYPE_FLAGS_HOST_VP		0x2
+#define EDMA_RING_TYPE_FLAGS_HOST_GRO		0x4
 
 /*
  * EDMA ring status flags
@@ -221,6 +250,21 @@ typedef enum {
 
 #define EDMA_DEFAULT_DDR_SIZE __DDR_SIZE_GBYTES(3UL) /* 3GB */
 #define EDMA_DEFAULT_DMA_MASK_BIT_HI 32
+
+#define EDMA_TXRX_RING_PH_EN_MASK(ring_id)			(0x1 << (ring_id))
+#define EDMA_RING_MODE_GET(idx, mode_bm)		(((mode_bm) & EDMA_TXRX_RING_PH_EN_MASK(idx)) >> (idx))
+
+/*
+ * Validate txcompl, rxdesc, and rxfill ring id params as integers
+ */
+#define param_check_bp_stats_en_txcmpl_ring_id(name, p) \
+        __param_check(name, p, int)
+
+#define param_check_bp_stats_en_rxdesc_ring_id(name, p) \
+        __param_check(name, p, int)
+
+#define param_check_bp_stats_en_rxfill_ring_id(name, p) \
+        __param_check(name, p, int)
 
 /*
  * EDMA Ring usage stats macro
@@ -431,6 +475,14 @@ struct edma_ds_info {
 };
 
 /*
+ * edma_host_gro_info
+ *	GRO mode configuration information.
+ */
+struct edma_host_gro_info {
+	struct edma_rx_rings_info rx_info;	/* RX rings information */
+};
+
+/*
  * edma_host_sfe_info
  *	SFE mode configuration information.
  */
@@ -456,6 +508,7 @@ struct edma_host_info {
 	struct edma_rings_common_info common_info;
 	struct edma_host_sfe_info sfe_info;		/* Host SFE specific information. */
 	struct edma_host_vp_info vp_info;		/* Host VP specific information. */
+	struct edma_host_gro_info gro_info;		/* Host GRO specific information. */
 };
 
 /*
@@ -471,6 +524,90 @@ struct edma_init_info {
 						/* Valid flags indicating the VP,
 						 * HOST, DS context information is valid or not
 						 */
+};
+
+/*
+ * edma_hw_gro_ctx
+ *	HW gro context structure
+ */
+struct edma_hw_gro_ctx {
+	int gro_timeout_usecs;
+		/* GRO default timeout value */
+	int gro_buffer_len;
+		/* GRO default buffer lenght */
+	int gro_desc_count;
+		/* GRO default descriptor count */
+	bool hw_gro_en;
+		/* HW GRO enable */
+	uint8_t rx_gro_queue_start;
+		/* RX GRO queue start */
+	uint8_t rx_gro_ring_start;
+		/* RX GRO ring start */
+};
+
+/*
+ * edma_init_stage - EDMA initialization stage tracking
+ *
+ * This enum defines bits for tracking completion of each initialization stage.
+ * Each bit represents successful completion of a specific initialization point.
+ * Used for crash dump analysis to determine where initialization failed.
+ */
+enum edma_init_stage {
+	EDMA_INIT_STAGE_CTX_ALLOC = 0,           /* edma_gbl_ctx allocated */
+	EDMA_INIT_STAGE_RING_MAPS_INIT,          /* Ring maps initialized */
+	EDMA_INIT_STAGE_DTS_PARSED,              /* Device tree parsed */
+	EDMA_INIT_STAGE_DESC_MAP_VALID,          /* Descriptor map validated */
+	EDMA_INIT_STAGE_SYSCTL_REG,              /* Sysctl registered */
+	EDMA_INIT_STAGE_MEM_REGION_REQ,          /* Memory region requested */
+	EDMA_INIT_STAGE_IOREMAP_DONE,            /* IO remap completed */
+	EDMA_INIT_STAGE_DEBUGFS_INIT,            /* Debugfs initialized */
+	EDMA_INIT_STAGE_PPEDS_INIT,              /* PPE-DS initialized */
+	EDMA_INIT_STAGE_CLOCKS_CONFIGURED,       /* All clocks configured */
+	EDMA_INIT_STAGE_HW_RESET_DONE,           /* Hardware reset completed */
+	EDMA_INIT_STAGE_PAGE_MODE_SET,           /* Page mode configured */
+	EDMA_INIT_STAGE_RINGS_ALLOCATED,         /* Rings allocated */
+	EDMA_INIT_STAGE_TX_MAPPING_DONE,         /* Tx mapping configured */
+	EDMA_INIT_STAGE_RX_MAPPING_DONE,         /* Rx mapping configured */
+	EDMA_INIT_STAGE_TX_RINGS_CFG,            /* Tx rings configured */
+	EDMA_INIT_STAGE_RX_RINGS_CFG,            /* Rx rings configured */
+	EDMA_INIT_STAGE_DMA_CTRL_CFG,            /* DMA control configured */
+	EDMA_INIT_STAGE_PRIO_MAP_CFG,            /* Priority map configured */
+	EDMA_INIT_STAGE_RPS_HASH_CFG,            /* RPS hash configured */
+	EDMA_INIT_STAGE_LOOPBACK_CFG,            /* Loopback configured */
+	EDMA_INIT_STAGE_PORT_ENABLED,            /* EDMA port enabled */
+	EDMA_INIT_STAGE_PROCFS_INIT,             /* Procfs initialized */
+	EDMA_INIT_STAGE_MINIDUMP_REG,            /* Minidump registered */
+
+	EDMA_INIT_STAGE_MAX                      /* Maximum stages */
+};
+
+/*
+ * edma_clock_init_stage - Clock initialization stage tracking
+ *
+ * These bits track individual clock configuration stages.
+ * Different SoCs will use different subsets of these bits.
+ */
+enum edma_clock_init_stage {
+	EDMA_CLK_STAGE_CSR = 0,		/* NSS_DP_EDMA_CSR_CLK */
+	EDMA_CLK_STAGE_NSSNOC_CSR,	/* NSS_DP_EDMA_NSSNOC_CSR_CLK */
+	EDMA_CLK_STAGE_TS,		/* NSS_DP_EDMA_TS_CLK */
+	EDMA_CLK_STAGE_NSSCC,		/* NSS_DP_EDMA_NSCC_CLK */
+	EDMA_CLK_STAGE_NSSCFG,		/* NSS_DP_EDMA_NSSCFG_CLK */
+	EDMA_CLK_STAGE_NSSNOC_ATB,	/* NSS_DP_EDMA_NSSNOC_ATB_CLK */
+	EDMA_CLK_STAGE_NSSNOC_NSSCC,	/* NSS_DP_EDMA_NSSNOC_NSSCC_CLK */
+	EDMA_CLK_STAGE_NSSNOC_PCNOC_1,	/* NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK */
+	EDMA_CLK_STAGE_NSSNOC_QOSGEN_REF,	/* NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK */
+	EDMA_CLK_STAGE_NSS_NOC_REG,	/* NSS NOC register update */
+	EDMA_CLK_STAGE_NSSNOC_SNOC_1,		/* NSS_DP_EDMA_NSSNOC_SNOC_1_CLK */
+	EDMA_CLK_STAGE_NSSNOC_SNOC,		/* NSS_DP_EDMA_NSSNOC_SNOC_CLK */
+	EDMA_CLK_STAGE_NSSNOC_TIMEOUT_REF,	/* NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK */
+	EDMA_CLK_STAGE_NSSNOC_XO_DCD,		/* NSS_DP_EDMA_NSSNOC_XO_DCD_CLK */
+	EDMA_CLK_STAGE_NSSNOC_MEMNOC,		/* NSS_DP_EDMA_NSSNOC_MEMNOC_CLK */
+	EDMA_CLK_STAGE_NSSNOC_MEM_NOC_1,	/* NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK */
+	EDMA_CLK_STAGE_MEM_NOC_NSSNOC,		/* NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK */
+	EDMA_CLK_STAGE_SNOC_NSSNOC,	/* NSS_DP_EDMA_SNOC_NSSNOC_CLK */
+	EDMA_CLK_STAGE_SNOC_NSSNOC_1,	/* NSS_DP_EDMA_SNOC_NSSNOC_1_CLK */
+	EDMA_CLK_STAGE_MAX
 };
 
 /*
@@ -530,6 +667,7 @@ struct edma_gbl_ctx {
 
 	struct dentry *root_dentry;	/* Root debugfs entry */
 	struct dentry *stats_dentry;	/* Statistics debugfs entry */
+	struct dentry *bp_stats_dentry;	/* Back pressure statistics debugfs entry */
 
 	struct edma_misc_stats __percpu *misc_stats;
 			/* Per CPU miscellaneous statistics */
@@ -609,6 +747,8 @@ struct edma_gbl_ctx {
 #endif
 	bool edma_initialized;
 			/* Flag to check initialization status */
+	struct edma_hw_gro_ctx hw_gro_ctx;
+			/* HW GRO context */
 #ifdef NSS_DP_PPEDS_SUPPORT
 	uint32_t ppeds_node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
 	struct edma_ppeds_drv ppeds_drv;
@@ -637,6 +777,12 @@ struct edma_gbl_ctx {
 	void __iomem *tstamp_nsec;
 			/* EDMA timestamp value in nano-second */
 #endif
+
+	/* Initialization tracking bitmaps for crash dump analysis */
+	uint32_t hw_init_bitmap;
+			/* Tracks main initialization stages */
+	uint32_t clk_init_bitmap;
+			/* Tracks clock initialization stages */
 };
 
 extern struct edma_gbl_ctx edma_gbl_ctx;
@@ -644,6 +790,8 @@ extern struct edma_init_info init_info;
 extern uint32_t edma_hang_recover;
 extern int edma_dp_extension_en;
 
+extern int edma_rx_ring_mode_bitmask;
+extern int edma_tx_ring_mode_bitmask;
 
 int edma_irq_init(void);
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx);
@@ -654,6 +802,13 @@ void edma_disable_interrupts(struct edma_gbl_ctx *egc);
 void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc);
 int edma_hang_recovery_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_vlan_append_handler(struct ctl_table *table, int write, void __user *buffer, size_t *lenp, loff_t *ppos);
+
+/*
+ * Forward declarations for custom param ops used in module_param_array
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_rxfill_ring_id;
+static const struct kernel_param_ops param_ops_bp_stats_en_rxdesc_ring_id;
+static const struct kernel_param_ops param_ops_bp_stats_en_txcmpl_ring_id;
 
 /*
  * edma_reg_read()
@@ -743,4 +898,25 @@ static inline bool edma_dp_per_ring_reset_support(void)
 	return ring_reset_en;
 }
 
+/*
+ * edma_set_init_stage()
+ *	Mark an initialization stage as complete
+ */
+static inline void edma_set_init_stage(enum edma_init_stage stage)
+{
+	if (stage < EDMA_INIT_STAGE_MAX) {
+		edma_gbl_ctx.hw_init_bitmap |= BIT(stage);
+	}
+}
+
+/*
+ * edma_set_clk_stage()
+ *	Mark a clock initialization stage as complete
+ */
+static inline void edma_set_clk_stage(enum edma_clock_init_stage stage)
+{
+	if (stage < EDMA_CLK_STAGE_MAX) {
+		edma_gbl_ctx.clk_init_bitmap |= BIT(stage);
+	}
+}
 #endif	/* __EDMA_H__ */

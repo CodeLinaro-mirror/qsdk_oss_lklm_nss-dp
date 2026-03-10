@@ -1757,7 +1757,7 @@ int edma_init(void)
 	/*
 	 * Register PTP service code callback function
 	 */
-	ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_phy_tstamp_buf, NULL);
+	ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_tstamp_buf, NULL);
 #endif
 	/*
 	 * Register mirror core selection API callback with PPE driver

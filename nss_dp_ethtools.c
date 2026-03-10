@@ -2,20 +2,8 @@
  **************************************************************************
  * Copyright (c) 2017-2020, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2023-2024, Qualcomm Innovation Center, Inc. All rights reserved
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- **************************************************************************
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/version.h>
@@ -123,10 +111,12 @@ static void nss_dp_get_pauseparam(struct net_device *netdev,
 {
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		phylink_ethtool_get_pauseparam(dp_priv->phylink, pause);
 		return;
 	}
+#endif
 
 	pause->rx_pause = dp_priv->pause & FLOW_CTRL_RX ? 1 : 0;
 	pause->tx_pause = dp_priv->pause & FLOW_CTRL_TX ? 1 : 0;
@@ -175,9 +165,11 @@ static int32_t nss_dp_set_pauseparam(struct net_device *netdev,
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(advertising) = { 0, };
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		return phylink_ethtool_set_pauseparam(dp_priv->phylink, pause);
 	}
+#endif
 
 	/* set flow control settings */
 	dp_priv->pause = 0;
@@ -401,6 +393,23 @@ static int nss_dp_set_priv_flags(struct net_device *dev, u32 flags)
 }
 
 /*
+ * nss_dp_get_ts_info()
+ *	Get PTP timestamping information
+ */
+static int nss_dp_get_ts_info(struct net_device *dev, struct ethtool_ts_info *info)
+{
+	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(dev);
+
+	/* Check if HAL supports get_ts_info operation */
+	if (dp_priv->gmac_hal_ops && dp_priv->gmac_hal_ops->get_ts_info) {
+		return dp_priv->gmac_hal_ops->get_ts_info(dp_priv->gmac_hal_ctx, info);
+	}
+
+	/* Fall back to default ethtool implementation */
+	return ethtool_op_get_ts_info(dev, info);
+}
+
+/*
  * nss_dp_get_ethtool_link_ksetting()
  *	get link settings
  */
@@ -413,9 +422,11 @@ static int nss_dp_get_ethtool_link_ksetting(struct net_device *dev, struct ethto
 
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(supported) = { 0, };
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		return phylink_ethtool_ksettings_get(dp_priv->phylink, cmd);
 	}
+#endif
 
 	if (dp_priv->phydev) {
 		return phy_ethtool_get_link_ksettings(dev, cmd);
@@ -476,9 +487,11 @@ static int nss_dp_set_ethtool_link_ksettings(struct net_device *dev,
 {
 	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(dev);
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		return phylink_ethtool_ksettings_set(dp_priv->phylink, cmd);
 	}
+#endif
 
 	if (dp_priv->phydev)
 		return phy_ethtool_ksettings_set(dp_priv->phydev, cmd);
@@ -507,6 +520,7 @@ struct ethtool_ops nss_dp_ethtool_ops = {
 	.set_eee = &nss_dp_set_eee,
 	.get_priv_flags = nss_dp_get_priv_flags,
 	.set_priv_flags = nss_dp_set_priv_flags,
+	.get_ts_info = nss_dp_get_ts_info,
 };
 
 /*

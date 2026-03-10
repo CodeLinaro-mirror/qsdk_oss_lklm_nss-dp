@@ -8,14 +8,19 @@
 #include <linux/version.h>
 #include <linux/netdevice.h>
 #include <ppe_drv_public.h>
+#include <ppe_drv_sc.h>
 #include <nss_dp_vp.h>
 #include <linux/phy.h>
 #include <linux/if_vlan.h>
+#ifdef NSS_DP_PON_SUPPORT
+#include <fal/fal_pon.h>
+#endif
 #include "edma.h"
 #include "edma_debug.h"
 #include "edma_regs.h"
 #include "edma_cfg_rx.h"
 #include "nss_dp_dev.h"
+#include "syn_dev.h"
 
 extern nss_dp_vp_rx_cb_t nss_dp_vp_rx_reg_cb;
 extern nss_dp_vp_list_rx_cb_t nss_dp_vp_list_rx_reg_cb;
@@ -24,6 +29,27 @@ extern struct nss_dp_vp_ctx g_vp_ctx;
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 #define EDMA_MAX_ORDER 10
 #define EDMA_MAX_BULK_PAGE_ALLOC_SZ  (PAGE_SIZE *  (1 << EDMA_MAX_ORDER))
+#endif
+
+#if defined(NSS_DP_HW_GRO)
+/*
+ * edma_rx_fill_gro_mdata()
+ *	Fill GRO metadata
+ */
+static void edma_rx_fill_gro_mdata(struct edma_gbl_ctx *egc, struct nss_dp_vp_rx_info *vprxi, uint32_t ring_id, uint32_t word7)
+{
+	struct nss_vp_rx_custom_gro_mdata *gro_mdata;
+
+	if (unlikely((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN))) {
+		if (unlikely(egc->rxdesc_info[ring_id].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO)) {
+			gro_mdata = &vprxi->vp_rx_mdata.rx_mdata.gro_mdata;
+			gro_mdata->hw_gro_en = true;
+			gro_mdata->hw_gro_more = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_MORE_MASK));
+			gro_mdata->hw_gro_fin = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_FIN_MASK));
+			gro_mdata->hw_gro_psh = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_PSH_MASK));
+		}
+	}
+}
 #endif
 
 /*
@@ -305,6 +331,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 	uint32_t rx_alloc_size = rxfill_ring->alloc_size;
 	uint32_t buf_len = rxfill_ring->buf_len;
 	bool page_mode = rxfill_ring->page_mode;
+	int8_t pre_hdr_mode_en = rxfill_ring->pre_hdr_mode_en;
 	INIT_LIST_HEAD(&rx_skb_alloc);
 
 	/*
@@ -368,9 +395,21 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		skb->next = skb->prev = NULL;
 
 		/*
-		 * Reserve headroom
+		 * Reserve headroom as per the configured mode
 		 */
-		skb_reserve(skb, EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN);
+		if (likely(pre_hdr_mode_en)) {
+			/*
+			 * Reserve additional space for Rx preheader area
+			 */
+			skb_reserve(skb, EDMA_RX_SKB_HEADROOM + EDMA_RX_PH_SIZE + NET_IP_ALIGN);
+
+			/*
+			 * Insert Rx preheader
+			 */
+			skb_push(skb, EDMA_RX_PH_SIZE);
+		} else {
+			skb_reserve(skb, EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN);
+		}
 
 		/*
 		 * Map Rx buffer for DMA
@@ -445,10 +484,9 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		 */
 		if (unlikely(!skb->fast_recycled)) {
 			edma_dmac_inv_range_no_dsb((void *)skb->data,
-					      (void *)(skb->data + rx_alloc_size -
-					      EDMA_RX_SKB_HEADROOM -
-					      NET_IP_ALIGN));
-
+					(void *)(skb->data + rx_alloc_size -
+						EDMA_RX_SKB_HEADROOM -
+						NET_IP_ALIGN));
 		}
 		skb->fast_recycled = 0;
 
@@ -503,18 +541,36 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
 	ppe_drv_tree_id_type_t tree_id_type;
 	uint32_t mlo_mark, sawf_mark;
+	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
 
-	desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
-	rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
+	if (unlikely(!pre_hdr_mode_en)) {
+		desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
+		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
 
-	/*
-	 * Depending on the use-case, sometime PPE generate the same CPU
-	 * code for every packet, prefetch the next secondary descriptor
-	 * to handle such cases.
-	 */
-	next_desc_index = (desc_index + 1) & EDMA_RX_RING_SIZE_MASK;
-	next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
-	prefetch(next_rxdesc_sec);
+		/*
+		 * Depending on the use-case, sometime PPE generate the same CPU
+		 * code for every packet, prefetch the next secondary descriptor
+		 * to handle such cases.
+		 */
+		next_desc_index = (desc_index + 1) & EDMA_RX_RING_SIZE_MASK;
+		next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
+		prefetch(next_rxdesc_sec);
+	} else {
+		/*
+		 * If preheader is enabled, get the secondary descriptor from the
+		 * start of the packet
+		 */
+		rxdesc_sec = (struct edma_rxdesc_sec_desc *)phys_to_virt(EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_head));
+	}
+
+	edma_debug("Rx secondary descriptor contents in %d mode: \n"
+			" word0: 0x%0x, word1: 0x%0x\n"
+			" word2: 0x%0x, word3: 0x%0x\n"
+			" word4: 0x%0x, word5: 0x%0x\n"
+			" word6: 0x%0x, word7: 0x%0x\n", pre_hdr_mode_en,
+			rxdesc_sec->word0,rxdesc_sec->word1, rxdesc_sec->word2,
+			rxdesc_sec->word3, rxdesc_sec->word4, rxdesc_sec->word5,
+			rxdesc_sec->word6, rxdesc_sec->word7);
 
 	tree_id_type = EDMA_RXDESC_TREE_ID_TYPE_GET(rxdesc_sec);
 
@@ -634,29 +690,54 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 	uint16_t desc_index, next_desc_index;
 	uint32_t dst_port;
 	uint8_t cpu_code, service_code;
-	bool acl_info_valid = false;
+	bool cpu_code_valid, is_ptp_sc, acl_info_valid = false;
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
 	struct ppe_drv_cc_metadata cc_info = {0};
 	struct ppe_drv_sc_metadata sc_info = {0};
 	struct ppe_drv_acl_metadata acl_info = {0};
+	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
+
+	cpu_code_valid = EDMA_RXDESC_CPU_CODE_VALID_GET(rxdesc_head);
+	service_code = EDMA_RXDESC_SERVICE_CODE_GET(rxdesc_head);
+	is_ptp_sc = (service_code == PPE_DRV_SC_PTP);
+
+	if (likely(cpu_code_valid) || unlikely(is_ptp_sc)) {
+		if (unlikely(!pre_hdr_mode_en)) {
+			desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
+			rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
+
+			/*
+			 * Depending on the use-case, sometime PPE generate the same CPU
+			 * code for every packet, prefetch the next secondary descriptor
+			 * to handle such cases.
+			 */
+			next_desc_index = (desc_index + 1) & EDMA_RX_RING_SIZE_MASK;
+			next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
+			prefetch(next_rxdesc_sec);
+		} else {
+			/*
+			 * If preheader is enabled, get the secondary descriptor from the
+			 * start of the packet
+			 */
+			rxdesc_sec = (struct edma_rxdesc_sec_desc *)phys_to_virt(EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_head));
+		}
+
+		edma_debug("Rx secondary descriptor contents in %d mode: \n"
+				" word0: 0x%0x, word1: 0x%0x\n"
+				" word2: 0x%0x, word3: 0x%0x\n"
+				" word4: 0x%0x, word5: 0x%0x\n"
+				" word6: 0x%0x, word7: 0x%0x\n", pre_hdr_mode_en,
+				rxdesc_sec->word0,rxdesc_sec->word1, rxdesc_sec->word2,
+				rxdesc_sec->word3, rxdesc_sec->word4, rxdesc_sec->word5,
+				rxdesc_sec->word6, rxdesc_sec->word7);
+	}
 
 	/*
 	 * The primary descriptor has CPU code valid indication bit while
 	 * the CPU code is available in secondary descriptor.
 	 */
-	if (likely(EDMA_RXDESC_CPU_CODE_VALID_GET(rxdesc_head))) {
-		desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
-		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
+	if (likely(cpu_code_valid)) {
 		cpu_code = EDMA_RXDESC_CPU_CODE_GET(rxdesc_sec);
-
-		/*
-		 * Depending on the use-case, sometime PPE generate the same CPU
-		 * code for every packet, prefetch the next secondary descriptor
-		 * to handle such cases.
-		 */
-		next_desc_index = (desc_index + 1) & EDMA_RX_RING_SIZE_MASK;
-		next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
-		prefetch(next_rxdesc_sec);
 
 		/*
 		 * Get the ACL id
@@ -679,9 +760,17 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 	/*
 	 * Process if there is any service code.
 	 */
-	service_code = EDMA_RXDESC_SERVICE_CODE_GET(rxdesc_head);
 	if (likely(service_code)) {
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+		if (unlikely(is_ptp_sc)) {
+			if (likely(EDMA_RX_SDESC_TSTAMP_VALID_GET(rxdesc_sec))) {
+				/* Extract timestamp from the second descriptor */
+				sc_info.ts_nsec = EDMA_RX_SDESC_TSTAMP_LO_GET(rxdesc_sec);  /* 32-bit nanoseconds */
+				sc_info.ts_sec = EDMA_RX_SDESC_TSTAMP_HI_GET(rxdesc_sec);  /* 8-bit seconds */
+			}
 
+		}
+#endif
 		/*
 		 * Fill the service code metadata structure.
 		 */
@@ -780,15 +869,17 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 	struct sk_buff *skb_head;
 	struct net_device *dev;
 	struct nss_dp_vp_rx_info vprxi = {0};
-	uint32_t pkt_length;
+	uint32_t pkt_length, inv_len;
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
+	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
 
 	/*
-	 * Get packet length
+	 * Get packet and invalidate length as per the descriptor mode
 	 */
-	pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_desc);
-	edma_debug("edma_gbl_ctx:%px skb:%px fragment pkt_length:%u\n", egc, skb, pkt_length);
+	inv_len = pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_desc);
+	inv_len = (likely(pre_hdr_mode_en) ? (inv_len + EDMA_RX_PH_SIZE) : inv_len);
+	edma_debug("edma_gbl_ctx:%px skb:%px fragment pkt_length:%u, inv_len: %u\n", egc, skb, pkt_length, inv_len);
 
 	/*
 	 * For fraglist case
@@ -799,7 +890,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 		 * Invalidate the buffer received from the HW
 		 */
 		edma_dmac_inv_range((void *)skb->data,
-				(void *)(skb->data + pkt_length));
+				(void *)(skb->data + inv_len));
 
 		if (!(rxdesc_ring->head)) {
 			skb_put(skb, pkt_length);
@@ -915,12 +1006,30 @@ process_next_scatter:
 	 * the skb data will be pointing to outer header and if
 	 * packet decap is successful then data offset will point
 	 * to inner payload.
+	 *
+	 * In case of HW GRO coalescing, suppose if there are two packets that are coalesced
+	 * then data offset of first packet is equal to PAYLOAD_OFFSET(32) while for second
+	 * packets(or onwards) data offset will be pointed to the start of L4 payload.
+	 * To make SW architecture common, for HW GRO packets also only PAYLOAD_OFFSET(32) worth
+	 * of data will be pulled.
 	 */
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-	if (unlikely(!__pskb_pull(skb_head, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_ring->pdesc_head)))) {
-#else
-	if (unlikely(!pskb_pull(skb_head, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_ring->pdesc_head)))) {
-#endif
+	if (unlikely(rxdesc_ring->gro_enabled) && unlikely(!pskb_pull(skb_head, EDMA_RXDESC_PH_PAYLOAD_OFFSET))) {
+		/*
+		 * Discard the SKB that we have been building,
+		 * in addition to the SKB linked to current descriptor.
+		 */
+		mem_debug_update_skb(skb_head);
+		dev_kfree_skb_any(skb_head);
+		rxdesc_ring->head = NULL;
+		rxdesc_ring->last = NULL;
+		rxdesc_ring->pdesc_head = NULL;
+
+		u64_stats_update_begin(&rx_stats->syncp);
+		rx_stats->rx_nr_frag_headroom_err++;
+		u64_stats_update_end(&rx_stats->syncp);
+
+		return;
+	} else if (unlikely(!pskb_pull(skb_head, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_ring->pdesc_head)))) {
 		/*
 		 * Discard the SKB that we have been building,
 		 * in addition to the SKB linked to current descriptor.
@@ -986,6 +1095,10 @@ process_next_scatter:
 	 */
 	if (unlikely(EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK)) {
 		mem_debug_update_skb(skb_head);
+#ifdef NSS_DP_HW_GRO
+		if (unlikely(rxdesc_ring->gro_enabled))
+			edma_rx_fill_gro_mdata(egc, &vprxi, rxdesc_ring->ring_id, rxdesc_desc->word7);
+#endif
 		edma_rx_process_vp(rxdesc_ring->pdesc_head, rxdesc_ring, skb_head, &vprxi);
 		rxdesc_ring->head = NULL;
 		rxdesc_ring->last = NULL;
@@ -1082,14 +1195,24 @@ void edma_rx_handle_capwap_linear_packets(struct edma_gbl_ctx *egc,
 	skb_put(skb, pkt_length);
 
 send_to_vp:
-
 	/*
-	 * In some cases like PPE tunnel when mode 1 is enabled
-	 * the skb data will be pointing to outer header and if
-	 * packet decap is successful then data offset will point
-	 * to inner payload.
+	 * In case of HW GRO coalescing, suppose if there are two packets that are coalesced
+	 * then data offset of first packet is equal to PAYLOAD_OFFSET(32) while for second
+	 * packets(or onwards) data offset will be pointed to the start of L4 payload.
+	 * To make SW architecture common, for HW GRO packets also only PAYLOAD_OFFSET(32) worth
+	 * of data will be pulled.
 	 */
-	__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	if (unlikely(rxdesc_ring->gro_enabled)) {
+		__skb_pull(skb, EDMA_RXDESC_PH_PAYLOAD_OFFSET);
+	} else {
+		/*
+		 * In some cases like PPE tunnel when mode 1 is enabled
+		 * the skb data will be pointing to outer header and if
+		 * packet decap is successful then data offset will point
+		 * to inner payload.
+		 */
+		__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	}
 
 	/*
 	 * TODO: Do a batched update of the stats per netdevice.
@@ -1144,9 +1267,10 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	struct edma_pcpu_stats *pcpu_stats;
 	struct edma_rx_stats *rx_stats;
 	struct nss_dp_vp_rx_info vprxi = {0};
-	uint32_t pkt_length;
+	uint32_t pkt_length, inv_len;
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
+	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
 
 	mem_debug_update_skb(skb);
 	/*
@@ -1156,17 +1280,17 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	rx_stats = this_cpu_ptr(pcpu_stats->rx_stats);
 
 	/*
-	 * Get packet length
+	 * Get packet & invalidate length depending on the descriptor mode
 	 */
-	pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_desc);
+	inv_len = pkt_length = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_desc);
+	inv_len = (likely(pre_hdr_mode_en) ? (inv_len + EDMA_RX_PH_SIZE) : inv_len);
 
 	if (likely(!page_mode)) {
-
 		/*
 		 * Invalidate the buffer received from the HW
 		 */
 		edma_dmac_inv_range((void *)skb->data,
-				(void *)(skb->data + pkt_length));
+				(void *)(skb->data + inv_len));
 		skb_put(skb, pkt_length);
 		goto send_to_stack;
 	}
@@ -1192,14 +1316,24 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	}
 
 send_to_stack:
-
 	/*
-	 * In some cases like PPE tunnel when mode 1 is enabled
-	 * the skb data will be pointing to outer header and if
-	 * packet decap is successful then data offset will point
-	 * to inner payload.
+	 * In case of HW GRO coalescing, suppose if there are two packets that are coalesced
+	 * then data offset of first packet is equal to PAYLOAD_OFFSET(32) while for second
+	 * packets(or onwards) data offset will be pointed to the start of L4 payload.
+	 * To make SW architecture common, for HW GRO packets also only PAYLOAD_OFFSET(32) worth
+	 * of data will be pulled.
 	 */
-	__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	if (rxdesc_ring->gro_enabled) {
+		__skb_pull(skb, EDMA_RXDESC_PH_PAYLOAD_OFFSET);
+	} else {
+		/*
+		 * In some cases like PPE tunnel when mode 1 is enabled
+		 * the skb data will be pointing to outer header and if
+		 * packet decap is successful then data offset will point
+		 * to inner payload.
+		 */
+		__skb_pull(skb, EDMA_RXDESC_DATA_OFFSET_GET(rxdesc_desc));
+	}
 
 	/*
 	 * Check Rx checksum offload status.
@@ -1253,6 +1387,16 @@ send_to_stack:
 	 */
 	if (EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK) {
 		mem_debug_update_skb(skb);
+#ifdef NSS_DP_HW_GRO
+		if (unlikely(rxdesc_ring->gro_enabled))
+			edma_rx_fill_gro_mdata(egc, &vprxi, rxdesc_ring->ring_id, rxdesc_desc->word7);
+#endif
+
+		/*
+		 * For linear packets, last_desc is the same as rxdesc_desc (first descriptor).
+		 * For scatter-gather packets, last_desc points to the final descriptor which
+		 * contains GRO indication flags in word7.
+		 */
 		edma_rx_process_vp(rxdesc_desc, rxdesc_ring, skb, &vprxi);
 		return false;
 	}
@@ -1289,10 +1433,10 @@ static inline struct net_device *edma_rx_get_src_dev(
 	if (likely((src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK)
 				== EDMA_RXDESC_SRCINFO_TYPE_PORTID)) {
 		src_port_num = src_info & EDMA_RXDESC_PORTNUM_BITS;
-#ifdef NSS_DP_IPQ_HERMOSA
+#ifdef NSS_DP_PON_SUPPORT
 	} else if ((src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK)
 				== EDMA_RXDESC_SRCINFO_TYPE_GEM_PORT) {
-		src_port_num = 6;
+		src_port_num = PON_PORT_ID;
 #endif
 	} else {
 		if (net_ratelimit()) {
@@ -1668,6 +1812,93 @@ next_rx_desc:
 	return work_done;
 }
 
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+/*
+ * edma_rx_hwtstamp()
+ *	Extract RX hardware timestamp from service code data.
+ *
+ * This function extracts the RX timestamp from the service code data, the RX
+ * timestamp is from RX second descriptor.
+ *
+ * RX Descriptor Format:
+ * - Word 0: TIMESTAMP_LO (32 bits nanoseconds)
+ * - Word 1 [7:0]: TIMESTAMP_HI (8 bits seconds)
+ * - Word 3 [23]: TIMESTAMP_VALID flag
+ *
+ * @skb: Socket buffer to attach timestamp to
+ * @sc_data: Pointer to service code data
+ */
+static void edma_rx_hwtstamp(struct sk_buff *skb,
+			     struct ppe_drv_sc_metadata *sc_data)
+{
+	struct skb_shared_hwtstamps *hwts;
+	struct nss_dp_dev *dp_dev;
+	struct syn_hal_dev *shd;
+	struct syn_ptp_priv *ptp_priv;
+	void __iomem *mac_base;
+	u64 ns;
+	u32 sys_sec;
+	u32 ts_sec;
+
+	if (unlikely(!sc_data)) {
+		edma_err("sc_data is null\n");
+		return;
+	}
+
+	/* Ensure skb->dev is valid before dereferencing */
+	if (unlikely(!skb || !skb->dev)) {
+		edma_err("skb or skb->dev is null\n");
+		return;
+	}
+
+	/* Get the system time in seconds (32-bit) */
+	dp_dev = netdev_priv(skb->dev);
+	if (!dp_dev || !dp_dev->gmac_hal_ctx) {
+		edma_err("dp_dev or gmac_hal_ctx is null\n");
+		/* Failed to get device context */
+		return;
+	}
+
+	shd = (struct syn_hal_dev *)dp_dev->gmac_hal_ctx;
+	ptp_priv = shd->ptp_priv;
+	if (!ptp_priv || ptp_priv->tstamp_config.rx_filter == HWTSTAMP_FILTER_NONE)
+		return;
+
+	mac_base = dp_dev->gmac_hal_ctx->mac_base;
+	if (!mac_base) {
+		edma_err("mac_base is null\n");
+		return;
+	}
+
+	/*
+	 * The EDMA RX descriptor provides only the lower 8 bits of the
+	 * seconds value. Read the current system time to determine the
+	 * upper 24 bits and reconstruct the full timestamp.
+	 */
+	sys_sec = hal_read_reg(mac_base, 0xd08);
+	ts_sec = (sys_sec & 0xFFFFFF00) | sc_data->ts_sec;
+
+	/* Handle rollover of 8 bits second:
+	 * if combined time is in future, decrement upper bits.
+	 */
+	if (ts_sec > sys_sec)
+		ts_sec -= 0x100;
+
+	/* DEBUG: Print raw timestamp values */
+	edma_debug("RX TS: ts_sec=0x%x, ts_nsec=0x%x, sys_sec=0x%x\n",
+		   sc_data->ts_sec, sc_data->ts_nsec, sys_sec);
+
+	/* Combine into 64-bit nanoseconds and store in SKB */
+	ns = ((u64)ts_sec * NSEC_PER_SEC) + sc_data->ts_nsec;
+	hwts = skb_hwtstamps(skb);
+	memset(hwts, 0, sizeof(*hwts));
+	hwts->hwtstamp = ns_to_ktime(ns);
+
+	/* Increment success counter */
+	ptp_priv->rx_ts_success++;
+}
+#endif
+
 /*
  * edma_rx_reap()
  *	Reap Rx descriptors
@@ -1684,6 +1915,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 	struct sk_buff *cur_skb = NULL, *next_skb = NULL;
 	struct edma_rxfill_ring *rxfill_ring;
 	struct list_head rx_list;
+	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
 	INIT_LIST_HEAD(&rx_list);
 
 	/*
@@ -1718,26 +1950,39 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 	end_idx = (cons_idx + work_to_do) & EDMA_RX_RING_SIZE_MASK;
 
 	rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
-	rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, cons_idx);
 
 	/*
-	 * Invalidate all the cached descriptors
-	 * that'll be processed.
+	 * Invalidate all the cached descriptors that'll be processed,
+	 * based on the mode
 	 */
-	if (end_idx > cons_idx) {
-		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
-			(void *)(rxdesc_desc + work_to_do));
-		edma_dmac_inv_range_no_dsb((void *)rxdesc_sec,
-			(void *)(rxdesc_sec + work_to_do));
+	if (likely(pre_hdr_mode_en)) {
+		if (end_idx > cons_idx) {
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
+					(void *)(rxdesc_desc + work_to_do));
+		} else {
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
+					(void *)(rxdesc_ring->pdesc + end_idx));
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
+					(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
+		}
 	} else {
-		edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
-			(void *)(rxdesc_ring->pdesc + end_idx));
-		edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->sdesc,
-			(void *)(rxdesc_ring->sdesc + end_idx));
-		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
-			(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
-		edma_dmac_inv_range_no_dsb((void *)rxdesc_sec,
-			(void *)(rxdesc_ring->sdesc + EDMA_RX_RING_SIZE));
+		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, cons_idx);
+		if (end_idx > cons_idx) {
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
+					(void *)(rxdesc_desc + work_to_do));
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_sec,
+					(void *)(rxdesc_sec + work_to_do));
+		} else {
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
+					(void *)(rxdesc_ring->pdesc + end_idx));
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
+					(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->sdesc,
+					(void *)(rxdesc_ring->sdesc + end_idx));
+			edma_dmac_inv_range_no_dsb((void *)rxdesc_sec,
+					(void *)(rxdesc_ring->sdesc + EDMA_RX_RING_SIZE));
+		}
+
 	}
 
 	/*
@@ -1772,20 +2017,29 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 		mem_debug_update_skb(skb);
 
 #ifdef CONFIG_SKB_TIMESTAMP
-	if (EDMA_RX_SDESC_TSTAMP_VALID_GET(rxdesc_sec)) {
-		uint64_t pkt_time, cur_time;
-
-		pkt_time = edma_rx_get_tstamp(rxdesc_sec);
-		cur_time = edma_rx_read_gmac_timer(egc);
-
-		if (likely(cur_time > pkt_time)) {
-			skb->delta_ts0 = cur_time - pkt_time;
-			skb->delta_ts1 = EDMA_TIMESTAMP_NSEC_TO_USEC(ktime_get_ns());
-			edma_debug("skb: %p, pkt_time: %llu, cur_time: %llu, delta_ts0: %llu, delta_ts1: %llu\n",
-					skb, pkt_time, cur_time,
-					skb->delta_ts0, skb->delta_ts1);
+		/*
+		 * If preheader mode is enabled, get the secondary descriptor from the
+		 * start of the packet
+		 */
+		if (likely(pre_hdr_mode_en)) {
+			rxdesc_sec = (struct edma_rxdesc_sec_desc *)phys_to_virt(EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_desc));
+			edma_dmac_inv_range((void *)rxdesc_sec, (void *)((uint8_t *)rxdesc_sec + EDMA_RX_PH_SIZE));
 		}
-	}
+
+		if (EDMA_RX_SDESC_TSTAMP_VALID_GET(rxdesc_sec)) {
+			uint64_t pkt_time, cur_time;
+
+			pkt_time = edma_rx_get_tstamp(rxdesc_sec);
+			cur_time = edma_rx_read_gmac_timer(egc);
+
+			if (likely(cur_time > pkt_time)) {
+				skb->delta_ts0 = cur_time - pkt_time;
+				skb->delta_ts1 = EDMA_TIMESTAMP_NSEC_TO_USEC(ktime_get_ns());
+				edma_debug("skb: %p, pkt_time: %llu, cur_time: %llu, delta_ts0: %llu, delta_ts1: %llu\n",
+						skb, pkt_time, cur_time,
+						skb->delta_ts0, skb->delta_ts1);
+			}
+		}
 #endif
 
 		/*
@@ -1833,6 +2087,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 				struct nss_dp_dev *dp_dev = netdev_priv(skb->dev);
 
 				if (likely(edma_rx_handle_linear_packets(egc, rxdesc_ring, rxdesc_desc, dp_dev, skb))) {
+
 					if (unlikely(ndev->features & NETIF_F_GRO)) {
 						skb->protocol = eth_type_trans(skb, ndev);
 						mem_debug_update_skb(skb);
@@ -1872,7 +2127,9 @@ next_rx_desc:
 		 */
 		rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
 #ifdef CONFIG_SKB_TIMESTAMP
-		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, cons_idx);
+		if (unlikely(!pre_hdr_mode_en)) {
+			rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, cons_idx);
+		}
 #endif
 	}
 
@@ -1895,6 +2152,7 @@ next_rx_desc:
 
 		skb_list_del_init(cur_skb);
 		cur_skb->protocol = eth_type_trans(cur_skb, cur_skb->dev);
+		mem_debug_update_skb(cur_skb);
 		netif_receive_skb(cur_skb);
 	}
 
@@ -2095,10 +2353,25 @@ int edma_rxfill_napi_poll(struct napi_struct *napi, int budget)
 }
 
 /*
- * edma_rx_phy_tstamp_buf()
- *	Receive skb for PHY timestamping
+ * edma_rx_mac_tstamp_consume()
+ *	Extract and attach XGMAC hardware timestamp
  */
-bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buff *skb, __attribute__((unused))void *sc_data)
+static bool edma_rx_mac_tstamp_consume(struct sk_buff *skb,
+				       struct ppe_drv_sc_metadata *sc_data)
+{
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	edma_rx_hwtstamp(skb, sc_data);
+#endif
+
+	/* Continue processing, don't consume packet */
+	return false;
+}
+
+/*
+ * edma_rx_phy_tstamp_consume()
+ *	Receive skb for PHY timestamping (internal function)
+ */
+static bool edma_rx_phy_tstamp_consume(struct sk_buff *skb)
 {
 	struct net_device *ndev = skb->dev;
 
@@ -2108,26 +2381,40 @@ bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buf
 	 * in drv->rxtstamp function.
 	 */
 	if (ndev && ndev->phydev && ndev->phydev->drv
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-			&& ndev->phydev->drv->rxtstamp
-#else
-			&& phy_has_rxtstamp(ndev->phydev)
-#endif
-			) {
+	    && phy_has_rxtstamp(ndev->phydev)) {
 		skb->protocol = eth_type_trans(skb, ndev);
 
-#if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-		if (likely(ndev->phydev->drv->rxtstamp(ndev->phydev, skb, 0))) {
-#else
 		if (likely(phy_rxtstamp(ndev->phydev, skb, 0))) {
-#endif
 			return true;
 		} else {
 			__skb_push(skb, ETH_HLEN);
+			edma_debug("Timestamp is not enabled with PHY driver");
 		}
 	}
 
 	return false;
+}
+
+/*
+ * edma_rx_tstamp_buf()
+ *	Wrapper function for PTP timestamp processing
+ *	Handles both PHY and XGMAC timestamps with priority
+ */
+bool edma_rx_tstamp_buf(void *app_data, struct sk_buff *skb, void *sc_data)
+{
+	/*
+	 * Try PHY timestamping first (higher priority)
+	 * If PHY consumes the packet, return true
+	 */
+	if (edma_rx_phy_tstamp_consume(skb)) {
+		return true;
+	}
+
+	/*
+	 * PHY didn't consume packet, apply XGMAC timestamp
+	 * This always returns false (doesn't consume packet)
+	 */
+	return edma_rx_mac_tstamp_consume(skb, sc_data);
 }
 
 /*

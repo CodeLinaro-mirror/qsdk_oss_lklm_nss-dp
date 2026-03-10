@@ -105,6 +105,34 @@
 
 #define EDMA_MAX_DMA_MASK_BIT_HI 32
 
+#define EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_TXDESC_RING_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_TXCMPL_RING_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_RXDESC_RING_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_RXFILL_RING_PER_TYPE	(NR_CPUS * 2)
+
+extern int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE];
+extern int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE];
+extern int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE];
+extern int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE];
+extern int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE];
+extern int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE];
+extern int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+
+#define EDMA_MAX_TXDESC_RING_PER_PPEVP	NR_CPUS
+#define EDMA_MAX_TXCMPL_RING_PER_PPEVP	NR_CPUS
+
+extern int edma_dp_ppe_vp_num_tx_rings;
+extern int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PER_PPEVP];
+extern int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP];
+extern int edma_dp_ppe_vp_num_tx_rings_per_core;
+extern int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+
+#ifdef NSS_DP_HW_GRO
+#define EDMA_GRO_PPE_QUEUE_BASE			176
+extern int edma_dp_gro_ppe_queue_base;
+#endif
+
 /**
  * nss_dp_hal_gmac_stats
  *	The per-GMAC statistics structure.
@@ -154,23 +182,27 @@ extern struct nss_dp_ppeds_ops edma_ppeds_ops;
 #endif
 
 static inline void edma_dmac_inv_range(const void *start, const void *end){
-
+#ifndef CONFIG_IO_COHERENCY
         dmac_inv_range(start, end);
+#endif
 }
 
 static inline void edma_dmac_inv_range_no_dsb(const void *start, const void *end){
-
+#ifndef CONFIG_IO_COHERENCY
         dmac_inv_range_no_dsb(start, end);
+#endif
 }
 
 static inline void edma_dmac_clean_range_no_dsb(const void *start, const void *end){
-
+#ifndef CONFIG_IO_COHERENCY
         dmac_clean_range_no_dsb(start, end);
+#endif
 }
 
 static inline void edma_dsb(void){
-
+#ifndef CONFIG_IO_COHERENCY
         dsb(st);
+#endif
 }
 
 #endif /* __NSS_DP_ARCH_H__ */

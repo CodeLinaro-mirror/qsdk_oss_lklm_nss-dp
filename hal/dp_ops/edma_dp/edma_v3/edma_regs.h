@@ -9,6 +9,20 @@
 #define EDMA_GENMASK(end, start)	(uint32_t)((((uint64_t)1 << ((end) - (start) + 1)) - 1) << (start))
 
 /*
+ * EDMA Debug Statistics Macros
+ */
+#define EDMA_REG_BP_COUNTERS_NUM		18
+#define EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX	6
+
+#define EDMA_REG_TXCMPL_BP_IDX_OFFSET	0
+#define EDMA_REG_RXDESC_BP_IDX_OFFSET	6
+#define EDMA_REG_RXFILL_BP_IDX_OFFSET	12
+
+#define EDMA_REG_BP_TXCMPL_RING_ID_OFFSET	0
+#define EDMA_REG_BP_RXDESC_RING_ID_OFFSET	20
+#define EDMA_REG_BP_RXFILL_RING_ID_OFFSET	44
+
+/*
  * EDMA register offsets
  */
 #define EDMA_REG_MAS_CTRL		0x0
@@ -40,6 +54,40 @@
 #define EDMA_REG_DBG_DATA		0x68
 #define EDMA_REG_DBG_DATA_MASK		0x7FFFFF	/* 23-bit mask */
 #define EDMA_REG_DS_CMPL_ERR_DBG_VAL	0x409c		/* Debug control value for DS CMPL error */
+#define EDMA_REG_DBG_CNT_TIME		0x1DC		/* Counter clock cycle for BP stats */
+#define EDMA_REG_DBG_CNT_CLEAN		0x1E0		/* Bitmask[0:17] to clean specific BP counters */
+#define EDMA_REG_DBG_TOTAL_GO		0x1E4		/* Enable/Disable BP counters */
+#define EDMA_REG_DBG_TOTAL_CLEAN	0x1E8		/* Clean all BP counters */
+#define EDMA_REG_DBG_CNT_TOTAL_CNT	0x1EC		/* Total BP count */
+
+/*
+ * EDMA debug counter bit fields
+ */
+#define EDMA_DBG_CNT_DUR_TIME_SHIFT	0
+#define EDMA_DBG_CNT_DUR_TIME_MASK	EDMA_GENMASK(2, 0)		/* 3-bit mask */
+
+#define EDMA_DBG_CNT_SINGLE_CLEAN_MASK	0x0003FFFFU 			/* 18-bit mask */
+
+#define EDMA_DBG_CNT_TOTAL_GO_MASK	0x1U				/* 1-bit mask */
+#define EDMA_DBG_CNT_TOTAL_CLEAN_MASK	0x1U				/* 1-bit mask */
+
+
+/*
+ * Debug counter port map registers
+ * First register absolute addr: 0x2AE1B300
+ * EDMA base is at 0x2AD00000, so relative offset = 0x11B300
+ * There are 18 registers, 32-bit stride, value field uses lower 6 bits (0..63)
+ */
+#define EDMA_REG_DBG_CNT_PORT_MAP(n)	(0x11B300 + (0x4 * (n)))
+#define EDMA_DBG_CNT_PORT_MAP_VAL_MASK	0x3FU				/* 6-bit mask */
+
+/*
+ * Debug BP counter registers
+ * First register absolute addr: 0x2AE1B400
+ * EDMA base is at 0x2AD00000, so relative offset = 0x11B400
+ * There are 18 registers
+ */
+#define EDMA_REG_DBG_CNT_NUM(n)		(0x11B400 + (0x4 * (n)))
 #define EDMA_REG_TX_TIMEOUT_THRESH	0x6c
 #define EDMA_REG_REQ0_FIFO_THRESH	0x80
 #define EDMA_REG_WB_OS_THRESH		0x84
@@ -81,6 +129,13 @@
 #define EDMA_REG_TXQ_FC_5		0xc0
 #define EDMA_REG_TXQ_FC_6		0xc4
 #define EDMA_REG_TXQ_FC_7		0xc8
+#endif
+
+#if defined(NSS_DP_HW_GRO)
+#define	EDMA_REG_SLOT_SEL(n)		(0x01C0 + (0x4 * (n)))
+#define EDMA_REG_GRO_SLOT_VLD(n)	(0xFFB00 + ((n) * 0x10))
+#define EDMA_REG_GRO_CONFIG1		0x01D0
+#define EDMA_REG_GRO_CONFIG2		0x01D4
 #endif
 
 #define EDMA_REG_TXDESC_BA(n)		(0x1000 + (0x1000 * (n)))
@@ -399,6 +454,17 @@
 #define EDMA_TXDESC_CTRL_ARB_GRP_ID_GET(x)	(((x) & EDMA_TXDESC_CTRL_ARB_GRP_ID_MASK) >> EDMA_TXDESC_CTRL_ARB_GRP_ID_SHIFT)
 #define EDMA_TXDESC_CTRL_ARB_GRP_ID_SET(x)	(((x) << EDMA_TXDESC_CTRL_ARB_GRP_ID_SHIFT) & EDMA_TXDESC_CTRL_ARB_GRP_ID_MASK)
 
+/*
+ * EDMA TX ring mode (preheader/secondary ring) configurations
+ */
+#define EDMA_TXDESC_PH_EN	1
+#define EDMA_TXDESC_CTRL_PH_EN_SHIFT		20
+#define EDMA_TXDESC_CTRL_PH_EN_MASK		EDMA_GENMASK(20, 20)
+#define EDMA_TXDESC_CTRL_PH_EN_GET(x)		(((x) & EDMA_TXDESC_CTRL_PH_EN_MASK) >> EDMA_TXDESC_CTRL_PH_EN_SHIFT)
+#define EDMA_TXDESC_CTRL_PH_EN_SET(x)		(((x) << EDMA_TXDESC_CTRL_PH_EN_SHIFT) & EDMA_TXDESC_CTRL_PH_EN_MASK)
+
+
+
 #if defined(NSS_DP_HIGHER_RING_MASK_CONFIG)
 /*
  * EDMA_REG_TXCMPL_PROD_IDX register
@@ -585,6 +651,22 @@
 #define EDMA_RXDESC_RX_EN			0x1
 #define EDMA_RXDESC_RX_DISABLE			0x1
 #define EDMA_RXDESC_RX_RESET			0x1
+#define EDMA_RXDESC_CTRL_PH_EN			(~(0x40))
+
+/*
+ * EDMA RX ring mode (preheader/secondary ring) configurations
+ */
+#define EDMA_RXDESC_PH_EN	1
+#define EDMA_RXDESC_CTRL_PH_EN_SHIFT		10
+#define EDMA_RXDESC_CTRL_PH_EN_MASK		EDMA_GENMASK(10, 10)
+#define EDMA_RXDESC_CTRL_PH_EN_GET(x)		(((x) & EDMA_RXDESC_CTRL_PH_EN_MASK) >> EDMA_RXDESC_CTRL_PH_EN_SHIFT)
+#define EDMA_RXDESC_CTRL_PH_EN_SET(x)		(((x) << EDMA_RXDESC_CTRL_PH_EN_SHIFT) & EDMA_RXDESC_CTRL_PH_EN_MASK)
+
+#define EDMA_RXDESC_PH_PAYLOAD_OFFSET		32
+#define EDMA_RXDESC_PAYLOAD_OFFSET_SHIFT	23
+#define EDMA_RXDESC_PAYLOAD_OFFSET_MASK		EDMA_GENMASK(31, 23)
+#define EDMA_RXDESC_PAYLOAD_OFFSET_GET(x)	(((x) & EDMA_RXDESC_PAYLOAD_OFFSET_MASK) >> EDMA_RXDESC_PAYLOAD_OFFSET_SHIFT)
+#define EDMA_RXDESC_PAYLOAD_OFFSET_SET(x)	(((x) << EDMA_RXDESC_PAYLOAD_OFFSET_SHIFT) & EDMA_RXDESC_PAYLOAD_OFFSET_MASK)
 
 /*
  * EDMA_REG_TX_INT_MASK register
@@ -713,5 +795,31 @@
 #define EDMA_RXFILL_FORMAT_SHIFT	0
 #define EDMA_RXFILL_FORMAT_MASK		0x1
 #define EDMA_RXFILL_FORMAT_SET(x)	(((x) << EDMA_RXFILL_FORMAT_SHIFT) & EDMA_RXFILL_FORMAT_MASK)
+
+#if defined(NSS_DP_HW_GRO)
+#define EDMA_RXDESC_GRO_INFO_SHIFT	12
+#define EDMA_RXDESC_GRO_INFO_MASK	EDMA_GENMASK(15, 12)
+#define EDMA_RXDESC_GRO_INFO_GET(x)	(((x) & EDMA_RXDESC_GRO_INFO_MASK) >> EDMA_RXDESC_GRO_INFO_SHIFT)
+
+#define EDMA_RXDESC_GRO_EN_FIN_MASK	0x1
+#define EDMA_RXDESC_GRO_EN_PSH_MASK	0x2
+#define EDMA_RXDESC_GRO_EN_MORE_MASK	0x4
+#define EDMA_RXDESC_GRO_EN		0x8
+
+
+#define EDMA_REG_GRO_CONFIG1_BUF_LEN_MASK	0x1FFFF
+#define EDMA_REG_GRO_CONFIG1_BUF_LEN_SHIFT	9
+
+#define EDMA_REG_GRO_CONFIG1_DESC_COUNT_MASK	0x3F
+#define EDMA_REG_GRO_CONFIG1_DESC_COUNT_SHIFT	3
+
+#define EDMA_REG_GRO_CONFIG1_BUF_LEN_SET(x)	(((x) & EDMA_REG_GRO_CONFIG1_BUF_LEN_MASK) << EDMA_REG_GRO_CONFIG1_BUF_LEN_SHIFT)
+#define EDMA_REG_GRO_CONFIG1_DESC_COUNT_SET(x)	(((x) & EDMA_REG_GRO_CONFIG1_DESC_COUNT_MASK) << EDMA_REG_GRO_CONFIG1_DESC_COUNT_SHIFT)
+
+#define EDMA_REG_GRO_CONFIG1_BUF_LEN_GET(x)	(((x) >> EDMA_REG_GRO_CONFIG1_BUF_LEN_SHIFT) & EDMA_REG_GRO_CONFIG1_BUF_LEN_MASK)
+#define EDMA_REG_GRO_CONFIG1_DESC_COUNT_GET(x)	(((x) >> EDMA_REG_GRO_CONFIG1_DESC_COUNT_SHIFT) & (EDMA_REG_GRO_CONFIG1_DESC_COUNT_MASK))
+
+#define EDMA_GRO_SLOT_VAL_ENABLE	0xFF
+#endif
 
 #endif	/* __EDMA_REGS__ */

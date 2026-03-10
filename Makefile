@@ -22,7 +22,8 @@ endif
 endif
 
 NSS_DP_INCLUDE = -I$(obj)/include -I$(obj)/exports -I$(obj)/hal/include \
-		 -I$(obj)/hal/dp_ops/include
+		 -I$(obj)/hal/dp_ops/include \
+		 -I$(obj)/hal/gmac_ops/syn/xgmac
 
 ifeq ($(SoC),$(filter $(SoC),ipq807x ipq60xx))
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v1/edma_cfg.o \
@@ -80,6 +81,9 @@ qca-nss-dp-objs += nss_dp_vp_main.o \
 		   hal/dp_ops/edma_dp/edma_v2/edma_tx.o \
 		   hal/gmac_ops/qcom/qcom_if.o \
 		   hal/gmac_ops/syn/xgmac/syn_if.o
+ifneq ($(CONFIG_PTP_1588_CLOCK),)
+qca-nss-dp-objs += hal/gmac_ops/syn/xgmac/syn_ptp.o
+endif
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ccflags-y += -DNSS_DP_TX_SMALL_PACKET_WAR
 ifeq ($(dp-ppe-ds),y)
@@ -117,10 +121,17 @@ qca-nss-dp-objs += nss_dp_vp_main.o \
 		   hal/dp_ops/edma_dp/edma_v3/edma_tx.o \
 		   hal/gmac_ops/qcom/qcom_if.o \
 		   hal/gmac_ops/syn/xgmac/syn_if.o
+ifneq ($(CONFIG_PTP_1588_CLOCK),)
+qca-nss-dp-objs += hal/gmac_ops/syn/xgmac/syn_ptp.o
+endif
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ifeq ($(dp-ppe-ds),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds.o
 ccflags-y += -DNSS_DP_PPEDS_SUPPORT
+endif
+
+ifeq ($(SoC),$(filter $(SoC),ipq96xx ipq52xx))
+ccflags-y += -DNSS_DP_HW_GRO
 endif
 
 ifeq ($(dp-loopback),y)
@@ -147,6 +158,9 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx))
 ccflags-y += -DNSS_DP_IPQ52XX
+ccflags-y += -DNSS_DP_PON_SUPPORT
+ccflags-y += -DNSS_DP_HIGHER_RING_MASK_CONFIG
+ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))

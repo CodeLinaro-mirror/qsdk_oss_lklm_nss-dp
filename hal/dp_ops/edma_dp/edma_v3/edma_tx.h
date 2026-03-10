@@ -9,6 +9,18 @@
 extern uint32_t tx_ring_sz_low_medium_mem;
 extern uint32_t tx_ring_sz_high_mem;
 
+/*
+ * edma_tx_cb
+ *	EDMA TX control buffer structure stored in SKB->cb
+ *	Used to save packet ID and originating interface for PTP timestamp matching
+ */
+struct edma_tx_cb {
+	u16 ptp_pkt_id;			/* PTP packet ID for timestamp matching (1-1023) */
+	struct nss_dp_dev *dp_dev;	/* Originating interface for timestamp retrieval */
+};
+
+#define EDMA_TX_CB(skb)	((struct edma_tx_cb *)(skb)->cb)
+
 #define EDMA_GET_DESC(R, i, type)	(&(((type *)((R)->desc))[(i)]))
 #define EDMA_GET_PDESC(R, i, type)	(&(((type *)((R)->pdesc))[(i)]))
 #define EDMA_GET_SDESC(R, i, type)	(&(((type *)((R)->sdesc))[(i)]))
@@ -20,10 +32,6 @@ extern uint32_t tx_ring_sz_high_mem;
 #define EDMA_MAX_TXCMPL_RINGS		NSS_DP_EDMA_MAX_TXCMPL_RINGS
 
 #define EDMA_MAX_TX_RINGS_PER_CORE	2
-
-#define EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE	10
-#define EDMA_MAX_TXDESC_RING_PER_TYPE	(NR_CPUS * 2)
-#define EDMA_MAX_TXCMPL_RING_PER_TYPE	(NR_CPUS * 2)
 
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 #define EDMA_TXCMPL_RING_PER_CORE_MAX	EDMA_MAX_TX_PORTS
@@ -120,6 +128,18 @@ extern uint32_t tx_ring_sz_high_mem;
 #define EDMA_TXDESC_FAKE_MAC_HDR_SHIFT		10
 #define EDMA_TXDESC_FAKE_MAC_HDR_MASK		(0x1 << EDMA_TXDESC_FAKE_MAC_HDR_SHIFT)
 #define EDMA_TXDESC_FAKE_MAC_HDR_SET(desc, x)	(desc->word1 |= (((x) << EDMA_TXDESC_FAKE_MAC_HDR_SHIFT) & (EDMA_TXDESC_FAKE_MAC_HDR_MASK)))
+
+#define EDMA_TXDESC_TIMESTAMP_EN_SHIFT		27
+#define EDMA_TXDESC_TIMESTAMP_EN_MASK		(0x1 << EDMA_TXDESC_TIMESTAMP_EN_SHIFT)
+#define EDMA_TXDESC_TIMESTAMP_EN_SET(desc, x)	(desc->word6 |= (((x) << EDMA_TXDESC_TIMESTAMP_EN_SHIFT) & (EDMA_TXDESC_TIMESTAMP_EN_MASK)))
+
+#define EDMA_TXDESC_TIMESTAMP_TAG_EN_SHIFT		11
+#define EDMA_TXDESC_TIMESTAMP_TAG_EN_MASK		(0x1 << EDMA_TXDESC_TIMESTAMP_TAG_EN_SHIFT)
+#define EDMA_TXDESC_TIMESTAMP_TAG_EN_SET(desc, x)	(desc->word1 |= (((x) << EDMA_TXDESC_TIMESTAMP_TAG_EN_SHIFT) & (EDMA_TXDESC_TIMESTAMP_TAG_EN_MASK)))
+
+#define EDMA_TXDESC_TIMESTAMP_TAG_SHIFT		16
+#define EDMA_TXDESC_TIMESTAMP_TAG_MASK		(0x3ff << EDMA_TXDESC_TIMESTAMP_TAG_SHIFT)
+#define EDMA_TXDESC_TIMESTAMP_TAG_SET(desc, x)	(desc->word6 |= (((x) << EDMA_TXDESC_TIMESTAMP_TAG_SHIFT) & (EDMA_TXDESC_TIMESTAMP_TAG_MASK)))
 
 #ifdef __LP64__
 #define EDMA_TXDESC_OPAQUE_GET(desc)		(((uint64_t)(desc)->word3 << 32) | (desc)->word2)
@@ -317,6 +337,7 @@ struct edma_txdesc_ring {
 	struct edma_sec_txdesc *sdesc;	/* Secondary descriptor ring virtual address */
 	struct edma_tx_desc_stats tx_desc_stats;
 					/* Tx descriptor ring statistics */
+	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	uint32_t count;			/* Number of descriptors */
 	uint8_t fc_grp_id;		/* Flow control group ID */

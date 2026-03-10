@@ -36,10 +36,10 @@ struct nss_dp_ppeds_tx_cmpl_elem {
 };
 
 /**
- * nss_dp_ppeds_handle
- *	PPE-DS DP handle info
- */
-typedef struct nss_dp_ppeds_handle {
+ * nss_dp_ppeds_wifi7_handle
+ * 	PPE-DS DP wifi7 handle information.
+*/
+struct nss_dp_ppeds_wifi7_handle {
 	bool polling_for_idx_update;	/**< DS poll mode used */
 	dma_addr_t ppe2tcl_ba;		/**< PPE2TCL ring's base address */
 	dma_addr_t reo2ppe_ba;		/**< REO2PPE ring's base address */
@@ -53,6 +53,17 @@ typedef struct nss_dp_ppeds_handle {
 	uint32_t eth_txcomp_chnk_of_reap;	/**< PPEDS Tx complete's chunk of reap */
 	struct nss_dp_ppeds_rx_fill_elem *rx_fill_arr;	/**< RxFill buffer array */
 	struct nss_dp_ppeds_tx_cmpl_elem *tx_cmpl_arr;	/**< TxComplete buffer array */
+};
+
+/**
+ * nss_dp_ppeds_handle
+ *	PPE-DS DP handle info
+ */
+typedef struct nss_dp_ppeds_handle {
+	uint8_t wifi_arch_mode;	/* 7 == wifi7, 8 == wifi8 */
+	union {
+		struct nss_dp_ppeds_wifi7_handle wifi7_cfg;	/**< wifi7 config applicable for IPQ54XX, IPQ95XX , IPQ53XX */
+	};
 	char priv[] __aligned(NETDEV_ALIGN);	/**< Private area */
 } nss_dp_ppeds_handle_t;
 
@@ -138,7 +149,7 @@ struct nss_dp_ppeds_ops {
  */
 static inline struct nss_dp_ppeds_rx_fill_elem *nss_dp_ppeds_get_rx_fill_arr(nss_dp_ppeds_handle_t *ppeds_handle)
 {
-	return ppeds_handle->rx_fill_arr;
+	return ppeds_handle->wifi7_cfg.rx_fill_arr;
 }
 
 /**
@@ -156,7 +167,7 @@ static inline struct nss_dp_ppeds_rx_fill_elem *nss_dp_ppeds_get_rx_fill_arr(nss
  */
 static inline struct nss_dp_ppeds_tx_cmpl_elem *nss_dp_ppeds_get_tx_cmpl_arr(nss_dp_ppeds_handle_t *ppeds_handle)
 {
-	return ppeds_handle->tx_cmpl_arr;
+	return ppeds_handle->wifi7_cfg.tx_cmpl_arr;
 }
 
 /**

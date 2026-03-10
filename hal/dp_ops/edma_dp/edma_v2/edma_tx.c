@@ -18,6 +18,64 @@
 #include "edma_debug.h"
 #include "edma.h"
 #include <ppe_drv_sc.h>
+#include "syn_dev.h"
+
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+extern int syn_ptp_get_tx_hwtstamp_by_id(struct syn_hal_dev *shd,
+					  u16 pkt_id,
+					  struct skb_shared_hwtstamps *shhwtstamps);
+
+/*
+ * edma_tx_complete_mac_tstamp()
+ *	Retrieve MAC TX timestamp in completion using packet ID
+ *
+ * This function retrieves the TX timestamp from XGMAC MAC registers
+ * using the packet ID saved in the SKB control buffer. It matches the
+ * packet ID with timestamps in the hardware FIFO and reports the
+ * timestamp to the network stack via skb_tstamp_tx().
+ *
+ * Called from TX completion handler before freeing the SKB.
+ */
+static inline void edma_tx_complete_mac_tstamp(struct sk_buff *skb)
+{
+	struct nss_dp_dev *orig_dp_dev;
+	struct nss_gmac_hal_dev *nghd;
+	struct syn_hal_dev *shd;
+	struct skb_shared_hwtstamps shhwtstamps;
+	u16 pkt_id;
+	int ret;
+
+	/* Get originating interface from SKB control buffer */
+	orig_dp_dev = EDMA_TX_CB(skb)->dp_dev;
+	if (!orig_dp_dev)
+		return;
+
+	/* Get HAL device structure from originating interface */
+	nghd = (struct nss_gmac_hal_dev *)orig_dp_dev->gmac_hal_ctx;
+	if (!nghd)
+		return;
+
+	shd = container_of(nghd, struct syn_hal_dev, nghd);
+	if (!shd->ptp_priv)
+		return;
+
+	/* Retrieve packet ID from SKB control buffer */
+	pkt_id = EDMA_TX_CB(skb)->ptp_pkt_id;
+
+	/* Look up timestamp by packet ID */
+	ret = syn_ptp_get_tx_hwtstamp_by_id(shd, pkt_id, &shhwtstamps);
+	if (ret == 0) {
+		/* Timestamp found - report it to PTP stack */
+		skb_tstamp_tx(skb, &shhwtstamps);
+	} else if (ret == -ENODATA) {
+		/* Timestamp not available - may occur if FIFO is not drained yet */
+		if (net_ratelimit()) {
+			dev_warn(&orig_dp_dev->netdev->dev,
+				"TX timestamp not found for pkt_id=%u\n", pkt_id);
+		}
+	}
+}
+#endif
 
 /*
  * edma_tx_complete()
@@ -178,6 +236,13 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 				}
 				u64_stats_update_end(&txcmpl_stats->syncp);
 			}
+
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+			/* Retrieve MAC TX timestamp if needed */
+			if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_IN_PROGRESS)) {
+				edma_tx_complete_mac_tstamp(skb);
+			}
+#endif
 
 			/*
 			 * Fast-recycle the SKB with a list, if skb is originally allocated
@@ -680,10 +745,12 @@ static uint32_t edma_tx_avail_desc(struct edma_txdesc_ring *txdesc_ring, uint32_
 }
 
 /*
- * edma_tx_phy_tstamp_buf()
- *	Send skb for PHY timestamping
+ * edma_tx_phy_tstamp_buf_internal()
+ *	Send skb for PHY timestamping (internal function)
+ *
+ * Returns true if PHY driver handles the timestamp, false otherwise.
  */
-static inline void edma_tx_phy_tstamp_buf(struct net_device *ndev, struct sk_buff *skb)
+static inline bool edma_tx_phy_tstamp_buf_internal(struct net_device *ndev, struct sk_buff *skb)
 {
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
 	/*
@@ -694,11 +761,90 @@ static inline void edma_tx_phy_tstamp_buf(struct net_device *ndev, struct sk_buf
 	 */
 	if (ndev && ndev->phydev && ndev->phydev->drv && ndev->phydev->drv->txtstamp) {
 		ndev->phydev->drv->txtstamp(ndev->phydev, skb, 0);
+		return true;
 	}
 #else
 	if (phy_has_txtstamp(ndev->phydev)) {
 		phy_txtstamp(ndev->phydev, skb, 0);
+		return true;
 	}
+#endif
+	return false;
+}
+
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+/*
+ * edma_tx_mac_tstamp_buf()
+ *	Enable MAC hardware timestamping for XGMAC
+ *
+ * This function enables MAC-level hardware timestamping for XGMAC PTP.
+ * It generates a unique packet ID, saves it in the SKB control buffer,
+ * and writes it to the EDMA TX descriptor for later matching with the
+ * timestamp from the hardware FIFO.
+ *
+ * Note: This is different from PHY timestamping. MAC timestamps are
+ * read from XGMAC registers (0xd30, 0xd34, 0xd38) in the TX completion handler.
+ */
+static inline void edma_tx_mac_tstamp_buf(struct nss_dp_dev *dp_dev,
+					  struct sk_buff *skb,
+					  struct edma_pri_txdesc *desc)
+{
+	static atomic_t pkt_id_counter = ATOMIC_INIT(0);
+	struct nss_gmac_hal_dev *nghd;
+	struct syn_hal_dev *shd;
+	u16 pkt_id;
+
+	/* Get HAL device structure */
+	nghd = (struct nss_gmac_hal_dev *)dp_dev->gmac_hal_ctx;
+	if (!nghd || !nghd->mac_base)
+		return;
+
+	/* Check if this is a Synopsys XGMAC with PTP support */
+	shd = container_of(nghd, struct syn_hal_dev, nghd);
+	if (!shd->ptp_priv)
+		return;
+
+	/* Generate sequential packet ID (1-1023) with wraparound */
+	pkt_id = (atomic_inc_return(&pkt_id_counter) % 1023) + 1;
+
+	/* Save packet ID and originating interface in SKB control buffer */
+	EDMA_TX_CB(skb)->ptp_pkt_id = pkt_id;
+	EDMA_TX_CB(skb)->dp_dev = dp_dev;
+
+	/* Mark SKB as waiting for hardware timestamp */
+	skb_shinfo(skb)->tx_flags |= SKBTX_IN_PROGRESS;
+
+	/* Write packet ID to EDMA descriptor */
+	EDMA_TXDESC_TIMESTAMP_EN_SET(desc, 1);
+	EDMA_TXDESC_TIMESTAMP_TAG_EN_SET(desc, 1);
+	EDMA_TXDESC_TIMESTAMP_TAG_SET(desc, pkt_id);
+}
+#endif
+
+/*
+ * edma_tx_tstamp_buf()
+ *	Wrapper function for PTP TX timestamp processing
+ *	Handles both PHY and XGMAC timestamps with priority
+ *
+ * This function tries PHY timestamping first (higher priority).
+ * If PHY doesn't handle it, XGMAC timestamping is enabled.
+ */
+static inline void edma_tx_tstamp_buf(struct nss_dp_dev *dp_dev, struct net_device *ndev,
+				      struct sk_buff *skb, struct edma_pri_txdesc *txdesc)
+{
+	/*
+	 * Try PHY timestamping first (higher priority)
+	 * If PHY handles it, we're done
+	 */
+	if (edma_tx_phy_tstamp_buf_internal(ndev, skb)) {
+		return;
+	}
+
+#if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
+	/*
+	 * PHY didn't handle timestamp, enable XGMAC timestamp
+	 */
+	edma_tx_mac_tstamp_buf(dp_dev, skb, txdesc);
 #endif
 }
 
@@ -751,13 +897,6 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		}
 	}
 
-	/*
-	 * Deliver the ptp packet to phy driver for TX timestamping
-	 */
-	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
-		edma_tx_phy_tstamp_buf(netdev, skb);
-	}
-
 #if defined(CONFIG_SKB_FAST_RECYCLABLE_DEBUG_ENABLE)
 	if (likely(skb->fast_xmit) && likely(skb->is_from_recycler)) {
 		dev_check_skb_fast_recyclable(skb);
@@ -770,6 +909,12 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	 */
 	if (likely(!skb_is_nonlinear(skb))) {
 		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+
+		/* Handle PTP timestamping (PHY priority, XGMAC fallback) */
+		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
+			edma_tx_tstamp_buf(dp_dev, netdev, skb, txdesc);
+		}
+
 		EDMA_TXDESC_ENDIAN_SET(txdesc);
 		num_desc_filled++;
 
@@ -817,6 +962,12 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		}
 
 		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+
+		/* Handle PTP timestamping (PHY priority, XGMAC fallback) */
+		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
+			edma_tx_tstamp_buf(dp_dev, netdev, skb, txdesc);
+		}
+
 		num_desc_filled = edma_tx_skb_sg_fill_desc(dp_dev, txdesc_ring, &txdesc, skb, &hw_next_to_use, stats);
 	}
 

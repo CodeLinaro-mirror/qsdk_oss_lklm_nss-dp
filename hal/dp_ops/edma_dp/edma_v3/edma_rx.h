@@ -20,6 +20,8 @@ extern uint32_t rx_ring_sz_high_mem;
 						   replenishing RxFill ring */
 #define EDMA_RX_SKB_HEADROOM		128
 
+#define EDMA_RX_PH_SIZE		(sizeof(struct edma_rxdesc_sec_desc))	/* Rx preheader size */
+
 /*
  * Helper function for generating mask for bit field in a word. This will generate a mask which will
  * enable bits from start to end(both inclusive) of the bit field in a word.
@@ -285,6 +287,19 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RXDESC_SIZE_SHIFT		5
 
 /*
+ * GRO Slot Valid Word Definitions
+ * These masks define which fields are valid for GRO coalescing
+ * for different protocol types (TCP, UDP, IP)
+ *
+ * TCP: Validates most fields including sequence numbers, flags, etc.
+ * UDP: Validates fewer fields (no sequence/ack numbers)
+ * IP:  Validates only IP header fields
+ */
+#define EDMA_GRO_SLOT_VLD_TCP_WORD 0x1FFFBFFF  /* TCP field validation mask */
+#define EDMA_GRO_SLOT_VLD_UDP_WORD 0xFFFFC000  /* UDP field validation mask */
+#define EDMA_GRO_SLOT_VLD_IP_WORD  0xFFFF8000  /* IP field validation mask */
+
+/*
  * edma_ring_usage
  *	Indices for stats
  */
@@ -392,6 +407,7 @@ struct edma_rxfill_ring {
 	uint32_t prod_idx;		/* Ring producer index */
 	uint32_t alloc_size;		/* Buffer size to allocate */
 	uint32_t num_rxfill_pending;	/* Number of allocation pending */
+	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
 	struct edma_rxfill_desc *desc;	/* descriptor ring virtual address */
 	dma_addr_t dma;			/* descriptor ring physical address */
 	uint32_t buf_len;		/* Buffer length for rxfill descriptor */
@@ -412,6 +428,7 @@ struct edma_rxdesc_ring {
 	uint32_t count;			/* number of descriptors in the ring */
 	uint32_t work_leftover;		/* Leftover descriptors to be processed */
 	uint32_t cons_idx;		/* Ring consumer index */
+	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
 	struct edma_rxdesc_desc *pdesc;
 					/* Primary descriptor ring virtual address */
 	struct edma_rxdesc_desc *pdesc_head;
@@ -423,6 +440,9 @@ struct edma_rxdesc_ring {
 	struct edma_rxfill_ring *rxfill;
 					/* RXFILL ring used */
 	bool napi_added;		/* Flag to indicate NAPI add status */
+#if defined(NSS_DP_HW_GRO)
+	bool gro_enabled;		/* Ring is GRO enabled */
+#endif
 	dma_addr_t pdma;		/* Primary descriptor ring physical address */
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	struct sk_buff *head;		/* Head of the skb list in case of scatter-gather frame */
@@ -437,7 +457,7 @@ int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_napi_poll(struct napi_struct *napi, int budget);
 int edma_rxfill_napi_poll(struct napi_struct *napi, int budget);
 void edma_rxfill_intr_timer(struct timer_list *tm);
-bool edma_rx_phy_tstamp_buf(__attribute__((unused))void *app_data, struct sk_buff *skb, void *sc_data);
+bool edma_rx_tstamp_buf(void *app_data, struct sk_buff *skb, void *sc_data);
 int edma_rx_napi_capwap_poll(struct napi_struct *napi, int budget);
 
 #endif	/* __EDMA_RX_H__ */

@@ -1,19 +1,8 @@
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2021-2025, Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #include <linux/kernel.h>
@@ -27,6 +16,7 @@
 #include <linux/of_mdio.h>
 #include <linux/phy.h>
 #include <linux/phylink.h>
+#include <linux/net_tstamp.h>
 
 #if defined(NSS_DP_PPE_SUPPORT)
 #include <fal/fal_vsi.h>
@@ -43,6 +33,7 @@
 #include <init/ssdk_init.h>
 #endif
 #include "nss_dp_hal.h"
+#include <ppe_drv.h>
 
 #define JUMBO_MRU_3K 3072
 #define NSS_DP_CAPWAP_VP_RX_CORE_INVALID 0XFFFF
@@ -192,23 +183,67 @@ module_param(tx_ring_sz_high_mem, int, 0640);
 MODULE_PARM_DESC(tx_ring_sz_high_mem, "edma tx ring size for high memory");
 
 /*
+ * nss_dp_eth_ioctl()
+ *	Handle ethernet ioctls with PHY priority for PTP
+ */
+static int nss_dp_eth_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
+{
+	struct nss_dp_dev *dp_priv;
+	int ret;
+
+	if (!netdev || !ifr)
+		return -EINVAL;
+
+	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
+	if (!dp_priv)
+		return -EINVAL;
+
+	/*
+	 * Try PHY-level PTP first (higher priority, more accurate)
+	 * PHY timestamping is closer to the wire and typically more precise
+	 */
+	ret = phy_do_ioctl_running(netdev, ifr, cmd);
+	if (!ret)
+		return ret;
+
+	/*
+	 * Fall back to MAC-level PTP (XGMAC) if PHY doesn't support it
+	 */
+	if (dp_priv->gmac_hal_ops) {
+		switch (cmd) {
+		case SIOCSHWTSTAMP:
+			if (dp_priv->gmac_hal_ops->hwtstamp_set)
+				return dp_priv->gmac_hal_ops->hwtstamp_set(dp_priv->gmac_hal_ctx, ifr);
+			break;
+		case SIOCGHWTSTAMP:
+			if (dp_priv->gmac_hal_ops->hwtstamp_get)
+				return dp_priv->gmac_hal_ops->hwtstamp_get(dp_priv->gmac_hal_ctx, ifr);
+			break;
+		}
+	}
+
+	return -EOPNOTSUPP;
+}
+
+/*
  * nss_dp_do_ioctl()
+ *	Legacy ioctl handler for older kernels
  */
 static int32_t nss_dp_do_ioctl(struct net_device *netdev, struct ifreq *ifr,
 						   int32_t cmd)
 {
-	int ret = -EINVAL;
 	struct nss_dp_dev *dp_priv;
 
 	if (!netdev || !ifr)
-		return ret;
+		return -EINVAL;
 
 	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 
+	/* Only handle PHY MII ioctls */
 	if (dp_priv->phydev)
 		return phy_mii_ioctl(dp_priv->phydev, ifr, cmd);
 
-	return ret;
+	return -EOPNOTSUPP;
 }
 
 /*
@@ -370,9 +405,12 @@ static int nss_dp_close(struct net_device *netdev)
 		return -EAGAIN;
 	}
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		phylink_stop(dp_priv->phylink);
-	} else {
+	} else
+#endif
+	{
 		if (dp_priv->phydev)
 			phy_stop(dp_priv->phydev);
 	}
@@ -503,9 +541,12 @@ static int nss_dp_open(struct net_device *netdev)
 
 	netif_start_queue(netdev);
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
 		phylink_start(dp_priv->phylink);
-	} else if (!dp_priv->link_poll) {
+	} else
+#endif
+	if (!dp_priv->link_poll) {
 		/* Notify data plane link is up */
 		if (dp_priv->data_plane_ops->link_state(dp_priv->dpc, 1)) {
 			netdev_dbg(netdev, "Data plane set link failed\n");
@@ -627,6 +668,23 @@ static u16 __attribute__((unused)) nss_dp_select_queue(struct net_device *netdev
 	return cpu;
 }
 
+/*
+ * nss_dp_features_set()
+ *	DP feature set ops
+ */
+static int nss_dp_features_set(struct net_device *dev,
+                             netdev_features_t features)
+{
+#if defined(NSS_DP_HW_GRO)
+        netdev_features_t changed = dev->features ^ features;
+	if (changed & NETIF_F_GRO_HW) {
+		ppe_drv_hw_gro_feature_set(dev, !!(features & NETIF_F_GRO_HW));
+	}
+#endif
+
+	return 0;
+}
+
 static netdev_features_t __attribute__((unused)) nss_dp_feature_check(struct sk_buff *skb,
 									struct net_device *dev,
 									netdev_features_t features)
@@ -639,6 +697,10 @@ static netdev_features_t __attribute__((unused)) nss_dp_feature_check(struct sk_
 	if (skb_vlan_tagged_multi(skb)) {
 		features &= ~(NETIF_F_HW_CSUM | NETIF_F_TSO | NETIF_F_TSO6);
 	}
+#endif
+
+#ifdef NSS_DP_HW_GRO
+	features |= NETIF_F_GRO_HW;
 #endif
 
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 6, 0))
@@ -676,7 +738,7 @@ struct net_device_ops nss_dp_netdev_ops = {
 	.ndo_change_mtu = nss_dp_change_mtu,
 	.ndo_do_ioctl = nss_dp_do_ioctl,
 #if (LINUX_VERSION_CODE >= KERNEL_VERSION(6, 1, 0))
-	.ndo_eth_ioctl = phy_do_ioctl_running,
+	.ndo_eth_ioctl = nss_dp_eth_ioctl,
 #endif
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(4, 5, 0))
@@ -686,7 +748,7 @@ struct net_device_ops nss_dp_netdev_ops = {
 #endif
 
 	.ndo_features_check = nss_dp_feature_check,
-
+	.ndo_set_features = nss_dp_features_set,
 #ifndef NSS_DP_IPQ50XX
 	.ndo_select_queue = nss_dp_select_queue,
 #endif
@@ -836,7 +898,11 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	dp_priv->ppe_offload_disabled = of_property_read_bool(np, "qcom,ppe-offload-disabled");
 	pr_debug("%s: ppe offload disabled: %d for macid %d\n", np->name,
 				dp_priv->ppe_offload_disabled, dp_priv->macid);
-
+#ifdef NSS_DP_PON_SUPPORT
+	dp_priv->gem_port = of_property_read_bool(np, "qcom,gem-port");
+	pr_debug("%s: gem port: %d for macid %d\n", np->name,
+			dp_priv->gem_port, dp_priv->macid);
+#endif
 	dp_priv->is_switch_connected = of_property_read_bool(np, "qcom,is_switch_connected");
 	pr_debug("%s: Switch attached to macid %d status: %d\n", np->name, dp_priv->macid, dp_priv->is_switch_connected);
 
@@ -1065,6 +1131,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		goto netdev_register_fail;
 	}
 
+#ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en) {
 		dp_priv->phylink = ssdk_port_phylink_setup(0, dp_priv->macid, netdev);
 		if (!dp_priv->phylink) {
@@ -1072,6 +1139,7 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 			dp_priv->phylink_en = false;
 		}
 	}
+#endif
 
 #if (!defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX))
 	if (!dp_priv->phylink_en && dp_priv->link_poll) {
@@ -1191,10 +1259,13 @@ static int nss_dp_remove(struct platform_device *pdev)
 		dp_ops = dp_priv->data_plane_ops;
 		hal_ops = dp_priv->gmac_hal_ops;
 
+#ifdef CONFIG_PHYLINK
 		if (dp_priv->phylink_en && dp_priv->phylink) {
 			ssdk_port_phylink_destroy(0, dp_priv->macid);
 			dp_priv->phylink = NULL;
-		} else {
+		} else
+#endif
+		{
 			if (dp_priv->phydev) {
 				phy_disconnect(dp_priv->phydev);
 				dp_priv->phydev = NULL;

@@ -61,7 +61,7 @@
 #define NSS_DP_EDMA_TS_CLK			"nss-ts-clk"
 #define NSS_DP_EDMA_NSSCC_CLK			"nss-nsscc-clk"
 #define NSS_DP_EDMA_NSSCFG_CLK			"nss-nsscfg-clk"
-#define NSS_DP_EDMA_NSSCNOC_ATB_CLK		"nss-nsscnoc-atb-clk"
+#define NSS_DP_EDMA_NSSNOC_ATB_CLK		"nss-nssnoc-atb-clk"
 #define NSS_DP_EDMA_NSSNOC_NSSCC_CLK		"nss-nssnoc-nsscc-clk"
 #define NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK		"nss-nssnoc-pcnoc-1-clk"
 #define NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK	"nss-nssnoc-qosgen-ref-clk"
@@ -69,12 +69,6 @@
 #define NSS_DP_EDMA_NSSNOC_SNOC_CLK		"nss-nssnoc-snoc-clk"
 #define NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK	"nss-nssnoc-timeout-ref-clk"
 #define NSS_DP_EDMA_NSSNOC_XO_DCD_CLK		"nss-nssnoc-xo-dcd-clk"
-#define NSS_DP_EDMA_IMEM_QSB_CLK		"nss-imem-qsb-clk"
-#define NSS_DP_EDMA_NSSNOC_IMEM_QSB_CLK		"nss-nssnoc-imem-qsb-clk"
-#define NSS_DP_EDMA_IMEM_AHB_CLK		"nss-imem-ahb-clk"
-#define NSS_DP_EDMA_NSSNOC_IMEM_AHB_CLK		"nss-nssnoc-imem-ahb-clk"
-#define NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK		"nss-mem-noc-nssnoc-clk"
-#define NSS_DP_EDMA_TBU_CLK			"nss-tbu-clk"
 #define NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK	"nss-nssnoc-mem-noc-1-clk"
 #define NSS_DP_EDMA_NSSNOC_MEMNOC_CLK		"nss-nssnoc-memnoc-clk"
 #define NSS_DP_EDMA_CLK				"nss-edma-clk"
@@ -87,24 +81,46 @@
 #define NSS_DP_EDMA_TS_CLK_FREQ				24000000
 #define NSS_DP_EDMA_NSSCC_CLK_FREQ			100000000
 #define NSS_DP_EDMA_NSSCFG_CLK_FREQ			100000000
-#define NSS_DP_EDMA_NSSCNOC_ATB_CLK_FREQ		240000000
+#define NSS_DP_EDMA_NSSNOC_ATB_CLK_FREQ			240000000
 #define NSS_DP_EDMA_NSSNOC_NSSCC_CLK_FREQ		100000000
 #define NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK_FREQ		100000000
 #define NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK_FREQ		6000000
-#define NSS_DP_EDMA_NSSNOC_SNOC_1_CLK_FREQ		342857143
-#define NSS_DP_EDMA_NSSNOC_SNOC_CLK_FREQ		342857143
+#define NSS_DP_EDMA_NSSNOC_SNOC_1_CLK_FREQ		266666666
+#define NSS_DP_EDMA_NSSNOC_SNOC_CLK_FREQ		266666666
 #define NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK_FREQ		6000000
 #define NSS_DP_EDMA_NSSNOC_XO_DCD_CLK_FREQ		24000000
-#define NSS_DP_EDMA_IMEM_QSB_CLK_FREQ			353000000
-#define NSS_DP_EDMA_NSSNOC_IMEM_QSB_CLK_FREQ		353000000
-#define NSS_DP_EDMA_IMEM_AHB_CLK_FREQ			100000000
-#define NSS_DP_EDMA_NSSNOC_IMEM_AHB_CLK_FREQ		100000000
-#define NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK_FREQ		533333333
-#define NSS_DP_EDMA_TBU_CLK_FREQ			533333333
-#define NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK_FREQ		533333333
-#define NSS_DP_EDMA_NSSNOC_MEMNOC_CLK_FREQ		533333333
+#define NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK_FREQ		429000000
+#define NSS_DP_EDMA_NSSNOC_MEMNOC_CLK_FREQ		429000000
 
 #define EDMA_MAX_DMA_MASK_BIT_HI 32
+
+#define EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_TXDESC_RING_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_TXCMPL_RING_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_RXDESC_RING_PER_TYPE	(NR_CPUS * 2)
+#define EDMA_MAX_RXFILL_RING_PER_TYPE	(NR_CPUS * 2)
+
+extern int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE];
+extern int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE];
+extern int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE];
+extern int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE];
+extern int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE];
+extern int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE];
+extern int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+
+#define EDMA_MAX_TXDESC_RING_PER_PPEVP	NR_CPUS
+#define EDMA_MAX_TXCMPL_RING_PER_PPEVP	NR_CPUS
+
+extern int edma_dp_ppe_vp_num_tx_rings;
+extern int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PER_PPEVP];
+extern int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP];
+extern int edma_dp_ppe_vp_num_tx_rings_per_core;
+extern int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+
+#ifdef NSS_DP_HW_GRO
+#define EDMA_GRO_PPE_QUEUE_BASE			230
+extern int edma_dp_gro_ppe_queue_base;
+#endif
 
 /**
  * nss_dp_hal_gmac_stats

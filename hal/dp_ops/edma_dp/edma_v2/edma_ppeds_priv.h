@@ -26,6 +26,8 @@
 #define EDMA_PPEDS_SERVICE_STOP_BIT 0
 #define EDMA_PPEDS_TXCOMP_NAPI_BIT 1
 
+#define EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7 7
+
 /*
  * Rx rings flow control threshold values
  *
@@ -79,17 +81,28 @@ enum {
 };
 
 /*
- * PPE-DS EDMA node descriptor
+ * edma_ppeds_wifi7_cfg
+ *	ppeds wifi7 mode information.
  */
-struct edma_ppeds {
-	const struct nss_dp_ppeds_cb *ops;	/* PPE-DS EDMA callback pointer */
+struct edma_ppeds_wifi7_cfg {
 	struct edma_rxfill_ring rxfill_ring;	/* PPE-DS EDMA Rxfill ring */
 	struct edma_txcmpl_ring txcmpl_ring;	/* PPE-DS EDMA Tx complete ring */
 	struct edma_rxdesc_ring rx_ring;	/* PPE-DS EDMA Rx ring */
 	struct edma_txdesc_ring tx_ring;	/* PPE-DS EDMA Tx ring */
-	struct net_device napi_ndev;		/* Dummy net_device for NAPI */
 	uint32_t ppe_qid;			/* PPE-DS node start queue id */
 	uint32_t ppe_num_queues;		/* PPE-DS node queue count */
+};
+
+/*
+ * PPE-DS EDMA node descriptor
+ */
+struct edma_ppeds {
+	const struct nss_dp_ppeds_cb *ops;	/* PPE-DS EDMA callback pointer */
+	struct net_device napi_ndev;		/* Dummy net_device for NAPI */
+	uint32_t wifi_arch_mode;
+	union {
+		struct edma_ppeds_wifi7_cfg wifi7_cfg;
+	};
 	uint32_t txcmpl_intr;			/* PPE-DS EDMA Tx complete IRQ */
 	uint32_t rxfill_intr;			/* PPE-DS EDMA Rxfill IRQ */
 	uint32_t rxdesc_intr;			/* PPE-DS EDMA Rx IRQ */

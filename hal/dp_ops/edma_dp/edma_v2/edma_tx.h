@@ -1,19 +1,8 @@
 /*
  * Copyright (c) 2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for any
- * purpose with or without fee is hereby granted, provided that the above
- * copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT OF
- * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 #ifndef __EDMA_TX_H__
@@ -21,6 +10,18 @@
 
 extern uint32_t tx_ring_sz_low_medium_mem;
 extern uint32_t tx_ring_sz_high_mem;
+
+/*
+ * edma_tx_cb
+ *	EDMA TX control buffer structure stored in SKB->cb
+ *	Used to save packet ID and originating interface for PTP timestamp matching
+ */
+struct edma_tx_cb {
+	u16 ptp_pkt_id;			/* PTP packet ID for timestamp matching (1-1023) */
+	struct nss_dp_dev *dp_dev;	/* Originating interface for timestamp retrieval */
+};
+
+#define EDMA_TX_CB(skb)	((struct edma_tx_cb *)(skb)->cb)
 
 #define EDMA_GET_DESC(R, i, type)	(&(((type *)((R)->desc))[(i)]))
 #define EDMA_GET_PDESC(R, i, type)	(&(((type *)((R)->pdesc))[(i)]))
@@ -115,6 +116,18 @@ extern uint32_t tx_ring_sz_high_mem;
 #define EDMA_TXDESC_FAKE_MAC_HDR_SHIFT		10
 #define EDMA_TXDESC_FAKE_MAC_HDR_MASK		(0x1 << EDMA_TXDESC_FAKE_MAC_HDR_SHIFT)
 #define EDMA_TXDESC_FAKE_MAC_HDR_SET(desc, x)	(desc->word1 |= (((x) << EDMA_TXDESC_FAKE_MAC_HDR_SHIFT) & (EDMA_TXDESC_FAKE_MAC_HDR_MASK)))
+
+#define EDMA_TXDESC_TIMESTAMP_EN_SHIFT		27
+#define EDMA_TXDESC_TIMESTAMP_EN_MASK		(0x1 << EDMA_TXDESC_TIMESTAMP_EN_SHIFT)
+#define EDMA_TXDESC_TIMESTAMP_EN_SET(desc, x)	(desc->word6 |= (((x) << EDMA_TXDESC_TIMESTAMP_EN_SHIFT) & (EDMA_TXDESC_TIMESTAMP_EN_MASK)))
+
+#define EDMA_TXDESC_TIMESTAMP_TAG_EN_SHIFT		11
+#define EDMA_TXDESC_TIMESTAMP_TAG_EN_MASK		(0x1 << EDMA_TXDESC_TIMESTAMP_TAG_EN_SHIFT)
+#define EDMA_TXDESC_TIMESTAMP_TAG_EN_SET(desc, x)	(desc->word1 |= (((x) << EDMA_TXDESC_TIMESTAMP_TAG_EN_SHIFT) & (EDMA_TXDESC_TIMESTAMP_TAG_EN_MASK)))
+
+#define EDMA_TXDESC_TIMESTAMP_TAG_SHIFT		16
+#define EDMA_TXDESC_TIMESTAMP_TAG_MASK		(0x3ff << EDMA_TXDESC_TIMESTAMP_TAG_SHIFT)
+#define EDMA_TXDESC_TIMESTAMP_TAG_SET(desc, x)	(desc->word6 |= (((x) << EDMA_TXDESC_TIMESTAMP_TAG_SHIFT) & (EDMA_TXDESC_TIMESTAMP_TAG_MASK)))
 
 #ifdef __LP64__
 #define EDMA_TXDESC_OPAQUE_GET(desc)		(((uint64_t)(desc)->word3 << 32) | (desc)->word2)

@@ -11,6 +11,28 @@
 #include <nss_dp_arch.h>
 #include "nss_dp_hal.h"
 #include "edma.h"
+#include "edma_debug.h"
+
+int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {7,8,9,10,-1,-1,-1,-1};
+int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0,8,16,24,-1,-1,-1,-1};
+int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {7,8,9,10,-1,-1,-1,-1};
+int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,-1,-1,-1,-1};
+int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
+int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
+int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10};
+
+/*
+ * PPEVP ring info
+ */
+int edma_dp_ppe_vp_num_tx_rings = EDMA_MAX_TXDESC_RING_PER_PPEVP;
+int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PER_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
+int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5};
+
+#ifdef NSS_DP_HW_GRO
+int edma_dp_gro_ppe_queue_base = EDMA_GRO_PPE_QUEUE_BASE;
+#endif
 
 /*
  * nss_dp_hal_nsm_sawf_sc_stats_read()
@@ -103,122 +125,101 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_CSR);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_CSR_CLK, NSS_DP_EDMA_NSSNOC_CSR_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_CSR);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_TS_CLK, NSS_DP_EDMA_TS_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_TS);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSCC_CLK, NSS_DP_EDMA_NSSCC_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSCC);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSCFG_CLK, NSS_DP_EDMA_NSSCFG_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSCFG);
 
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSCNOC_ATB_CLK,
-					NSS_DP_EDMA_NSSCNOC_ATB_CLK_FREQ);
+	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_ATB_CLK,
+					NSS_DP_EDMA_NSSNOC_ATB_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_ATB);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_NSSCC_CLK,
 					NSS_DP_EDMA_NSSNOC_NSSCC_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_NSSCC);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK,
 					NSS_DP_EDMA_NSSNOC_PCNOC_1_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_PCNOC_1);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK,
 					NSS_DP_EDMA_NSSNOC_QOSGEN_REF_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_QOSGEN_REF);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_SNOC_1_CLK,
 					NSS_DP_EDMA_NSSNOC_SNOC_1_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_SNOC_1);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_SNOC_CLK,
 					NSS_DP_EDMA_NSSNOC_SNOC_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_SNOC);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK,
 					NSS_DP_EDMA_NSSNOC_TIMEOUT_REF_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_TIMEOUT_REF);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_XO_DCD_CLK,
 					NSS_DP_EDMA_NSSNOC_XO_DCD_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_IMEM_QSB_CLK,
-					NSS_DP_EDMA_IMEM_QSB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_IMEM_QSB_CLK,
-					NSS_DP_EDMA_NSSNOC_IMEM_QSB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_IMEM_AHB_CLK,
-					NSS_DP_EDMA_IMEM_AHB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_IMEM_AHB_CLK,
-					NSS_DP_EDMA_NSSNOC_IMEM_AHB_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK,
-					NSS_DP_EDMA_MEM_NOC_NSSNOC_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
-
-	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_TBU_CLK,
-					NSS_DP_EDMA_TBU_CLK_FREQ);
-	if (err) {
-		return -1;
-	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_XO_DCD);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK,
 					NSS_DP_EDMA_NSSNOC_MEM_NOC_1_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_MEM_NOC_1);
 
 	err = nss_dp_hal_clock_set_and_enable(&pdev->dev, NSS_DP_EDMA_NSSNOC_MEMNOC_CLK,
 					NSS_DP_EDMA_NSSNOC_MEMNOC_CLK_FREQ);
 	if (err) {
 		return -1;
 	}
+	edma_set_clk_stage(EDMA_CLK_STAGE_NSSNOC_MEMNOC);
 
 	return 0;
 }
@@ -229,11 +230,18 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
  */
 int32_t nss_dp_hal_hw_reset(void *ctx)
 {
-	struct reset_control *edma_hw_rst;
+	struct reset_control *edma_hw_rst, *edma_cfg_rst;
 	struct platform_device *pdev = (struct platform_device *)ctx;
 
 	edma_hw_rst = devm_reset_control_get(&pdev->dev, EDMA_HW_RESET_ID);
 	if (IS_ERR(edma_hw_rst)) {
+		edma_err("Error: edma HW reset failed\n");
+		return -EINVAL;
+	}
+
+	edma_cfg_rst = devm_reset_control_get(&pdev->dev, EDMA_CFG_RESET_ID);
+	if (IS_ERR(edma_hw_rst)) {
+		edma_err("Error: edma HW CFG reset failed\n");
 		return -EINVAL;
 	}
 
@@ -246,10 +254,26 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
  	 */
 	edma_gbl_ctx.hw_rst = edma_hw_rst;
 
+	/*
+	 * Store the obtained edma configuration reset handle (`edma_cfg_rst`) in the global context
+	 * (`edma_gbl_ctx`) for future use. This allows for centralized configuration reset control
+	 * throughout the driver.
+	 */
+	edma_gbl_ctx.cfg_rst = edma_cfg_rst;
+
 	reset_control_assert(edma_hw_rst);
 	udelay(100);
 
 	reset_control_deassert(edma_hw_rst);
+	udelay(100);
+
+	/*
+	 * EDMA configuration reset.
+	 */
+	reset_control_assert(edma_cfg_rst);
+	udelay(100);
+
+	reset_control_deassert(edma_cfg_rst);
 	udelay(100);
 
 	return 0;
@@ -264,7 +288,7 @@ bool nss_dp_hal_init(void)
 	/*
 	 * Bail out on not supported platform
 	 */
-	if (!of_machine_is_compatible("qcom,ipq52xx")) {
+	if (!of_machine_is_compatible("qcom,ipq5210")) {
 		return false;
 	}
 

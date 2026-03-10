@@ -53,15 +53,12 @@ int edma_dp_host_queues_per_ring = 8;
 module_param(edma_dp_host_queues_per_ring, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_queues_per_ring, "Number of queues per rx rings");
 
-int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {1,2,3,4,5,-1,-1,-1};
 module_param_array(edma_dp_host_rx_rings, int, NULL, 0);
 MODULE_PARM_DESC(edma_dp_host_rx_rings, "RX rings for host");
 
-int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0,8,16,24,32,-1,-1,-1};
 module_param_array(edma_dp_host_rx_queue_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_rx_queue_map, "Queue base for each RX ring");
 
-int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {2,3,4,5,6,-1,-1,-1};
 module_param_array(edma_dp_host_rxfill_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_rxfill_map, "RX ring to RX fill ring mapping");
 
@@ -73,25 +70,100 @@ int edma_dp_host_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 module_param(edma_dp_host_num_tx_rings_per_core, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_tx_rings_per_core, "Number of Host TX rings");
 
-int edma_dp_host_num_txcmpl_rings = NR_CPUS;
+int edma_dp_host_num_txcmpl_rings = NR_CPUS + EDMA_MAX_TXDESC_RING_PER_PPEVP;
 module_param(edma_dp_host_num_txcmpl_rings, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_txcmpl_rings, "Number of Host TX cmpl rings");
 
-int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {1,2,3,4,5,-1,-1,-1};
 module_param_array(edma_dp_host_tx_rings, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_rings, "TX rings for host");
 
-int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {2,3,4,5,6,-1,-1,-1};
 module_param_array(edma_dp_host_txcmpl_rings, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_txcmpl_rings, "TX cmpl rings for host");
 
-int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {2,3,4,5,6,-1,-1,-1};
 module_param_array(edma_dp_host_txcmpl_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_txcmpl_map, "TX to txcmpl map rings for host");
 
-int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {1,1,2,2,3,3,4,4,5,5};
 module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
+
+/*
+ * PPE-VP ring information
+ */
+module_param(edma_dp_ppe_vp_num_tx_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_num_tx_rings, "Number of host ppe_vp TX rings");
+
+module_param_array(edma_dp_ppe_vp_tx_rings, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_tx_rings, "TX rings for host ppe_vp");
+
+module_param_array(edma_dp_ppe_vp_txcmpl_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_txcmpl_map, "TX cmpl rings for host ppe_vp");
+
+module_param(edma_dp_ppe_vp_num_tx_rings_per_core, int, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_num_tx_rings_per_core, "Number of host ppe_vp TX rings per core");
+
+module_param_array(edma_dp_ppe_vp_tx_ring_to_core_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_tx_ring_to_core_map, "TX to core map for host ppe_vp");
+
+/*
+ * Each bit denotes the configured mode for that particular EDMA Tx/Rx rings IDs:
+ *   Bit is set : The particular ring is configured in pre-header mode
+ *   Bit is not set : The particular ring is configured in secondary ring mode
+ */
+int edma_rx_ring_mode_bitmask = EDMA_RX_RING_MODE_BITMASK_DEF;
+module_param(edma_rx_ring_mode_bitmask, int, 0640);
+MODULE_PARM_DESC(edma_rx_ring_mode_bitmask, "EDMA Rx ring mode (preheader/secondary ring) bitmask");
+
+int edma_tx_ring_mode_bitmask = EDMA_TX_RING_MODE_BITMASK_DEF;
+module_param(edma_tx_ring_mode_bitmask, int, 0640);
+MODULE_PARM_DESC(edma_tx_ring_mode_bitmask, "EDMA Tx ring mode (preheader/secondary ring) bitmask");
+
+#ifdef NSS_DP_HW_GRO
+int edma_dp_gro_num_rxfill_rings = 4;
+module_param(edma_dp_gro_num_rxfill_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_num_rxfill_rings, "Number of GRO RX fill rings");
+
+int edma_dp_gro_num_rx_rings = EDMA_RX_RING_GRO_NUM_MAX;
+module_param(edma_dp_gro_num_rx_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_num_rx_rings, "Number of GRO RX rings");
+
+#if EDMA_RX_RING_GRO_NUM_MAX > 4
+#error "Number of GRO rings cannot exceed 4"
+#endif
+
+int edma_dp_gro_queues_per_ring = 1;
+module_param(edma_dp_gro_queues_per_ring, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_queues_per_ring, "Number of queues per rx rings");
+
+module_param(edma_dp_gro_ppe_queue_base, int, 0640);
+MODULE_PARM_DESC(edma_dp_gro_ppe_queue_base, "GRO PPE Queue Base");
+
+int edma_dp_gro_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {20, 21, 22, 23, -1, -1, -1, -1};
+module_param_array(edma_dp_gro_rx_rings, int, NULL, 0);
+MODULE_PARM_DESC(edma_dp_gro_rx_rings, "RX rings for gro");
+
+int edma_dp_gro_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0, 1, 2, 3, -1, -1, -1, -1};
+module_param_array(edma_dp_gro_rx_queue_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_gro_rx_queue_map, "Queue base for each RX ring");
+
+int edma_dp_gro_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {16, 17, 18, 19, -1, -1, -1, -1};
+module_param_array(edma_dp_gro_rxfill_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_gro_rxfill_map, "RX ring to RX fill ring mapping");
+#endif
+
+/*
+ * Module parameters for the bp stats enabled txcmpl, rxdesc, and rxfill rings config
+ */
+int edma_bp_stats_en_txcmpl_rings[EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX] = {0,1,7,8,9,10};
+module_param_array(edma_bp_stats_en_txcmpl_rings, bp_stats_en_txcmpl_ring_id, NULL, 0640);
+MODULE_PARM_DESC(edma_bp_stats_en_txcmpl_rings, "bp_stats_en_txcmpl_rings");
+
+int edma_bp_stats_en_rxdesc_rings[EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX] = {0,1,7,8,9,10};
+module_param_array(edma_bp_stats_en_rxdesc_rings, bp_stats_en_rxdesc_ring_id, NULL, 0640);
+MODULE_PARM_DESC(edma_bp_stats_en_rxdesc_rings, "bp_stats_en_rxdesc_rings");
+
+int edma_bp_stats_en_rxfill_rings[EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX] = {0,1,7,8,9,10};
+module_param_array(edma_bp_stats_en_rxfill_rings, bp_stats_en_rxfill_ring_id, NULL, 0640);
+MODULE_PARM_DESC(edma_bp_stats_en_rxfill_rings, "bp_stats_en_rxfill_rings");
 
 /*
  * Input String length for VLAN insertion.
@@ -121,6 +193,141 @@ static char edma_rxfill_irq_name[EDMA_MAX_RXFILL_RINGS][EDMA_IRQ_NAME_SIZE];
 static char edma_vlan_append_info[EDMA_VLAN_APPEND_INFO_STR_LEN];
 
 char *argv[] = {"/usr/bin/edma_recover.sh", NULL };
+
+/*
+ * edma_param_set_bp_stats_en_txcmpl_ring_id()
+ *      Custom setter for the edma_bp_stats_en_txcmpl_rings module parameter.
+ */
+static int edma_param_set_bp_stats_en_txcmpl_ring_id(const char *val, const struct kernel_param *kp)
+{
+        int ret;
+        int ring_id;
+        struct kernel_param kptmp = *kp;	/* Create a temporary kp pointing to our local ring_id */
+
+        kptmp.arg = &ring_id;
+
+	/*
+	 * Use standard helper to parse string -> integer
+	 */
+        ret = param_set_int(val, &kptmp);
+        if (ret < 0)
+                return ret;
+
+	/*
+	 * Perform Range Check
+	 */
+        if (ring_id < 0 || ring_id >= EDMA_MAX_TXCMPL_RINGS) {
+                pr_err("Invalid txcmpl ring_id: %d, Valid range: [%d, %d]\n", ring_id,
+			0, EDMA_MAX_TXCMPL_RINGS - 1);
+                return -EINVAL;
+        }
+
+	/*
+	 * If valid, write to the actual location
+	 * Note: param_set_int already wrote to ring_id, now we copy it to the real array element
+	 */
+	*((int *)kp->arg) = ring_id;
+
+        return 0;
+}
+
+/*
+ * edma_param_set_bp_stats_en_rxdesc_ring_id()
+ *      Custom setter for the edma_bp_stats_en_rxdesc_rings module parameter.
+ */
+static int edma_param_set_bp_stats_en_rxdesc_ring_id(const char *val, const struct kernel_param *kp)
+{
+        int ret;
+        int ring_id;
+        struct kernel_param kptmp = *kp;	/* Create a temporary kp pointing to our local ring_id */
+
+        kptmp.arg = &ring_id;
+
+	/*
+	 * Use standard helper to parse string -> integer
+	 */
+        ret = param_set_int(val, &kptmp);
+        if (ret < 0)
+                return ret;
+
+	/*
+	 * Perform Range Check
+	 */
+        if (ring_id < 0 || ring_id >= EDMA_MAX_RXDESC_RINGS) {
+                pr_err("Invalid rxdesc ring_id: %d, Valid range: [%d, %d]\n", ring_id,
+			0, EDMA_MAX_RXDESC_RINGS - 1);
+                return -EINVAL;
+        }
+
+	/*
+	 * If valid, write to the actual location
+	 * Note: param_set_int already wrote to ring_id, now we copy it to the real array element
+	 */
+        *((int *)kp->arg) = ring_id;
+
+        return 0;
+}
+
+/*
+ * edma_param_set_bp_stats_en_rxfill_ring_id()
+ *      Custom setter for the edma_bp_stats_en_rxfill_rings module parameter.
+ */
+static int edma_param_set_bp_stats_en_rxfill_ring_id(const char *val, const struct kernel_param *kp)
+{
+        int ret;
+        int ring_id;
+        struct kernel_param kptmp = *kp;	/* Create a temporary kp pointing to our local ring_id */
+
+        kptmp.arg = &ring_id;
+
+	/*
+	 * Use standard helper to parse string -> integer
+	 */
+        ret = param_set_int(val, &kptmp);
+        if (ret < 0)
+                return ret;
+
+	/*
+	 * Perform Range Check
+	 */
+        if (ring_id < 0 || ring_id >= EDMA_MAX_RXFILL_RINGS) {
+                pr_err("Invalid rxfill ring_id: %d, Valid range: [%d, %d]\n", ring_id,
+			0, EDMA_MAX_RXFILL_RINGS - 1);
+                return -EINVAL;
+        }
+
+	/*
+	 * If valid, write to the actual location
+	 * Note: param_set_int already wrote to ring_id, now we copy it to the real array element
+	 */
+        *((int *)kp->arg) = ring_id;
+
+        return 0;
+}
+
+/*
+ * Defines the ops for the custom 'bp_stats_en_txcmpl_ring_id' parameter type.
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_txcmpl_ring_id = {
+        .set = edma_param_set_bp_stats_en_txcmpl_ring_id,
+        .get = param_get_int,	/* Use standard getter */
+};
+
+/*
+ * Defines the ops for the custom 'bp_stats_en_rxdesc_ring_id' parameter type.
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_rxdesc_ring_id = {
+        .set = edma_param_set_bp_stats_en_rxdesc_ring_id,
+        .get = param_get_int,	/* Use standard getter */
+};
+
+/*
+ * Defines the ops for the custom 'bp_stats_en_rxfill_ring_id' parameter type.
+ */
+static const struct kernel_param_ops param_ops_bp_stats_en_rxfill_ring_id = {
+        .set = edma_param_set_bp_stats_en_rxfill_ring_id,
+        .get = param_get_int,	/* Use standard getter */
+};
 
 /*
  * edma_recovery_work()
@@ -649,15 +856,79 @@ static int edma_validate_host_ring_info(void)
 
 	/*
 	 * Validate host SFE rings (RX and TX)
-	 * This can be extended further for host VP / GRO rings.
+	 * This can be extended further for host GRO rings.
 	 */
 	if (edma_validate_host_txrx_rings(rx_info, tx_info, rxfill_ring_bitmap, txcmpl_ring_bitmap)) {
 		edma_err("Validating host SFE rings failed\n");
 		return -EINVAL;
 	}
 
+	/*
+	 * Validate host PPE VP tx rings
+	 */
+	tx_info = &host_info->vp_info.tx_info;
+	if (edma_validate_host_txrx_rings(NULL, tx_info, 0, txcmpl_ring_bitmap)) {
+		edma_err("Validating host PPE VP tx rings failed\n");
+		return -EINVAL;
+	}
+
 	return 0;
 }
+
+#ifdef NSS_DP_HW_GRO
+/*
+ * edma_validate_gro_ring_info()
+ *	Validate GRO ring information
+ */
+static int edma_validate_gro_ring_info(void)
+{
+	int i;
+
+	/* Validate GRO module parameters */
+	if (edma_dp_gro_num_rxfill_rings <= 0 || edma_dp_gro_num_rxfill_rings > EDMA_MAX_RXFILL_RING_PER_TYPE) {
+		edma_err("Invalid GRO rxfill rings: %d (max: %d)\n",
+			 edma_dp_gro_num_rxfill_rings, EDMA_MAX_RXFILL_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	if (edma_dp_gro_num_rx_rings <= 0 || edma_dp_gro_num_rx_rings > EDMA_MAX_RXDESC_RING_PER_TYPE) {
+		edma_err("Invalid GRO rx rings: %d (max: %d)\n",
+			 edma_dp_gro_num_rx_rings, EDMA_MAX_RXDESC_RING_PER_TYPE);
+		return -EINVAL;
+	}
+
+	if (edma_dp_gro_queues_per_ring <= 0) {
+		edma_err("Invalid GRO queues per ring: %d\n", edma_dp_gro_queues_per_ring);
+		return -EINVAL;
+	}
+
+	/* Validate GRO ring IDs */
+	for (i = 0; i < edma_dp_gro_num_rx_rings; i++) {
+		if ((edma_dp_gro_rx_rings[i] < 0) || (edma_dp_gro_rx_rings[i] >= EDMA_MAX_RXDESC_RINGS)) {
+			edma_err("Invalid GRO rx ring ID at index %d: %d\n", i, edma_dp_gro_rx_rings[i]);
+			return -EINVAL;
+		}
+	}
+
+	/* Validate GRO queue map */
+	for (i = 0; i < edma_dp_gro_num_rx_rings; i++) {
+		if (edma_dp_gro_rx_queue_map[i] < 0) {
+			edma_err("Invalid GRO queue map at index %d: %d\n", i, edma_dp_gro_rx_queue_map[i]);
+			return -EINVAL;
+		}
+	}
+
+	/* Validate GRO rxfill map */
+	for (i = 0; i < edma_dp_gro_num_rxfill_rings; i++) {
+		if ((edma_dp_gro_rxfill_map[i] < 0) || (edma_dp_gro_rxfill_map[i] >= EDMA_MAX_RXFILL_RINGS)) {
+			edma_err("Invalid GRO rxfill map at index %d: %d\n", i, edma_dp_gro_rxfill_map[i]);
+			return -EINVAL;
+		}
+	}
+
+	return 0;
+}
+#endif
 
 /*
  * edma_parse_ini()
@@ -665,6 +936,7 @@ static int edma_validate_host_ring_info(void)
  */
 static int edma_parse_ini(void)
 {
+	int i;
 	/*
 	 * TO-DO: Remove the module params and replace them with the
 	 * parsing logic to fetch the information from INI file.
@@ -677,6 +949,9 @@ static int edma_parse_ini(void)
 	struct edma_rx_rings_info *rx_info = &host_info->sfe_info.rx_info;
 	struct edma_tx_rings_info *tx_info = &host_info->sfe_info.tx_info;
 	fal_portscheduler_resource_t cfg = {0};
+#ifdef NSS_DP_HW_GRO
+	struct edma_rx_rings_info *rx_gro_info;
+#endif
 
 	/*
 	 * Get the queue base for host queues.
@@ -687,22 +962,51 @@ static int edma_parse_ini(void)
 	}
 
 	edma_gbl_ctx.rx_queue_start = cfg.ucastq_start;
-
 	host_info->common_info.edma_num_rxfill_rings = edma_dp_host_num_rxfill_rings;
 	host_info->common_info.edma_num_txcmpl_rings = edma_dp_host_num_txcmpl_rings;
 
 	rx_info->num_rx_rings = edma_dp_host_num_rx_rings;
 	rx_info->num_queues_per_ring = edma_dp_host_queues_per_ring;
 
-	for (int i = 0; i < EDMA_MAX_RXDESC_RING_PER_TYPE; i++) {
+	for (i = 0; i < EDMA_MAX_RXDESC_RING_PER_TYPE; i++) {
 		rx_info->rx_map[i].rx_ring_id = edma_dp_host_rx_rings[i];
 		rx_info->rx_map[i].ppe_queue_base = edma_dp_host_rx_queue_map[i];
 		rx_info->rx_map[i].rx_fill_ring_id = edma_dp_host_rxfill_map[i];
 	}
 
-	for (int i = 0; i < EDMA_MAX_RXFILL_RING_PER_TYPE; i++) {
+	for (i = 0; i < EDMA_MAX_RXFILL_RING_PER_TYPE; i++) {
 		host_info->common_info.edma_rxfill_ring_map[i] = edma_dp_host_rxfill_map[i];
 	}
+
+#ifdef NSS_DP_HW_GRO
+	/*
+	 * GRO setup need to happen after SFE rings are initialized
+	 */
+	if (edma_validate_gro_ring_info() < 0) {
+		edma_err("GRO ring validation failed\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * GRO setup
+	 */
+	edma_gbl_ctx.hw_gro_ctx.rx_gro_queue_start = edma_dp_gro_ppe_queue_base;
+	edma_gbl_ctx.hw_gro_ctx.rx_gro_ring_start = edma_dp_gro_rx_rings[0];
+
+	rx_gro_info = &host_info->gro_info.rx_info;
+
+	/*
+	 * configure GRO ctx.
+	 */
+	rx_gro_info->num_rx_rings = edma_dp_gro_num_rx_rings;
+	rx_gro_info->num_queues_per_ring = edma_dp_gro_queues_per_ring;
+
+	for (i = 0; i < EDMA_MAX_RXDESC_RING_PER_TYPE; i++) {
+		rx_gro_info->rx_map[i].rx_ring_id = edma_dp_gro_rx_rings[i];
+		rx_gro_info->rx_map[i].ppe_queue_base = edma_dp_gro_rx_queue_map[i];
+		rx_gro_info->rx_map[i].rx_fill_ring_id = edma_dp_gro_rxfill_map[i];
+	}
+#endif
 
 	/*
 	 * Configure host TX ctx.
@@ -723,6 +1027,26 @@ static int edma_parse_ini(void)
 		for (int j = 0; j < EDMA_MAX_TX_RINGS_PER_CORE; j++) {
 			int c = ((i * EDMA_MAX_TX_RINGS_PER_CORE) + j);
 			tx_info->tx_ring_per_core_map[i][j] = edma_dp_host_tx_ring_to_core_map[c];
+		}
+	}
+
+	/*
+	 * PPE VP configurations.
+	 */
+	tx_info = &host_info->vp_info.tx_info;
+
+	tx_info->num_tx_rings = edma_dp_ppe_vp_num_tx_rings;
+	tx_info->max_rings_per_core = edma_dp_ppe_vp_num_tx_rings_per_core;
+
+	for (int i = 0; i < tx_info->num_tx_rings; i++) {
+		tx_info->tx_map[i].tx_ring_id = edma_dp_ppe_vp_tx_rings[i];
+		tx_info->tx_map[i].tx_cmpl_ring_id = edma_dp_ppe_vp_txcmpl_map[i];
+	}
+
+	for (int i = 0; i < NR_CPUS; i++) {
+		for (int j = 0; j < EDMA_MAX_TX_RINGS_PER_CORE; j++) {
+			int c = ((i * EDMA_MAX_TX_RINGS_PER_CORE) + j);
+			tx_info->tx_ring_per_core_map[i][j] = edma_dp_ppe_vp_tx_ring_to_core_map[c];
 		}
 	}
 
@@ -916,7 +1240,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	 */
 #if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
 	of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rx-page-mode",
-					&edma_gbl_ctx.rx_page_mode);
+						&edma_gbl_ctx.rx_page_mode);
 #endif
 
 	/*
@@ -1271,15 +1595,17 @@ tx_alloc_fail:
  */
 static inline int edma_hw_reset(struct edma_gbl_ctx *egc)
 {
+	int hw_reset = 0;
 
 	/*
 	 * Soc Specific Reset
 	 */
-	nss_dp_hal_hw_reset(egc->pdev);
+	hw_reset = nss_dp_hal_hw_reset(egc->pdev);
 
-	edma_info("EDMA HW Reset completed succesfully\n");
-
-	return 0;
+	if (hw_reset == 0) {
+		edma_info("EDMA HW Reset completed succesfully\n");
+	}
+	return hw_reset;
 }
 
 /*
@@ -1388,6 +1714,51 @@ void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc)
 void edma_configure_mirror_pkt_capture_core(uint8_t core_id, void *app_data)
 {
 	edma_cfg_rx_mcast_qid_to_core_mapping(&edma_gbl_ctx, core_id);
+}
+
+/*
+ * edma_cfg_ring_to_backpressure_mapping()
+ *      Map txcmpl, rxdesc & rxfill ring_id to backpressure counter index after adding offset.
+ */
+static void edma_cfg_ring_to_backpressure_mapping(void)
+{
+        uint8_t mapped_ring_id;
+        uint8_t ring_id;
+        for (uint8_t i = 0; i < EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX; i++) {
+                /*
+                 * Map txcmpl rings to BP idx 0-5
+                 */
+                ring_id = edma_bp_stats_en_txcmpl_rings[i];
+                if (ring_id >= EDMA_MAX_TXCMPL_RINGS) {
+                        pr_err("Invalid txcmpl ring_id: %u, hence mapping ring_id = 0\n", ring_id);
+                        ring_id = 0;
+                }
+                mapped_ring_id = ring_id + EDMA_REG_BP_TXCMPL_RING_ID_OFFSET;
+                edma_reg_write(EDMA_REG_DBG_CNT_PORT_MAP(i + EDMA_REG_TXCMPL_BP_IDX_OFFSET), mapped_ring_id & EDMA_DBG_CNT_PORT_MAP_VAL_MASK);
+
+                /*
+                 * Map rxdesc rings to BP idx 6-11
+                 */
+                ring_id = edma_bp_stats_en_rxdesc_rings[i];
+                if (ring_id >= EDMA_MAX_RXDESC_RINGS) {
+                        pr_err("Invalid rxdesc ring_id: %u, hence mapping ring_id = 0\n", ring_id);
+                        ring_id = 0;
+                }
+                mapped_ring_id = ring_id + EDMA_REG_BP_RXDESC_RING_ID_OFFSET;
+                edma_reg_write(EDMA_REG_DBG_CNT_PORT_MAP(i + EDMA_REG_RXDESC_BP_IDX_OFFSET), mapped_ring_id & EDMA_DBG_CNT_PORT_MAP_VAL_MASK);
+
+                /*
+                 * Map rxfill rings to BP idx 12-17
+                 */
+                ring_id = edma_bp_stats_en_rxfill_rings[i];
+                if (ring_id >= EDMA_MAX_RXFILL_RINGS) {
+                        pr_err("Invalid rxfill ring_id: %u, hence mapping ring_id = 0\n", ring_id);
+                        ring_id = 0;
+                }
+                mapped_ring_id = ring_id + EDMA_REG_BP_RXFILL_RING_ID_OFFSET;
+                edma_reg_write(EDMA_REG_DBG_CNT_PORT_MAP(i + EDMA_REG_RXFILL_BP_IDX_OFFSET), mapped_ring_id & EDMA_DBG_CNT_PORT_MAP_VAL_MASK);
+        }
+
 }
 
 /*
@@ -1501,6 +1872,9 @@ static void edma_init_txcmpl_rings(struct edma_gbl_ctx *egc,
  */
 void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *init_info)
 {
+#ifdef NSS_DP_HW_GRO
+	struct edma_rx_rings_info *gro_rx_rings = &init_info->host_info.gro_info.rx_info;
+#endif
 	struct edma_rx_rings_info *rx_rings = &init_info->host_info.sfe_info.rx_info;
 	struct edma_tx_rings_info *tx_rings = &init_info->host_info.sfe_info.tx_info;
 	struct edma_host_info *host_info = &init_info->host_info;
@@ -1553,11 +1927,79 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 				EDMA_TX_RING_SIZE);
 
 	/*
+	 * Mark PPEVP rings.
+	 */
+	tx_rings = &host_info->vp_info.tx_info;
+
+	/*
+	 * Mark PPEVP TX descriptor rings
+	 */
+	edma_init_txdesc_rings(egc, tx_rings->tx_map, tx_rings->num_tx_rings,
+				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_VP,
+				EDMA_TX_RING_SIZE);
+
+	/*
+	 * Mark the GRO RX rings into the global RX rings pool.
+	 * TODO: Parameters will be extracted from GRO structure rather than
+	 * module param
+	 */
+	edma_init_rxfill_rings(egc, edma_dp_gro_rxfill_map,
+				edma_dp_gro_num_rxfill_rings, EDMA_RING_TYPE_HOST,
+				EDMA_RING_TYPE_FLAGS_HOST_GRO, EDMA_RX_RING_SIZE,
+				alloc_size, buf_len, egc->rx_page_mode);
+
+	edma_init_rxdesc_rings(egc, gro_rx_rings->rx_map, edma_dp_gro_num_rx_rings,
+				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_GRO,
+				EDMA_RX_RING_SIZE, gro_rx_rings->num_queues_per_ring);
+
+	/*
 	 * TO-DO: Further for other host rings like VP host rings, SMD host rings,
 	 * simply mark them into the global pool so that these will be initialized and setup
 	 * at once. This makes it easy to add/delete a new type of host ring.
 	 */
 }
+
+#ifdef NSS_DP_HW_GRO
+/*
+ * edma_hw_gro_init()
+ *	HW GRO Initialization
+ */
+static int edma_hw_gro_init(struct edma_gbl_ctx *egc)
+{
+	int ret = 0;
+
+	egc->hw_gro_ctx.gro_timeout_usecs = EDMA_RX_GRO_TIMEOUT_DEFAULT;
+	egc->hw_gro_ctx.gro_buffer_len = EDMA_RX_GRO_BUFFER_LEN_DEFAULT;
+	egc->hw_gro_ctx.gro_desc_count = EDMA_RX_GRO_DESC_COUNT_DEFAULT;
+	egc->hw_gro_ctx.hw_gro_en = true;
+
+	ret = edma_rx_gro_timeout_configure(&egc->hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO timeout: %d\n", ret);
+		return ret;
+	}
+
+	ret = edma_rx_gro_buffer_len_configure(&egc->hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO buffer len: %d\n", ret);
+		return ret;
+	}
+
+	ret = edma_rx_gro_desc_count_configure(&egc->hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO desc count: %d\n", ret);
+		return ret;
+	}
+
+	ret = edma_rx_gro_slot_vld_configure(egc);
+	if (ret) {
+		edma_err("Failed to configure GRO slot vld: %d\n", ret);
+		return ret;
+	}
+
+	return 0;
+}
+#endif
 
 /*
  * edma_hw_init()
@@ -1592,11 +2034,13 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_err("Error in resetting the hardware. ret: %d\n", ret);
 		return ret;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_HW_RESET_DONE);
 
 	/*
 	 * Set EDMA global page mode and jumbo MRU
 	 */
 	edma_cfg_rx_page_mode_and_jumbo(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_PAGE_MODE_SET);
 
 	/*
 	 * Set EDMA Tx max ports.
@@ -1618,6 +2062,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_err("Error in initializaing the rings. ret: %d\n", ret);
 		return ret;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_RINGS_ALLOCATED);
 
 	/*
 	 * Disable interrupts
@@ -1628,7 +2073,9 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	edma_cfg_tx_rings_disable(egc);
 
 	edma_cfg_tx_mapping(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_TX_MAPPING_DONE);
 	edma_cfg_rx_mapping(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_RX_MAPPING_DONE);
 #if defined(NSS_DP_POINT_OFFLOAD)
 	edma_cfg_tx_point_offload_mapping(egc);
 	edma_cfg_rx_point_offload_mapping(egc);
@@ -1636,7 +2083,9 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 
 	edma_fetch_mitigation_timer_rate(egc, NSS_DP_EDMA_CLK);
 	edma_cfg_tx_rings(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_TX_RINGS_CFG);
 	edma_cfg_rx_rings(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_RX_RINGS_CFG);
 #if defined(NSS_DP_POINT_OFFLOAD)
 	edma_cfg_rx_point_offload_rings(egc);
 #endif
@@ -1651,6 +2100,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		| EDMA_DMAR_TXDESC_OUTSTANDING_NUM_SET(7)
 		| EDMA_DMAR_RXFILL_OUTSTANDING_NUM_SET(7);
 	edma_reg_write(EDMA_REG_DMAR_CTRL, data);
+	edma_set_init_stage(EDMA_INIT_STAGE_DMA_CTRL_CFG);
 
 	/*
 	 * Configure TXQ_CTRL_2 register - TSO IP Identification (IPID) Update Control
@@ -1748,11 +2198,13 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_cfg_rx_rings_cleanup(egc);
 		return ret;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_PRIO_MAP_CFG);
 
 	/*
 	 * Initialize RPS hash map table
 	 */
 	edma_configure_rps_hash_map(egc);
+	edma_set_init_stage(EDMA_INIT_STAGE_RPS_HASH_CFG);
 
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	if (dp_global_ctx.is_mht_dev) {
@@ -1806,15 +2258,25 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		 * Loopback register configuration
 		 */
 		edma_hw_loopback_init(egc);
+		edma_set_init_stage(EDMA_INIT_STAGE_LOOPBACK_CFG);
+	}
+#endif
+
+#ifdef NSS_DP_HW_GRO
+	ret = edma_hw_gro_init(egc);
+	if (ret) {
+		edma_err("HW GRO initialization failed\n");
+		return ret;
 	}
 #endif
 
 	egc->edma_initialized = true;
+	edma_set_init_stage(EDMA_INIT_STAGE_PORT_ENABLED);
 
 	return 0;
 }
 
-#if !defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX)
+#if !defined(NSS_DP_IPQ96XX)
 /*
  * edma_configure_clocks()
  *	API to configure EDMA common clocks
@@ -1835,6 +2297,96 @@ static int32_t edma_configure_clocks(void)
 	}
 
 	return 0;
+}
+#endif
+
+#ifdef NSS_DP_HW_GRO
+/*
+ * edma_rx_gro_timeout_cfg()
+ *	Code change to configure GRO timeout
+ */
+int edma_rx_gro_max_timeout_cfg(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs > EDMA_RX_GRO_TIMEOUT_MAX) {
+    		edma_err("GRO timeout %d exceeds max %d\n", edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs, EDMA_RX_GRO_TIMEOUT_MAX);
+		return -EINVAL;
+	}
+
+	ret = edma_rx_gro_timeout_configure(&edma_gbl_ctx.hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO timeout: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+/*
+ * edma_rx_gro_buffer_len_cfg()
+ *	Code change to configure GRO total coalescing buffer len
+ */
+int edma_rx_gro_max_buffer_len_cfg(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (edma_gbl_ctx.hw_gro_ctx.gro_buffer_len >  EDMA_RX_GRO_BUFFER_LEN_MAX) {
+		edma_debug("%p: gro buffer len more than max buffer length supported\n", &edma_gbl_ctx, edma_gbl_ctx.hw_gro_ctx.gro_buffer_len);
+		return -1;
+	}
+
+	ret = edma_rx_gro_buffer_len_configure(&edma_gbl_ctx.hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO buffer len: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
+}
+
+
+/*
+ * edma_rx_gro_max_desc_count_cfg()
+ *	Code change to configure GRO total coalescing buffer len
+ */
+int edma_rx_gro_max_desc_count_cfg(struct ctl_table *table, int write,
+                void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if (edma_gbl_ctx.hw_gro_ctx.gro_desc_count > EDMA_RX_GRO_DESC_COUNT_MAX) {
+		edma_debug("%p: gro desc count more than max desc count supported\n", &edma_gbl_ctx, edma_gbl_ctx.hw_gro_ctx.gro_desc_count);
+		return -1;
+	}
+
+	ret = edma_rx_gro_desc_count_configure(&edma_gbl_ctx.hw_gro_ctx);
+	if (ret) {
+		edma_err("Failed to configure GRO desc count: %d\n", ret);
+		return ret;
+	}
+
+	return ret;
 }
 #endif
 
@@ -1885,6 +2437,30 @@ static struct ctl_table edma_sub[] = {
 		.mode           =       0644,
 		.proc_handler   =       edma_vlan_append_handler
 	},
+
+#ifdef NSS_DP_HW_GRO
+	{
+		.procname	=	"gro_timeout",
+		.data		=	&edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs,
+		.maxlen		=	sizeof(int),
+		.mode		=	0644,
+		.proc_handler	=	edma_rx_gro_max_timeout_cfg
+	},
+	{
+		.procname       =       "gro_buffer_len",
+		.data           =       &edma_gbl_ctx.hw_gro_ctx.gro_buffer_len,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_rx_gro_max_buffer_len_cfg
+	},
+	{
+		.procname       =       "gro_desc_count",
+		.data           =       &edma_gbl_ctx.hw_gro_ctx.gro_desc_count,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_rx_gro_max_desc_count_cfg
+	},
+#endif
 	{}
 };
 
@@ -1902,6 +2478,10 @@ int edma_init(void)
 	struct edma_rx_rings_info *rx_info;
 	int min;
 
+	edma_gbl_ctx.hw_init_bitmap = 0;
+	edma_gbl_ctx.clk_init_bitmap = 0;
+	edma_set_init_stage(EDMA_INIT_STAGE_CTX_ALLOC);
+
 	/*
 	 * Check the EDMA state
 	 */
@@ -1917,12 +2497,14 @@ int edma_init(void)
 		edma_err("Unable to get EDMA DTS data.\n");
 		return -EINVAL;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_DTS_PARSED);
 
 	edma_gbl_ctx.ctl_table_hdr = register_sysctl("net/edma", edma_sub);
 	if (!edma_gbl_ctx.ctl_table_hdr) {
 		edma_err("sysctl table configuration failed");
 		return -EINVAL;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_SYSCTL_REG);
 
 	/*
 	 * Request memory region for EDMA registers
@@ -1936,6 +2518,7 @@ int edma_init(void)
 		edma_gbl_ctx.ctl_table_hdr = NULL;
 		return -EFAULT;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_MEM_REGION_REQ);
 
 	/*
 	 * Parse and config EDMA ini
@@ -1956,6 +2539,7 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_init_remap_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_IOREMAP_DONE);
 
 	/*
 	 * Initialize EDMA debugfs entry
@@ -1966,6 +2550,7 @@ int edma_init(void)
 		ret = -EINVAL;
 		goto edma_debugfs_init_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_DEBUGFS_INIT);
 
 #ifdef NSS_DP_PPEDS_SUPPORT
 	if (edma_ppeds_init(&edma_gbl_ctx.ppeds_drv) != 0) {
@@ -1973,12 +2558,13 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_init_ppeds_init_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_PPEDS_INIT);
 #endif
 
 	/*
 	 * Configure the EDMA common clocks
 	 */
-#if !defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX)
+#if !defined(NSS_DP_IPQ96XX)
 	/*
 	 * TODO: Revisit this during SOD
 	 */
@@ -1988,6 +2574,7 @@ int edma_init(void)
 		ret = -EFAULT;
 		goto edma_hw_init_fail;
 	}
+	edma_set_init_stage(EDMA_INIT_STAGE_CLOCKS_CONFIGURED);
 #endif
 
 	edma_info("EDMA common clocks are configured\n");
@@ -2001,7 +2588,7 @@ int edma_init(void)
 	/*
 	 * Register PTP service code callback function
 	 */
-	ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_phy_tstamp_buf, NULL);
+	ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_tstamp_buf, NULL);
 #endif
 	/*
 	 * Register mirror core selection API callback with PPE driver
@@ -2012,6 +2599,16 @@ int edma_init(void)
 	 * We add NAPIs and register IRQs at the time of the first netdev open
 	 */
 	edma_gbl_ctx.napi_added = false;
+
+#ifdef NSS_DP_HW_GRO
+	/*
+	 * GRO ring to queue mapping
+	 */
+	for (i = 0; i < edma_dp_gro_num_rx_rings; i++) {
+		queue_start = edma_gbl_ctx.hw_gro_ctx.rx_gro_queue_start;
+		ppe_drv_gro_core2queue_mapping(i, queue_start + i);
+	}
+#endif
 
 	/*
 	 * DP module maintains queue to ring mapping, and the rings are mapped
@@ -2042,9 +2639,15 @@ int edma_init(void)
 #endif
 
 	/*
+	 * Initialize the mapping of txcmpl, rxdesc and rxfill rings to bp counters
+	 */
+	edma_cfg_ring_to_backpressure_mapping();
+
+	/*
 	 * Initialize the procf entries for enabling EDMA ring stats
 	 */
 	edma_procfs_init();
+	edma_set_init_stage(EDMA_INIT_STAGE_PROCFS_INIT);
 
 	/*
          * Initialize the EDMA global context work task with the edma_recovery_work function
@@ -2139,7 +2742,6 @@ int edma_irq_init(void)
 				 (edma_gbl_ctx.device_node)->name,
 				 i, edma_gbl_ctx.rxdesc_info[i].intr_num);
 	}
-
 
 	/*
 	 * Get misc IRQ number
