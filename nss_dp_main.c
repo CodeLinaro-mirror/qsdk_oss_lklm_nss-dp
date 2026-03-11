@@ -171,7 +171,7 @@ MODULE_PARM_DESC(edma_loopback_buffer_size, "Loopback buffer size");
  */
 uint32_t edma_loopback_feature_type = 1;
 module_param(edma_loopback_feature_type, int, 0644);
-MODULE_PARM_DESC(edma_loopback_feature_type, "loopback feature type 0x0: disabled, 0x1: default, 0x2: ddr extended buffer, 0x4: gretap to mapt");
+MODULE_PARM_DESC(edma_loopback_feature_type, "loopback feature type 0x0: disabled, 0x1: default, 0x2: ddr extended buffer, 0x4: gretap to mapt, 0x8: speed-mismatch DDR buffering");
 #endif
 
 uint32_t rx_ring_sz_low_mem = 512;
