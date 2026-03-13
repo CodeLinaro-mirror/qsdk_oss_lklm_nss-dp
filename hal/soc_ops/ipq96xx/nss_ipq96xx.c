@@ -11,6 +11,7 @@
 #include <nss_dp_arch.h>
 #include "nss_dp_hal.h"
 #include "edma.h"
+#include "edma_debug.h"
 
 int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
 int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0,8,16,24,32,-1,-1,-1,-1,-1};
@@ -250,11 +251,18 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
  */
 int32_t nss_dp_hal_hw_reset(void *ctx)
 {
-	struct reset_control *edma_hw_rst;
+	struct reset_control *edma_hw_rst, *edma_cfg_rst;
 	struct platform_device *pdev = (struct platform_device *)ctx;
 
 	edma_hw_rst = devm_reset_control_get(&pdev->dev, EDMA_HW_RESET_ID);
 	if (IS_ERR(edma_hw_rst)) {
+		edma_err("Error: edma HW reset failed\n");
+		return -EINVAL;
+	}
+
+	edma_cfg_rst = devm_reset_control_get(&pdev->dev, EDMA_CFG_RESET_ID);
+	if (IS_ERR(edma_cfg_rst)) {
+		edma_err("Error: edma HW CFG reset failed\n");
 		return -EINVAL;
 	}
 
@@ -267,10 +275,26 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
  	 */
 	edma_gbl_ctx.hw_rst = edma_hw_rst;
 
+	/*
+	 * Store the obtained edma configuration reset handle (`edma_cfg_rst`) in the global context
+	 * (`edma_gbl_ctx`) for future use. This allows for centralized configuration reset control
+	 * throughout the driver.
+	 */
+	edma_gbl_ctx.cfg_rst = edma_cfg_rst;
+
 	reset_control_assert(edma_hw_rst);
 	udelay(100);
 
 	reset_control_deassert(edma_hw_rst);
+	udelay(100);
+
+	/*
+	 * EDMA configuration reset.
+	 */
+	reset_control_assert(edma_cfg_rst);
+	udelay(100);
+
+	reset_control_deassert(edma_cfg_rst);
 	udelay(100);
 
 	return 0;
