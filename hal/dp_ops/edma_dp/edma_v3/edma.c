@@ -2395,7 +2395,6 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	return 0;
 }
 
-#if !defined(NSS_DP_IPQ96XX)
 /*
  * edma_configure_clocks()
  *	API to configure EDMA common clocks
@@ -2417,7 +2416,6 @@ static int32_t edma_configure_clocks(void)
 
 	return 0;
 }
-#endif
 
 #ifdef NSS_DP_DDRQ_SUPPORT
 /*
@@ -2715,7 +2713,6 @@ int edma_init(void)
 	/*
 	 * Configure the EDMA common clocks
 	 */
-#if !defined(NSS_DP_IPQ96XX)
 	/*
 	 * TODO: Revisit this during SOD
 	 */
@@ -2726,7 +2723,6 @@ int edma_init(void)
 		goto edma_hw_init_fail;
 	}
 	edma_set_init_stage(EDMA_INIT_STAGE_CLOCKS_CONFIGURED);
-#endif
 
 	edma_info("EDMA common clocks are configured\n");
 
@@ -3267,7 +3263,6 @@ static int edma_recovery_setup(void)
 		goto edma_init_remap_fail;
 	}
 
-#if !defined(NSS_DP_IPQ96XX) && !defined(NSS_DP_IPQ52XX)
 	/*
 	 * Configure the EDMA common clocks
 	 */
@@ -3279,7 +3274,6 @@ static int edma_recovery_setup(void)
 	}
 
 	edma_info("EDMA common clocks are configured\n");
-#endif
 
 	if (edma_hw_init(&edma_gbl_ctx) != 0) {
 		edma_err("Error in edma initialization\n");
