@@ -189,22 +189,20 @@ MODULE_PARM_DESC(tx_ring_sz_high_mem, "edma tx ring size for high memory");
 static int nss_dp_eth_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {
 	struct nss_dp_dev *dp_priv;
-	int ret;
 
 	if (!netdev || !ifr)
-		return -EINVAL;
-
-	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
-	if (!dp_priv)
 		return -EINVAL;
 
 	/*
 	 * Try PHY-level PTP first (higher priority, more accurate)
 	 * PHY timestamping is closer to the wire and typically more precise
 	 */
-	ret = phy_do_ioctl_running(netdev, ifr, cmd);
-	if (!ret)
-		return ret;
+	if (phy_has_hwtstamp(netdev->phydev))
+		return phy_do_ioctl_running(netdev, ifr, cmd);
+
+	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
+	if (!dp_priv)
+		return -EINVAL;
 
 	/*
 	 * Fall back to MAC-level PTP (XGMAC) if PHY doesn't support it
