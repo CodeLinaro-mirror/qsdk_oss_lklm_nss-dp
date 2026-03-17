@@ -1853,7 +1853,7 @@ static int edma_ddrq_get_ddrq_mem_regions(void)
 	edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr = rmem->base;
 	edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.size = rmem->size;
 
-	edma_warn("ddrq data reg addr: %pa, size: %lu, ddrq desc reg addr: %pa, size: %lu\n",
+	edma_warn("ddrq data reg addr: %pa, size: %zu, ddrq desc reg addr: %pa, size: %zu\n",
 				&edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.phy_addr,
 				edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.size,
 				&edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr,
