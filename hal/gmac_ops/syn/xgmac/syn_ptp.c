@@ -16,14 +16,13 @@
 #include <linux/ptp_clock_kernel.h>
 #include <linux/slab.h>
 #include <linux/spinlock.h>
-#include <linux/gpio.h>
-#include <linux/gpio/consumer.h>
 #include <linux/io.h>
 #include <linux/of.h>
 #include <linux/interrupt.h>
 #include <linux/clk.h>
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
+#include <linux/time.h>
 #include <fal/fal_port_ctrl.h>
 #include "nss_dp_api_if.h"
 #include "nss_dp_hal_if.h"
@@ -51,7 +50,25 @@ static DEFINE_MUTEX(ptp_debugfs_mutex);
 #define IPQ96XX_PPS_IN_IRQ		362
 #define IPQ96XX_PPS_OUT_IRQ		363
 
+/* SPARE2 register for PPS output enable control */
+#define IPQ52XX_SPARE2_REG		0x01110020
+#define IPQ52XX_SPARE2_PPS_EN		BIT(1)	/* PPS_EN: enable PPS output for IPQ5210 */
+#define IPQ96XX_SPARE2_REG		0x01110020
+#define IPQ96XX_SPARE2_TSN_EN		BIT(5)	/* TSN_EN: enable PPS output for IPQ9650 */
+
 #define SYN_MAC_PTP_TXTS_FIFO_NUM	8
+
+/*
+ * SYN_PTP_PPS_BOUNDARY_THRESHOLD_NS - Distance from a second boundary above
+ * which a hardware AUX timestamp is treated as a possible PPS glitch.
+ *
+ * A genuine PPS pulse should arrive very close to a second boundary.
+ * If the captured timestamp is further than this threshold (and the clock
+ * has already been synchronized), a dev_warn_ratelimited message is emitted,
+ * aux_ts_glitch is incremented, and the timestamp is skipped (not delivered
+ * to ts2phc).
+ */
+#define SYN_PTP_PPS_BOUNDARY_THRESHOLD_NS	10000000U	/* 10 ms */
 
 static int syn_ptp_time_set(void __iomem *mac_base, u32 flag, u32 sec, u32 nsec)
 {
@@ -86,10 +103,35 @@ static int syn_ptp_increment_set(void __iomem *mac_base, u32 ns)
 	value |= FIELD_PREP(SYN_MAC_SUB_SEC_INCR_SSINC_MASK, ns);
 
 	hal_write_reg(mac_base, SYN_MAC_SUB_SEC_INCR, value);
-	dev_dbg(NULL, "SYN_MAC_SUB_SEC_INCR configured: reg=0x%x, val=0x%x, ns=%u\n",
-		SYN_MAC_SUB_SEC_INCR, value, ns);
 
 	return 0;
+}
+
+/*
+ * syn_ptp_pps_ctrl_set()
+ *	Configure the PPS0 output frequency via MAC_PPS_Control register
+ *
+ * Sets PPSCTRL0 (bits 3:0) to the requested value while preserving all
+ * other bits in the register (PPSEN0, TRGTMODSEL0, etc.).
+ *
+ * PPSCTRL0 encoding (MAC_PPS_Control, offset 0xD70):
+ *   0000 - 1 narrow pulse per second (default, width = clk_ptp_ref_i)
+ *   0001 - generated clock: binary 2 Hz / digital 1 Hz rollover
+ *   0010 - generated clock: binary 4 Hz / digital 2 Hz rollover
+ *   0011 - generated clock: binary 8 Hz / digital 4 Hz rollover
+ *   0100 - generated clock: binary 16 Hz / digital 8 Hz rollover
+ *
+ * @mac_base: MMIO base address of the XGMAC instance
+ * @ppsctrl:  PPSCTRL0 value to program (use SYN_MAC_PPS_CTL_PPSCTRL0_* defines)
+ */
+static void syn_ptp_pps_ctrl_set(void __iomem *mac_base, u32 ppsctrl)
+{
+	u32 pps_ctl;
+
+	pps_ctl = hal_read_reg(mac_base, SYN_MAC_PPS_CTL);
+	pps_ctl &= ~SYN_MAC_PPS_CTL_PPSCTRL_MASK;
+	pps_ctl |= (ppsctrl & SYN_MAC_PPS_CTL_PPSCTRL_MASK);
+	hal_write_reg(mac_base, SYN_MAC_PPS_CTL, pps_ctl);
 }
 
 static int syn_ptp_adjfine(void __iomem *mac_base, u32 addend)
@@ -136,6 +178,10 @@ static int qcom_nss_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 
 	addend = (u32)adjust_by_scaled_ppm(ptp_priv->default_addend, scaled_ppm);
 
+	dev_dbg(ptp_priv->dev,
+		"adjfine: scaled_ppm=%ld default_addend=0x%08x new_addend=0x%08x\n",
+		scaled_ppm, ptp_priv->default_addend, addend);
+
 	spin_lock_irqsave(&ptp_priv->lock, flags);
 	ret = syn_ptp_adjfine(mac_base, addend);
 	spin_unlock_irqrestore(&ptp_priv->lock, flags);
@@ -168,11 +214,38 @@ static int qcom_nss_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	/* Convert delta (nanoseconds) to seconds and nanoseconds */
 	sec = div_u64_rem(delta, 1000000000ULL, &nsec);
 
-	/* Write nanoseconds to MAC_System_Time_Nanoseconds_Update register
-	 * Set ADDSUB bit (bit 31) if delta is negative
-	 */
-	if (negative)
+	dev_dbg(ptp_priv->dev,
+		"adjtime: delta=%lld ns (%s) -> sec=%u nsec=%u\n",
+		negative ? -(s64)delta : (s64)delta,
+		negative ? "subtract" : "add", sec, nsec);
+
+	if (negative) {
+		/*
+		 * Per the XGMAC datasheet (MAC_System_Time_Seconds_Update /
+		 * MAC_System_Time_Nanoseconds_Update), the hardware ALWAYS ADDS
+		 * the update register values to the current time, regardless of
+		 * the ADDSUB bit. To subtract, the values must be encoded as
+		 * two's complement so that the addition wraps around:
+		 *
+		 *   TSS  = 2^32 - sec          (complement of seconds)
+		 *   TSSS = 10^9 - nsec         (complement of nanoseconds,
+		 *                               valid when TSCTRLSSR=1)
+		 *
+		 * Example from datasheet: to subtract 2.000000001 s,
+		 *   TSS  = 0xFFFFFFFE (2^32 - 2)
+		 *   TSSS = 0x3B9AC9FF (10^9 - 1)
+		 *
+		 * Note: the hardware adds TSS and TSSS independently with no
+		 * carry between the two fields.
+		 *
+		 * Special case: if nsec == 0, the complement would be 10^9
+		 * which overflows the 30-bit TSSS field; use 0 instead
+		 * (adding 0 nanoseconds is correct when subtracting 0 ns).
+		 */
+		sec  = (u32)(0x100000000ULL - (u64)sec);
+		nsec = (nsec != 0) ? (1000000000U - nsec) : 0U;
 		nsec |= SYN_MAC_SYS_TIME_NSECS_UPDATE_ADDSUB;
+	}
 
 	spin_lock_irqsave(&ptp_priv->lock, flags);
 	ret = syn_ptp_time_set(mac_base, SYN_MAC_TS_CTL_TSUPDT, sec, nsec);
@@ -182,47 +255,84 @@ static int qcom_nss_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 }
 
 /*
+ * __syn_ptp_read_sys_time_locked()
+ *	Read XGMAC system time with rollover protection (caller must hold ptp_priv->lock)
+ *
+ * This is the single authoritative register-read primitive for the hardware PTP
+ * clock. It must be called with ptp_priv->lock already held to prevent races
+ * with concurrent adjtime/settime operations.
+ *
+ * Separating the lock-free core from the locking wrapper allows the IRQ handler
+ * software fallback to reuse this logic without re-acquiring the spinlock
+ * (which would deadlock, since the handler already holds the lock).
+ *
+ * @mac_base: MMIO base address of the XGMAC instance
+ * @sec:  Output - seconds value from SYN_MAC_SYS_TIME_SECS
+ * @nsec: Output - nanoseconds value from SYN_MAC_SYS_TIME_NSECS (masked to 31 bits)
+ */
+static void __syn_ptp_read_sys_time_locked(void __iomem *mac_base,
+					   u32 *sec, u32 *nsec)
+{
+	u32 sec2;
+
+	*sec  = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_SECS);
+	*nsec = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_NSECS);
+	sec2  = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_SECS);
+
+	/* Re-read nanoseconds if seconds rolled over during the read sequence */
+	if (*sec != sec2) {
+		*sec  = sec2;
+		*nsec = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_NSECS);
+	}
+
+	*nsec &= SYN_MAC_SYS_TIME_NSECS_MASK;
+}
+
+/*
+ * syn_ptp_read_sys_time()
+ *	Read current XGMAC system time with rollover protection
+ *
+ * Acquires ptp_priv->lock and delegates to __syn_ptp_read_sys_time_locked().
+ * All external callers (gettimex64, debugfs stats) should use this wrapper.
+ * The IRQ handler software fallback must call __syn_ptp_read_sys_time_locked()
+ * directly because it already holds the lock.
+ *
+ * @ptp_priv: Pointer to PTP private data structure
+ * @sec:  Output - seconds value from SYN_MAC_SYS_TIME_SECS
+ * @nsec: Output - nanoseconds value from SYN_MAC_SYS_TIME_NSECS (masked to 31 bits)
+ */
+static void syn_ptp_read_sys_time(struct syn_ptp_priv *ptp_priv,
+				  u32 *sec, u32 *nsec)
+{
+	void __iomem *mac_base = ptp_priv->shd->nghd.mac_base;
+	unsigned long flags;
+
+	spin_lock_irqsave(&ptp_priv->lock, flags);
+	__syn_ptp_read_sys_time_locked(mac_base, sec, nsec);
+	spin_unlock_irqrestore(&ptp_priv->lock, flags);
+}
+
+/*
  * qcom_nss_ptp_gettimex()
  *	Get current PHC time
  *
- * This function reads the current hardware timestamp.
- * Handles nanosecond rollover correctly.
+ * Reads the current hardware timestamp by delegating to syn_ptp_read_sys_time(),
+ * which handles rollover protection and nanosecond masking.
  */
 static int qcom_nss_ptp_gettimex(struct ptp_clock_info *ptp,
 				 struct timespec64 *ts,
 				 struct ptp_system_timestamp *sts)
 {
 	struct syn_ptp_priv *ptp_priv = container_of(ptp, struct syn_ptp_priv, caps);
-	struct syn_hal_dev *shd = ptp_priv->shd;
-	void __iomem *mac_base = shd->nghd.mac_base;
-	unsigned long flags;
-	u32 sec, nsec, sec2;
+	u32 sec, nsec;
 
-	spin_lock_irqsave(&ptp_priv->lock, flags);
+	syn_ptp_read_sys_time(ptp_priv, &sec, &nsec);
 
-	/* Read seconds */
-	sec = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_SECS);
-
-	/* Read nanoseconds */
-	nsec = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_NSECS);
-
-	/* Read seconds again to detect rollover */
-	sec2 = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_SECS);
-
-	/* If seconds changed, re-read nanoseconds */
-	if (sec != sec2) {
-		sec = sec2;
-		nsec = hal_read_reg(mac_base, SYN_MAC_SYS_TIME_NSECS);
-	}
-
-	spin_unlock_irqrestore(&ptp_priv->lock, flags);
-
-	/* Mask nanoseconds to 31 bits (bit 31 is reserved) */
-	nsec &= SYN_MAC_SYS_TIME_NSECS_MASK;
-
-	/* Fill timespec64 structure */
-	ts->tv_sec = sec;
+	ts->tv_sec  = sec;
 	ts->tv_nsec = nsec;
+
+	dev_dbg(ptp_priv->dev, "gettimex: sec=%u nsec=%u (ts=%llu ns)\n",
+		sec, nsec, (u64)sec * NSEC_PER_SEC + nsec);
 
 	return 0;
 }
@@ -249,6 +359,9 @@ static int qcom_nss_ptp_settime(struct ptp_clock_info *ptp,
 		return -EINVAL;
 	}
 
+	dev_dbg(ptp_priv->dev, "settime: sec=%lld nsec=%ld\n",
+		ts->tv_sec, ts->tv_nsec);
+
 	spin_lock_irqsave(&ptp_priv->lock, flags);
 	ret = syn_ptp_time_set(mac_base, SYN_MAC_TS_CTL_TSINIT,
 			       (u32)ts->tv_sec, (u32)ts->tv_nsec);
@@ -257,33 +370,128 @@ static int qcom_nss_ptp_settime(struct ptp_clock_info *ptp,
 	return ret;
 }
 
-/*
- * qcom_nss_ptp_enable()
- *	Enable/disable PPS capture
- *
- * This function enables or disables PPS timestamp capture.
- */
 static int qcom_nss_ptp_enable(struct ptp_clock_info *ptp,
 			       struct ptp_clock_request *rq, int on)
 {
 	struct syn_ptp_priv *ptp_priv = container_of(ptp, struct syn_ptp_priv, caps);
+	struct syn_hal_dev *shd = ptp_priv->shd;
+	void __iomem *mac_base = shd->nghd.mac_base;
 	unsigned long flags;
 
-	/* Only support external timestamp requests */
-	if (rq->type != PTP_CLK_REQ_EXTTS)
+	switch (rq->type) {
+	case PTP_CLK_REQ_EXTTS: {
+		struct syn_ptp_platform_mgr *mgr = ptp_priv->platform_mgr;
+		unsigned long list_flags;
+
+		spin_lock_irqsave(&ptp_priv->lock, flags);
+		ptp_priv->pps_enabled = (on != 0);
+		spin_unlock_irqrestore(&ptp_priv->lock, flags);
+
+		spin_lock_irqsave(&mgr->pps_list_lock, list_flags);
+		if (on) {
+			/*
+			 * Add this instance to the platform-level PPS active list
+			 * so the shared IRQ handler delivers events to it.
+			 * list_add() is safe to call even if the node is already
+			 * in the list only if we guard with list_empty(); use
+			 * list_del_init() + list_add() to be idempotent.
+			 */
+			if (list_empty(&ptp_priv->pps_list_node))
+				list_add(&ptp_priv->pps_list_node,
+					 &mgr->pps_active_list);
+
+			/* Enable XGMAC timestamping engine */
+			hal_set_reg_bits(mac_base, SYN_MAC_TS_CTL, SYN_MAC_TS_CTL_TSENA);
+
+			/*
+			 * Enable auxiliary snapshot capture for trigger 0 (ATSEN0).
+			 * The XGMAC will latch the system time into the AUX FIFO on
+			 * each rising edge of the PHY PPS signal routed to AUX_IN0.
+			 * Clear the FIFO first to discard any stale entries.
+			 */
+			hal_set_reg_bits(mac_base, SYN_MAC_AUX_CTRL, SYN_MAC_AUX_CTRL_ATSFC);
+			hal_set_reg_bits(mac_base, SYN_MAC_AUX_CTRL, SYN_MAC_AUX_CTRL_ATSEN0);
+		} else {
+			/*
+			 * Disable auxiliary snapshot capture for trigger 0 (ATSEN0).
+			 */
+			hal_clear_reg_bits(mac_base, SYN_MAC_AUX_CTRL, SYN_MAC_AUX_CTRL_ATSEN0);
+
+			/*
+			 * Remove this instance from the active list.
+			 * list_del_init() is safe even if the node is not in any list.
+			 */
+			list_del_init(&ptp_priv->pps_list_node);
+
+			/* Reset for next enable. */
+			ptp_priv->aux_ts_was_synced = false;
+		}
+		spin_unlock_irqrestore(&mgr->pps_list_lock, list_flags);
+		return 0;
+	}
+
+	case PTP_CLK_REQ_PEROUT:
+		/*
+		 * Called by ts2phc via PTP_PEROUT_REQUEST2 ioctl when /dev/ptp0
+		 * is used as the PPS source (ts2phc -s /dev/ptp0 -c eth2).
+		 */
+		spin_lock_irqsave(&ptp_priv->lock, flags);
+
+		/* Enable XGMAC timestamping engine (required for PPS output) */
+		if (on)
+			hal_set_reg_bits(mac_base, SYN_MAC_TS_CTL, SYN_MAC_TS_CTL_TSENA);
+
+		spin_unlock_irqrestore(&ptp_priv->lock, flags);
+
+		/*
+		 * Enable/disable PPS output via SPARE2 register:
+		 *   IPQ5210: set/clear PPS_EN (bit 1)
+		 *   IPQ9650: set/clear TSN_EN (bit 5)
+		 */
+		if (ptp_priv->platform_mgr->spare2) {
+			u32 val = readl(ptp_priv->platform_mgr->spare2);
+			u32 bit = (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX)
+				  ? IPQ52XX_SPARE2_PPS_EN : IPQ96XX_SPARE2_TSN_EN;
+			if (on)
+				writel(val | bit, ptp_priv->platform_mgr->spare2);
+			else
+				writel(val & ~bit, ptp_priv->platform_mgr->spare2);
+		}
+
+		/* Configure PPE switch PPS output source */
+		if (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX ||
+		    ptp_priv->platform_mgr->platform == PLATFORM_IPQ96XX) {
+			fal_port_pps_ctrl_t pps_ctrl = {0};
+			u32 mac_id = ptp_priv->shd->nghd.mac_id;
+
+			/*
+			 * On IPQ52XX, MAC IDs >= 4 are mapped to a different PPE
+			 * port index. Subtract 3 to obtain the correct pps_out_sel
+			 * index (e.g., mac_id=4 → index 0, mac_id=5 → index 1).
+			 */
+			if (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX &&
+			    mac_id >= 4)
+				mac_id -= 3;
+
+			if (WARN_ON(mac_id == 0))
+				return -EINVAL;
+
+			fal_port_pps_ctrl_get(0, &pps_ctrl);
+			if (on) {
+				/* Select this MAC as the PPS output source */
+				pps_ctrl.pps_out_sel = mac_id - 1;
+			} else {
+				/* Release PPS output if this MAC currently owns it */
+				if (pps_ctrl.pps_out_sel == mac_id - 1)
+					pps_ctrl.pps_out_sel = 0;
+			}
+			fal_port_pps_ctrl_set(0, &pps_ctrl);
+		}
+		return 0;
+
+	default:
 		return -EOPNOTSUPP;
-
-	spin_lock_irqsave(&ptp_priv->lock, flags);
-
-	/* Set or clear PPS enabled flag */
-	ptp_priv->pps_enabled = (on != 0);
-
-	spin_unlock_irqrestore(&ptp_priv->lock, flags);
-
-	dev_dbg(ptp_priv->dev,
-		"PPS capture %s\n",  on ? "enabled" : "disabled");
-
-	return 0;
+	}
 }
 
 /*
@@ -291,7 +499,8 @@ static int qcom_nss_ptp_enable(struct ptp_clock_info *ptp,
  *	Verify pin configuration
  *
  * This function validates pin configuration requests.
- * We only support one pin for external timestamps.
+ * We support pin 0 for both external timestamps (PPS input) and
+ * periodic output (PPS output, used by ts2phc as PPS source).
  */
 static int qcom_nss_ptp_verify(struct ptp_clock_info *ptp, unsigned int pin,
 			       enum ptp_pin_function func, unsigned int chan)
@@ -300,53 +509,170 @@ static int qcom_nss_ptp_verify(struct ptp_clock_info *ptp, unsigned int pin,
 	if (pin != 0)
 		return -EINVAL;
 
-	/* Only accept external timestamp function */
-	if (func != PTP_PF_EXTTS)
+	switch (func) {
+	case PTP_PF_EXTTS:
+	case PTP_PF_PEROUT:
+		return 0;
+	default:
 		return -EINVAL;
-
-	return 0;
+	}
 }
 
 /*
  * qcom_nss_ptp_irq_handler_thread()
- *	Threaded interrupt handler for PPS signals
+ *	Threaded interrupt handler for PPS signals with hardware timestamp capture
  *
- * This function is called when a PPS signal is received. It captures
- * the current timestamp and delivers it to userspace via the PTP subsystem.
+ * The PPS_IN IRQ is a single platform-level resource shared by all XGMAC
+ * instances. It is registered once (with the platform manager as private data)
+ * and iterates platform_mgr->pps_active_list to deliver an independent
+ * PPS event to every XGMAC instance that has enabled PPS capture via
+ * PTP_CLK_REQ_EXTTS (qcom_nss_ptp_enable()). Multiple instances can be
+ * synchronized simultaneously.
+ *
+ * This function first attempts to read the hardware-captured auxiliary
+ * timestamp from each XGMAC's AUX FIFO (SYN_MAC_AUX_TS_NSECS/SECS), which
+ * was latched at the exact PPS edge. This provides nanosecond-accurate
+ * timestamps for ts2phc to use when synchronizing each XGMAC RTC to the
+ * PHY RTC.
+ *
+ * If no hardware snapshot is available (ATSEN0 not connected or FIFO empty),
+ * it falls back to a software timestamp by reading the XGMAC system time
+ * at interrupt handler execution time (~1-10 µs latency jitter).
+ *
+ * Hardware path (preferred):
+ *   PPS edge → XGMAC latches time → FIFO → IRQ fires → read FIFO
+ *
+ * Software fallback:
+ *   PPS edge → GPIO IRQ fires → read XGMAC system time now
  *
  * @irq: IRQ number
- * @priv: Pointer to PTP private data structure
+ * @priv: Pointer to platform manager (syn_ptp_platform_mgr)
  *
  * Returns: IRQ_HANDLED
  */
 static irqreturn_t qcom_nss_ptp_irq_handler_thread(int irq, void *priv)
 {
-	struct syn_ptp_priv *ptp_priv = (struct syn_ptp_priv *)priv;
-	struct ptp_clock_event event;
-	struct timespec64 ts;
-	unsigned long flags;
+	struct syn_ptp_platform_mgr *mgr = (struct syn_ptp_platform_mgr *)priv;
+	struct syn_ptp_priv *ptp_priv;
+	unsigned long list_flags;
 
-	/* Check if PPS capture is enabled */
-	spin_lock_irqsave(&ptp_priv->lock, flags);
-	if (!ptp_priv->pps_enabled) {
+	/*
+	 * Iterate all XGMAC instances that have PPS capture enabled and
+	 * deliver an independent timestamp event to each one.
+	 *
+	 * Each XGMAC has its own AUX FIFO and system-time registers, so
+	 * timestamps are read independently per instance.
+	 *
+	 * pps_list_lock is a spinlock so it is safe to acquire here in the
+	 * threaded IRQ context. list_for_each_entry() is safe because
+	 * qcom_nss_ptp_enable() and syn_ptp_cleanup() also hold
+	 * pps_list_lock when modifying the list.
+	 */
+	spin_lock_irqsave(&mgr->pps_list_lock, list_flags);
+	list_for_each_entry(ptp_priv, &mgr->pps_active_list, pps_list_node) {
+		void __iomem *mac_base = ptp_priv->shd->nghd.mac_base;
+		struct ptp_clock_event event;
+		unsigned long flags;
+		u32 status, nsec, sec, num_snapshots, dist;
+		bool use_hw_ts = false;
+
+		spin_lock_irqsave(&ptp_priv->lock, flags);
+
+		if (!ptp_priv->pps_enabled) {
+			spin_unlock_irqrestore(&ptp_priv->lock, flags);
+			continue;
+		}
+
+		/*
+		 * Read MAC_Timestamp_Status to check auxiliary snapshot availability.
+		 * AUXTSTRIG (bit 2): set when at least one snapshot is in the FIFO.
+		 * ATSNS (bits 29:25): number of snapshots currently in the FIFO.
+		 * ATSSTM (bit 24): set if a snapshot was missed due to FIFO overflow.
+		 */
+		status = hal_read_reg(mac_base, SYN_MAC_TS_STATUS);
+
+		/* Warn on FIFO overflow (missed snapshot) */
+		if (status & SYN_MAC_TS_STATUS_ATSSTM) {
+			ptp_priv->aux_ts_missed++;
+			dev_warn_ratelimited(ptp_priv->dev,
+					     "Auxiliary timestamp FIFO overflow (total missed=%u)\n",
+					     ptp_priv->aux_ts_missed);
+		}
+
+		num_snapshots = (status & SYN_MAC_TS_STATUS_ATSNS_MASK)
+				>> SYN_MAC_TS_STATUS_ATSNS_SHIFT;
+
+		if ((status & SYN_MAC_TS_STATUS_AUXTSTRIG) && num_snapshots > 0) {
+			/*
+			 * Hardware auxiliary timestamp available.
+			 *
+			 * Read one entry from the AUX FIFO. Reading
+			 * SYN_MAC_AUX_TS_NSECS pops the entry from the FIFO.
+			 * Read order: NSECS first (pops the FIFO entry), then SECS.
+			 */
+			nsec = hal_read_reg(mac_base, SYN_MAC_AUX_TS_NSECS);
+			nsec &= SYN_MAC_AUX_TS_NSECS_MASK;
+			sec  = hal_read_reg(mac_base, SYN_MAC_AUX_TS_SECS);
+			use_hw_ts = true;
+			ptp_priv->aux_ts_hw_count++;
+
+			/*
+			 * Glitch detection (post-sync only):
+			 *
+			 * At startup the XGMAC clock is not yet aligned to wall
+			 * time, so captures far from a second boundary are normal
+			 * and must not be counted as glitches.
+			 *
+			 * Once aux_ts_was_synced is true (a prior capture was
+			 * within SYN_PTP_PPS_BOUNDARY_THRESHOLD_NS of a second
+			 * boundary), any capture far from the boundary is logged
+			 * as a possible spurious GPIO glitch, counted, and skipped
+			 * (not delivered to ts2phc).
+			 */
+			dist = (nsec > 500000000U) ? (1000000000U - nsec) : nsec;
+
+			if (dist <= SYN_PTP_PPS_BOUNDARY_THRESHOLD_NS) {
+				ptp_priv->aux_ts_was_synced = true;
+			} else if (ptp_priv->aux_ts_was_synced) {
+				dev_warn_ratelimited(ptp_priv->dev,
+					"PPS glitch: ts=%u.%09u dist=%u ns from boundary, skipped\n",
+					sec, nsec, dist);
+				ptp_priv->aux_ts_glitch++;
+				spin_unlock_irqrestore(&ptp_priv->lock, flags);
+				continue;
+			}
+		} else {
+			/*
+			 * No hardware snapshot available. Fall back to software
+			 * timestamp: read this XGMAC's system time now.
+			 * The lock is already held; call the lock-free helper.
+			 */
+			__syn_ptp_read_sys_time_locked(mac_base, &sec, &nsec);
+			ptp_priv->aux_ts_sw_fallback++;
+		}
+
 		spin_unlock_irqrestore(&ptp_priv->lock, flags);
-		return IRQ_HANDLED;
+
+		/*
+		 * Deliver external timestamp event to the PTP subsystem.
+		 * ts2phc reads this via read(fd, &event, sizeof(event)) on the
+		 * PHC fd and uses it to compute the offset between PHY and
+		 * this XGMAC's RTC.
+		 */
+		event.type      = PTP_CLOCK_EXTTS;
+		event.index     = 0;
+		event.timestamp = (u64)sec * NSEC_PER_SEC + nsec;
+		ptp_clock_event(ptp_priv->clock, &event);
+
+		dev_dbg(ptp_priv->dev,
+			"PPS captured at %u.%09u (%s timestamp, hw=%u sw=%u missed=%u)\n",
+			sec, nsec,
+			use_hw_ts ? "hardware" : "software",
+			ptp_priv->aux_ts_hw_count,
+			ptp_priv->aux_ts_sw_fallback,
+			ptp_priv->aux_ts_missed);
 	}
-	spin_unlock_irqrestore(&ptp_priv->lock, flags);
-
-	/* Capture current timestamp */
-	qcom_nss_ptp_gettimex(&ptp_priv->caps, &ts, NULL);
-
-	/* Prepare PTP clock event */
-	event.type = PTP_CLOCK_EXTTS;
-	event.index = 0;
-	event.timestamp = ts.tv_sec * 1000000000ULL + ts.tv_nsec;
-
-	/* Deliver event to PTP subsystem */
-	ptp_clock_event(ptp_priv->clock, &event);
-
-	dev_dbg(ptp_priv->dev, " PPS event captured at %lld.%09ld\n",
-		 (s64)ts.tv_sec, ts.tv_nsec);
+	spin_unlock_irqrestore(&mgr->pps_list_lock, list_flags);
 
 	return IRQ_HANDLED;
 }
@@ -407,8 +733,32 @@ static int syn_ptp_ipq52xx_init(struct syn_ptp_platform_mgr *mgr, struct device 
 	writel(0x0, mgr->tcsr_pps_out);
 	mgr->pps_out_source = 0;
 
-	/* Initialize in disabled mode */
-	mgr->pps_mode = PPS_MODE_DISABLED;
+	/* Map SPARE2 register for PPS output enable control */
+	mgr->spare2 = devm_ioremap(dev, IPQ52XX_SPARE2_REG, 4);
+	if (!mgr->spare2)
+		dev_warn(dev, "Failed to map SPARE2 register, PPS output control unavailable\n");
+
+	return 0;
+}
+
+/*
+ * syn_ptp_ipq96xx_init()
+ *	Initialize IPQ96XX platform-specific PPS configuration
+ *
+ * This function maps the SPARE2 register for PPS output enable control
+ * on the IPQ96XX platform.
+ *
+ * @mgr: Pointer to platform manager structure
+ * @dev: Pointer to device structure for logging
+ *
+ * Returns: 0 on success, negative error code on failure
+ */
+static int syn_ptp_ipq96xx_init(struct syn_ptp_platform_mgr *mgr, struct device *dev)
+{
+	/* Map SPARE2 register for PPS output enable control */
+	mgr->spare2 = devm_ioremap(dev, IPQ96XX_SPARE2_REG, 4);
+	if (!mgr->spare2)
+		dev_warn(dev, "Failed to map SPARE2 register, PPS output control unavailable\n");
 
 	return 0;
 }
@@ -454,17 +804,15 @@ static struct syn_ptp_platform_mgr *syn_ptp_platform_mgr_get(struct platform_dev
 	mutex_init(&mgr->lock);
 	mgr->refcount = 1;
 	mgr->platform = PLATFORM_UNKNOWN;
-	mgr->gpio_desc = NULL;
 	mgr->pps_in_irq = -1;
-	mgr->pps_mode = PPS_MODE_DISABLED;
 	mgr->tcsr_pps_in = NULL;
 	mgr->tcsr_pps_out = NULL;
 	mgr->pps_in_source = 0;
 	mgr->pps_out_source = 0;
+	mgr->spare2 = NULL;
 	mgr->dev = dev;
-
-	/* Acquire GPIO from DTS (optional) - GPIOD_IN flag configures it as input */
-	mgr->gpio_desc = devm_gpiod_get_optional(dev, "pps", GPIOD_IN);
+	INIT_LIST_HEAD(&mgr->pps_active_list);
+	spin_lock_init(&mgr->pps_list_lock);
 
 	/* Get PPS_IN interrupt from DTS by name */
 	mgr->pps_in_irq = platform_get_irq_byname_optional(pdev, "pps_in");
@@ -480,6 +828,12 @@ static struct syn_ptp_platform_mgr *syn_ptp_platform_mgr_get(struct platform_dev
 		int ret = syn_ptp_ipq52xx_init(mgr, &pdev->dev);
 		if (ret) {
 			dev_warn(&pdev->dev, "IPQ52XX platform init failed: %d, continuing without PPS\n", ret);
+			/* Continue without PPS support */
+		}
+	} else if (mgr->platform == PLATFORM_IPQ96XX) {
+		int ret = syn_ptp_ipq96xx_init(mgr, &pdev->dev);
+		if (ret) {
+			dev_warn(&pdev->dev, "IPQ96XX platform init failed: %d, continuing without PPS\n", ret);
 			/* Continue without PPS support */
 		}
 	}
@@ -511,222 +865,25 @@ static void syn_ptp_platform_mgr_put(void)
 
 	g_platform_mgr->refcount--;
 
-	if (g_platform_mgr->refcount == 0)
+	if (g_platform_mgr->refcount == 0) {
+		/*
+		 * Last instance released — free the PPS_IN IRQ if it was
+		 * registered. The IRQ was registered with the platform manager
+		 * as private data (not with any individual ptp_priv), so it
+		 * must be freed here rather than in syn_ptp_cleanup().
+		 */
+		if (g_platform_mgr->pps_in_irq_registered &&
+		    g_platform_mgr->pps_in_irq >= 0) {
+			free_irq(g_platform_mgr->pps_in_irq, g_platform_mgr);
+			g_platform_mgr->pps_in_irq_registered = false;
+			pr_info("nss-ptp: Unregistered PPS_IN interrupt (IRQ=%d)\n",
+				g_platform_mgr->pps_in_irq);
+		}
 		g_platform_mgr = NULL;
+	}
 
 	mutex_unlock(&platform_mgr_mutex);
 }
-
-/*
- * syn_ptp_set_pps_mode()
- *	Set PPS mode (input/output) and configure GPIO direction
- *
- * This function switches between PPS input (slave) and output (master) modes.
- * It handles GPIO direction, interrupt registration/unregistration, and
- * hardware configuration.
- *
- * @ptp_priv: Pointer to PTP private data structure
- * @mode: Desired PPS mode (PPS_MODE_INPUT or PPS_MODE_OUTPUT)
- *
- * Returns: 0 on success, negative error code on failure
- */
-static int syn_ptp_set_pps_mode(struct syn_ptp_priv *ptp_priv, enum pps_mode mode)
-{
-	unsigned long flags;
-	int ret;
-
-	if (!ptp_priv->platform_mgr->gpio_desc) {
-		dev_dbg(ptp_priv->dev, "GPIO for PPS is not provided");
-		return 0;
-	}
-
-	if (mode == ptp_priv->platform_mgr->pps_mode) {
-		dev_dbg(ptp_priv->dev, "Already in requested mode %d\n", mode);
-		return 0;
-	}
-
-	spin_lock_irqsave(&ptp_priv->lock, flags);
-
-	/* Disable current mode */
-	if (ptp_priv->platform_mgr->pps_mode == PPS_MODE_INPUT) {
-		/* Unregister PPS_IN interrupt */
-		if (ptp_priv->platform_mgr->pps_in_irq >= 0) {
-			spin_unlock_irqrestore(&ptp_priv->lock, flags);
-			free_irq(ptp_priv->platform_mgr->pps_in_irq, ptp_priv);
-			dev_info(ptp_priv->dev, "Unregistered PPS_IN interrupt (IRQ=%d)\n",
-				 ptp_priv->platform_mgr->pps_in_irq);
-			spin_lock_irqsave(&ptp_priv->lock, flags);
-		}
-	}
-
-	/* Configure new mode */
-	switch (mode) {
-	case PPS_MODE_INPUT:
-		/* Configure GPIO as input */
-		spin_unlock_irqrestore(&ptp_priv->lock, flags);
-
-		ret = gpiod_direction_input(ptp_priv->platform_mgr->gpio_desc);
-		if (ret) {
-			dev_err(ptp_priv->dev, "Failed to set GPIO as input: %d\n", ret);
-			return ret;
-		}
-
-		/* Register PPS_IN interrupt handler */
-		if (ptp_priv->platform_mgr->pps_in_irq >= 0) {
-			ret = request_threaded_irq(ptp_priv->platform_mgr->pps_in_irq,
-						    NULL,
-						    qcom_nss_ptp_irq_handler_thread,
-						    IRQF_TRIGGER_RISING | IRQF_ONESHOT,
-						    "qcom-nss-ptp-in",
-						    ptp_priv);
-			if (ret) {
-				dev_err(ptp_priv->dev, "Failed to register PPS_IN IRQ %d: %d\n",
-				       ptp_priv->platform_mgr->pps_in_irq, ret);
-				return ret;
-			}
-			dev_info(ptp_priv->dev, "Registered PPS_IN interrupt (IRQ=%d)\n",
-				ptp_priv->platform_mgr->pps_in_irq);
-		}
-
-		spin_lock_irqsave(&ptp_priv->lock, flags);
-		ptp_priv->platform_mgr->pps_mode = PPS_MODE_INPUT;
-		spin_unlock_irqrestore(&ptp_priv->lock, flags);
-		dev_info(ptp_priv->dev, "Switched to PPS_IN mode (slave)\n");
-		break;
-
-	case PPS_MODE_OUTPUT:
-		/* Configure GPIO as output */
-		spin_unlock_irqrestore(&ptp_priv->lock, flags);
-
-		ret = gpiod_direction_output(ptp_priv->platform_mgr->gpio_desc, 0);
-		if (ret) {
-			dev_err(ptp_priv->dev, "Failed to set GPIO as output: %d\n", ret);
-			return ret;
-		}
-
-		spin_lock_irqsave(&ptp_priv->lock, flags);
-		ptp_priv->platform_mgr->pps_mode = PPS_MODE_OUTPUT;
-		spin_unlock_irqrestore(&ptp_priv->lock, flags);
-		dev_info(ptp_priv->dev, "Switched to PPS_OUT mode (master)\n");
-		break;
-
-	case PPS_MODE_DISABLED:
-		ptp_priv->platform_mgr->pps_mode = PPS_MODE_DISABLED;
-		spin_unlock_irqrestore(&ptp_priv->lock, flags);
-		dev_info(ptp_priv->dev, "PPS disabled\n");
-		break;
-
-	default:
-		spin_unlock_irqrestore(&ptp_priv->lock, flags);
-		dev_err(ptp_priv->dev, "Invalid PPS mode %d\n", mode);
-		return -EINVAL;
-	}
-
-	return 0;
-}
-
-
-/*
- * pps_mode_show()
- *	Show current PPS mode via debugfs
- *
- * @m: seq_file for output
- * @v: Unused parameter
- *
- * Returns: 0 on success
- */
-static int pps_mode_show(struct seq_file *m, void *v)
-{
-	struct syn_ptp_platform_mgr *mgr = g_platform_mgr;
-	const char *mode_str;
-
-	if (!mgr) {
-		seq_printf(m, "PPS not initialized\n");
-		return 0;
-	}
-
-	switch (mgr->pps_mode) {
-	case PPS_MODE_INPUT:
-		mode_str = "input";
-		break;
-	case PPS_MODE_OUTPUT:
-		mode_str = "output";
-		break;
-	case PPS_MODE_DISABLED:
-		mode_str = "disabled";
-		break;
-	default:
-		mode_str = "unknown";
-	}
-
-	seq_printf(m, "%s\n", mode_str);
-	return 0;
-}
-
-/*
- * pps_mode_open()
- *	Open callback for pps_mode debugfs file
- */
-static int pps_mode_open(struct inode *inode, struct file *file)
-{
-	return single_open(file, pps_mode_show, inode->i_private);
-}
-
-/*
- * pps_mode_write()
- *	Write callback for pps_mode debugfs file
- *
- * Valid values: "input" (slave mode), "output" (master mode), "disabled"
- */
-static ssize_t pps_mode_write(struct file *file, const char __user *user_buf,
-			      size_t count, loff_t *ppos)
-{
-	struct syn_ptp_platform_mgr *mgr = g_platform_mgr;
-	char buf[32];
-	size_t len;
-	enum pps_mode mode;
-
-	if (!mgr)
-		return -ENODEV;
-
-	len = min(count, sizeof(buf) - 1);
-	if (copy_from_user(buf, user_buf, len))
-		return -EFAULT;
-
-	buf[len] = '\0';
-
-	/* Remove trailing newline if present */
-	if (len > 0 && buf[len - 1] == '\n')
-		buf[len - 1] = '\0';
-
-	/* Parse input string */
-	if (strcmp(buf, "input") == 0)
-		mode = PPS_MODE_INPUT;
-	else if (strcmp(buf, "output") == 0)
-		mode = PPS_MODE_OUTPUT;
-	else if (strcmp(buf, "disabled") == 0)
-		mode = PPS_MODE_DISABLED;
-	else
-		return -EINVAL;
-
-	/* Update mode in platform manager */
-	mgr->pps_mode = mode;
-
-	pr_info("PPS mode set to %s\n",
-		mode == PPS_MODE_INPUT ? "input" :
-		mode == PPS_MODE_OUTPUT ? "output" : "disabled");
-
-	return count;
-}
-
-/* File operations for pps_mode debugfs file */
-static const struct file_operations pps_mode_fops = {
-	.open = pps_mode_open,
-	.read = seq_read,
-	.write = pps_mode_write,
-	.llseek = seq_lseek,
-	.release = single_release,
-};
 
 /*
  * pps_in_source_show()
@@ -1024,6 +1181,7 @@ static int calculate_ptp_parameters(u32 ptp_clock_rate,
  *
  * This function displays comprehensive PTP statistics including:
  * - PHC information
+ * - XGMAC system time
  * - TX timestamp statistics
  * - TX timestamp queue status
  *
@@ -1035,9 +1193,12 @@ static int calculate_ptp_parameters(u32 ptp_clock_rate,
 static int syn_ptp_stats_show(struct seq_file *m, void *v)
 {
 	struct syn_ptp_priv *ptp_priv = (struct syn_ptp_priv *)m->private;
+	void __iomem *mac_base;
 	unsigned long flags;
-	int i;
+	u32 ts_sec, ts_nsec;
+	struct tm tm;
 	ktime_t now;
+	int i;
 
 	if (!ptp_priv) {
 		seq_printf(m, "PTP not initialized\n");
@@ -1049,13 +1210,37 @@ static int syn_ptp_stats_show(struct seq_file *m, void *v)
 	seq_printf(m, "PTP Statistics for %s\n", ptp_priv->caps.name);
 	seq_printf(m, "========================================\n\n");
 
+	mac_base = ptp_priv->shd->nghd.mac_base;
+
 	/* PHC Information */
 	seq_printf(m, "PHC Information:\n");
 	seq_printf(m, "  PHC Index: %d\n", ptp_clock_index(ptp_priv->clock));
 	seq_printf(m, "  PTP Clock Rate: %u Hz\n", ptp_priv->ptp_clock_rate);
 	seq_printf(m, "  SSINC: %u ns\n", ptp_priv->ssinc);
 	seq_printf(m, "  Default Addend: 0x%08x\n", ptp_priv->default_addend);
+	seq_printf(m, "  Current Addend: 0x%08x\n",
+		   hal_read_reg(mac_base, SYN_MAC_TS_ADDEND));
 	seq_printf(m, "  PPS Enabled: %s\n", ptp_priv->pps_enabled ? "Yes" : "No");
+	seq_printf(m, "  Timestamping Enabled: %s\n",
+		   (hal_read_reg(mac_base, SYN_MAC_TS_CTL) & SYN_MAC_TS_CTL_TSENA) ? "Yes" : "No");
+	if (ptp_priv->platform_mgr->spare2) {
+		u32 spare2_val = readl(ptp_priv->platform_mgr->spare2);
+		u32 bit = (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX)
+			  ? IPQ52XX_SPARE2_PPS_EN : IPQ96XX_SPARE2_TSN_EN;
+		seq_printf(m, "  PPS Output Enabled:   %s\n",
+			   (spare2_val & bit) ? "Yes" : "No");
+	}
+	seq_printf(m, "\n");
+
+	/* XGMAC System Time */
+	syn_ptp_read_sys_time(ptp_priv, &ts_sec, &ts_nsec);
+	time64_to_tm((time64_t)ts_sec, 0, &tm);
+	seq_printf(m, "XGMAC System Time:\n");
+	seq_printf(m, "  Seconds:     %u\n", ts_sec);
+	seq_printf(m, "  Nanoseconds: %u\n", ts_nsec);
+	seq_printf(m, "  Time:        %04ld-%02d-%02d %02d:%02d:%02d.%09u UTC\n",
+		   tm.tm_year + 1900, tm.tm_mon + 1, tm.tm_mday,
+		   tm.tm_hour, tm.tm_min, tm.tm_sec, ts_nsec);
 	seq_printf(m, "\n");
 
 	/* TX Timestamp Statistics */
@@ -1088,6 +1273,19 @@ static int syn_ptp_stats_show(struct seq_file *m, void *v)
 		}
 	}
 	spin_unlock_irqrestore(&ptp_priv->tx_ts_lock, flags);
+	seq_printf(m, "\n");
+
+	/* Auxiliary Timestamp Statistics (for ts2phc PHY→XGMAC sync) */
+	seq_printf(m, "Auxiliary Timestamp Statistics:\n");
+	seq_printf(m, "  Hardware captures (ATSEN0 FIFO): %u\n",
+		   ptp_priv->aux_ts_hw_count);
+	seq_printf(m, "  Software fallbacks (FIFO empty): %u\n",
+		   ptp_priv->aux_ts_sw_fallback);
+	seq_printf(m, "  Missed (FIFO overflow, ATSSTM): %u\n",
+		   ptp_priv->aux_ts_missed);
+	seq_printf(m, "  Glitches (>%u ns from boundary): %u\n",
+		   SYN_PTP_PPS_BOUNDARY_THRESHOLD_NS,
+		   ptp_priv->aux_ts_glitch);
 	seq_printf(m, "\n");
 
 	/* Timestamp Configuration */
@@ -1188,16 +1386,7 @@ static int syn_ptp_debugfs_init(struct syn_ptp_priv *ptp_priv)
 	mutex_lock(&ptp_debugfs_mutex);
 	if (g_ptp_debugfs_refcount == 1) {
 		/* First instance - create PPS control files */
-		struct dentry *pps_mode_dentry, *pps_in_dentry, *pps_out_dentry;
-
-		/* Create pps_mode file (available on all platforms with GPIO) */
-		if (ptp_priv->platform_mgr->gpio_desc) {
-			pps_mode_dentry = debugfs_create_file("pps_mode", 0644, g_ptp_debugfs_dir,
-							      NULL, &pps_mode_fops);
-			if (!pps_mode_dentry) {
-				dev_warn(ptp_priv->dev, "Failed to create pps_mode debugfs file\n");
-			}
-		}
+		struct dentry *pps_in_dentry, *pps_out_dentry;
 
 		/* Create IPQ52XX-specific files */
 		if (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX) {
@@ -1270,9 +1459,9 @@ static int syn_ptp_hw_init(struct syn_ptp_priv *ptp_priv)
 	/* Step 1: Mask timestamp trigger interrupt (bit 12) */
 	hal_clear_reg_bits(mac_base, SYN_MAC_INT_ENABLE, SYN_MAC_INT_ENABLE_TSIE);
 
-	/* Step 2: Enable timestamp, Fine mode and Timestamp Digital Rollover Control */
-	hal_set_reg_bits(mac_base, SYN_MAC_TS_CTL, SYN_MAC_TS_CTL_TSENA |
-			 SYN_MAC_TS_CTL_TSCFUPDT | SYN_MAC_TS_CTL_TSCTRLSSR);
+	/* Step 2: Enable Timestamp, Fine mode, and Timestamp Digital Rollover Control */
+	hal_set_reg_bits(mac_base, SYN_MAC_TS_CTL,
+			 SYN_MAC_TS_CTL_TSENA | SYN_MAC_TS_CTL_TSCFUPDT | SYN_MAC_TS_CTL_TSCTRLSSR);
 
 	/* Step 3: Calculate PTP parameters using datasheet formula */
 	ret = calculate_ptp_parameters(ptp_priv->ptp_clock_rate,
@@ -1301,6 +1490,13 @@ static int syn_ptp_hw_init(struct syn_ptp_priv *ptp_priv)
 	/* Step 6b: Initialize asymmetry correction registers to 0 */
 	hal_write_reg(mac_base, SYN_MAC_TS_INGRESS_ASYM_CORR, 0);
 	hal_write_reg(mac_base, SYN_MAC_TS_EGRESS_ASYM_CORR, 0);
+
+	/* Step 7: Configure PPS0 output frequency to 1 Hz (digital rollover)
+	 * PPSCTRL0 (bits 3:0) = 0x1: binary rollover 2 Hz, digital rollover 1 Hz.
+	 * This configures the ptp_pps_o[0] output signal on the MAC_PPS_Control
+	 * register (offset 0xD70).
+	 */
+	syn_ptp_pps_ctrl_set(mac_base, SYN_MAC_PPS_CTL_PPSCTRL0_1HZ);
 
 	dev_info(ptp_priv->dev,
 		 "Sub-second increment: %u ns, Addend: 0x%08x, Clock rate: %u Hz)\n",
@@ -1351,6 +1547,10 @@ int syn_ptp_init(struct syn_hal_dev *shd, struct platform_device *pdev)
 
 	/* Get the PTP reference clock rate. */
 	ptp_priv->ptp_clock_rate = clk_get_rate(ptp_clk);
+	if (!ptp_priv->ptp_clock_rate) {
+		dev_err(dev, "PTP clock rate is 0\n");
+		return -EINVAL;
+	}
 
 	/* Store back pointer to HAL device */
 	ptp_priv->shd = shd;
@@ -1374,11 +1574,17 @@ int syn_ptp_init(struct syn_hal_dev *shd, struct platform_device *pdev)
 	/* Initialize PPS enabled flag */
 	ptp_priv->pps_enabled = false;
 
+	/*
+	 * Initialize the PPS list node so list_del_init() is always safe
+	 * to call in syn_ptp_cleanup() even if PPS was never enabled.
+	 */
+	INIT_LIST_HEAD(&ptp_priv->pps_list_node);
+
 	/* Initialize PTP clock capabilities */
 	ptp_priv->caps.owner = THIS_MODULE;
 	snprintf(ptp_priv->caps.name, sizeof(ptp_priv->caps.name),
 		 "xgmac-ptp-%d", shd->nghd.mac_id);
-	ptp_priv->caps.max_adj = S32_MAX;	/* Maximum frequency adjustment (ppb) */
+	ptp_priv->caps.max_adj = 500000000;	/* Maximum frequency adjustment: ±500,000,000 ppb (±500,000 ppm) */
 	ptp_priv->caps.n_alarm = 0;		/* No alarm support */
 	ptp_priv->caps.n_ext_ts = 1;		/* One external timestamp channel */
 	ptp_priv->caps.n_per_out = 1;		/* One periodic output channel */
@@ -1423,19 +1629,52 @@ int syn_ptp_init(struct syn_hal_dev *shd, struct platform_device *pdev)
 		/* Continue without debugfs support */
 	}
 
-	/* Set default PPS mode to INPUT (slave mode) if IRQ is valid */
-	if (ptp_priv->platform_mgr->pps_in_irq >= 0) {
-		ret = syn_ptp_set_pps_mode(ptp_priv, PPS_MODE_INPUT);
+	/*
+	 * Register the PPS_IN IRQ once for the entire platform (not per-instance).
+	 *
+	 * The PPS_IN signal is a single hardware wire shared by all XGMAC
+	 * instances. Registering it per-instance would cause the second
+	 * instance to fail with -EBUSY ("Flags mismatch") because the IRQ
+	 * is already owned without IRQF_SHARED.
+	 *
+	 * The IRQ is registered with the platform manager as private data.
+	 * The handler iterates platform_mgr->pps_active_list and delivers
+	 * an independent PPS event to each XGMAC instance that has enabled
+	 * PPS capture via PTP_CLK_REQ_EXTTS (qcom_nss_ptp_enable()).
+	 *
+	 * The IRQ is freed in syn_ptp_platform_mgr_put() when the last
+	 * XGMAC instance releases its reference.
+	 */
+	mutex_lock(&platform_mgr_mutex);
+	if (ptp_priv->platform_mgr->pps_in_irq >= 0 &&
+	    !ptp_priv->platform_mgr->pps_in_irq_registered) {
+		ret = request_threaded_irq(ptp_priv->platform_mgr->pps_in_irq,
+					   NULL,
+					   qcom_nss_ptp_irq_handler_thread,
+					   IRQF_TRIGGER_RISING | IRQF_ONESHOT,
+					   "nss-pps-in",
+					   ptp_priv->platform_mgr);
 		if (ret) {
-			dev_warn(dev, "Failed to set default PPS_IN mode: %d\n", ret);
-			/* Continue with PPS disabled */
+			dev_err(dev, "Failed to register PPS_IN IRQ %d: %d\n",
+				ptp_priv->platform_mgr->pps_in_irq, ret);
+			/* Non-fatal: PHC still works, only PPS capture is unavailable */
+		} else {
+			ptp_priv->platform_mgr->pps_in_irq_registered = true;
+			dev_info(dev, "Registered PPS_IN interrupt (IRQ=%d)\n",
+				 ptp_priv->platform_mgr->pps_in_irq);
 		}
+		ret = 0;  /* Reset ret: IRQ failure is non-fatal */
+	} else if (ptp_priv->platform_mgr->pps_in_irq >= 0) {
+		dev_dbg(dev, "PPS_IN IRQ %d already registered by another instance\n",
+			ptp_priv->platform_mgr->pps_in_irq);
 	}
+	mutex_unlock(&platform_mgr_mutex);
 
 	return 0;
 
 err_free_priv:
 	syn_ptp_platform_mgr_put();
+	shd->ptp_priv = NULL;
 	return ret;
 }
 EXPORT_SYMBOL(syn_ptp_init);
@@ -1600,6 +1839,9 @@ int syn_ptp_hwtstamp_set(void *hal_ctx, struct ifreq *ifr)
 		}
 	}
 
+	if (config.rx_filter != HWTSTAMP_FILTER_NONE)
+		new_config |= SYN_MAC_TS_CTL_TSENA;
+
 	/* Configure RX filtering based on config.rx_filter */
 	switch (config.rx_filter) {
 	case HWTSTAMP_FILTER_NONE:
@@ -1648,23 +1890,6 @@ int syn_ptp_hwtstamp_set(void *hal_ctx, struct ifreq *ifr)
 	memcpy(&ptp_priv->tstamp_config, &config, sizeof(config));
 
 	spin_unlock_irqrestore(&ptp_priv->lock, flags);
-
-	if (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX ||
-	    ptp_priv->platform_mgr->platform == PLATFORM_IPQ96XX) {
-		fal_port_pps_ctrl_t pps_ctrl = {0};
-
-		fal_port_pps_ctrl_get(0, &pps_ctrl);
-		if (config.rx_filter != HWTSTAMP_FILTER_NONE ||
-				config.tx_type != HWTSTAMP_TX_OFF) {
-			/* Enabling PTP - select this MAC (mac_id - 1) PPS out. */
-			pps_ctrl.pps_out_sel = shd->nghd.mac_id - 1;
-		} else {
-			/* Disabling PTP - if we own the PPS out, release it (to 0) */
-			if (pps_ctrl.pps_out_sel == shd->nghd.mac_id - 1)
-				pps_ctrl.pps_out_sel = 0;
-		}
-		fal_port_pps_ctrl_set(0, &pps_ctrl);
-	}
 
 	/* Copy configuration back to userspace */
 	if (copy_to_user(ifr->ifr_data, &config, sizeof(config))) {
@@ -1932,10 +2157,16 @@ void syn_ptp_cleanup(struct syn_hal_dev *shd)
 	/* Cleanup debugfs interface */
 	syn_ptp_debugfs_exit(ptp_priv);
 
-	/* Disable PPS mode (this will unregister interrupts if needed) */
-	if (ptp_priv->platform_mgr->pps_mode != PPS_MODE_DISABLED) {
-		syn_ptp_set_pps_mode(ptp_priv, PPS_MODE_DISABLED);
-	}
+	/*
+	 * Remove this instance from the platform-level PPS active list.
+	 * list_del_init() is safe even if the node is not currently in any
+	 * list (e.g., PPS was never enabled for this instance).
+	 * The PPS_IN IRQ itself is freed in syn_ptp_platform_mgr_put() when
+	 * the last XGMAC instance releases its reference — not here.
+	 */
+	spin_lock_irq(&ptp_priv->platform_mgr->pps_list_lock);
+	list_del_init(&ptp_priv->pps_list_node);
+	spin_unlock_irq(&ptp_priv->platform_mgr->pps_list_lock);
 
 	/* Unregister PHC device */
 	if (ptp_priv->clock) {

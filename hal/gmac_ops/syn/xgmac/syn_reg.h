@@ -66,6 +66,9 @@
 #define SYN_MAC_TX_TS_STATUS_NSECS	0x0d30
 #define SYN_MAC_TX_TS_STATUS_SECS	0x0d34
 #define SYN_MAC_TX_TS_STATUS_PKTID	0x0d38
+#define SYN_MAC_AUX_CTRL		0x0d40	/* MAC_Auxiliary_CONTROL */
+#define SYN_MAC_AUX_TS_NSECS		0x0d48	/* MAC_Auxiliary_Timestamp_Nanoseconds */
+#define SYN_MAC_AUX_TS_SECS		0x0d4c	/* MAC_Auxiliary_Timestamp_Seconds */
 #define SYN_MAC_TS_INGRESS_ASYM_CORR	0x0d50
 #define SYN_MAC_TS_EGRESS_ASYM_CORR	0x0d54
 #define SYN_MAC_TS_INGR_LAT		0x0d58
@@ -214,8 +217,13 @@
 #define SYN_MAC_TS_CTL_TSENMACADDR	0x00040000	/* Enable MAC Address for PTP Packet Filtering */
 #define SYN_MAC_TS_CTL_CSC		0x00080000	/* Enable checksum correction during OST for PTP over UDP/IPv4 */
 #define SYN_MAC_TS_CTL_TXTSSTSM		0x01000000	/* Transmit Timestamp Status Mode */
+#define SYN_MAC_AUX_CTRL_ATSFC		0x00000001	/* Auxiliary Snapshot FIFO Clear (bit 0) */
+#define SYN_MAC_AUX_CTRL_ATSEN0		0x00000010	/* Auxiliary Snapshot Enable for trigger 0 (bit 4) */
 #define SYN_MAC_TS_CTL_AV8021ASMEN	0x10000000	/* AV 802.1AS Mode Enable */
 #define SYN_MAC_TS_CTL_ESTI		0x20000000	/* External System Time Input */
+
+/* SYN_MAC_AUX_TS_NSECS (MAC_Auxiliary_Timestamp_Nanoseconds) Bit definitions */
+#define SYN_MAC_AUX_TS_NSECS_MASK	0x7FFFFFFF	/* Auxiliary Timestamp Nanoseconds (31 bits) */
 
 /* PTP Timestamp Control configuration mask */
 #define SYN_MAC_HWTS_CFG_MASK		(SYN_MAC_TS_CTL_TSENA | \
@@ -264,6 +272,7 @@
 #define SYN_MAC_PPS_CTL_PPSEN0		0x00000010	/* Flexible PPS Output Mode Enable */
 #define SYN_MAC_PPS_CTL_TRGTMODSEL0_MASK 0x00000060	/* Target Time Register Mode for PPS0 Output */
 #define SYN_MAC_PPS_CTL_TRGTMODSEL0_SHIFT 5
+#define SYN_MAC_PPS_CTL_PPSCTRL0_1HZ	0x00000001	/* PPSCTRL0=1: binary rollover 2Hz, digital rollover 1Hz */
 
 /*
  *
