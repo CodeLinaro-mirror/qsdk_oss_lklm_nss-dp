@@ -140,6 +140,7 @@ int edma_rx_gro_desc_count_configure(struct edma_hw_gro_ctx *gro_ctx)
 	 * EDMA GRO CONFIG1 has the following configurations
 	 */
 	reg_data = edma_reg_read(EDMA_REG_GRO_CONFIG1);
+	reg_data &= ~(EDMA_REG_GRO_CONFIG1_DESC_COUNT_MASK << EDMA_REG_GRO_CONFIG1_DESC_COUNT_SHIFT);
 	reg_data |= EDMA_REG_GRO_CONFIG1_DESC_COUNT_SET(gro_ctx->gro_desc_count);
 	edma_reg_write(EDMA_REG_GRO_CONFIG1, reg_data);
 	return 0;
