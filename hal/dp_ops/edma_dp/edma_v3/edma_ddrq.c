@@ -1806,6 +1806,12 @@ int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg)
 		edma_err("Error in setting the DDRQ default configurations\n");
 		return -EINVAL;
 	}
+
+	if (!ppe_drv_isram_queue_profile_init(edma_ddrq_isq_base)) {
+		edma_err("Error in configuring ISRAM queue (%d) base for PPE ports\n", edma_ddrq_isq_base);
+		return -EINVAL;
+	}
+
 	return 0;
 }
 
