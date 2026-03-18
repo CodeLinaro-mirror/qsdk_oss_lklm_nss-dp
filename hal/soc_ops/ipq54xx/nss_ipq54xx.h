@@ -13,6 +13,8 @@
 #define NSS_DP_MAX_PORTS		(NSS_DP_HAL_MAX_PORTS + NSS_DP_VP_HAL_MAX_PORTS)
 #define NSS_DP_HAL_START_IFNUM		1
 
+#define EDMA_PPEDS_MAX_NODES		4	/* Maximum number of supported PPE-DS nodes */
+
 /*
  * TX maximum supported ports
  */

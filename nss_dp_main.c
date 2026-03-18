@@ -113,6 +113,10 @@ int nss_dp_tx_mitigation_pkt_cnt = NSS_DP_TX_MITIGATION_PKT_CNT_DEF;
 module_param(nss_dp_tx_mitigation_pkt_cnt, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_tx_mitigation_pkt_cnt, "Tx mitigation packet count value");
 
+int nss_dp_txcmpl_fc_threshold_cnt = NSS_DP_TXCMPL_FC_THRESHOLD_DEF;
+module_param(nss_dp_txcmpl_fc_threshold_cnt, int, 0444);
+MODULE_PARM_DESC(nss_dp_txcmpl_fc_threshold_cnt, "Txcmpl FC threshold count value");
+
 int nss_dp_rx_mitigation_timer = NSS_DP_RX_MITIGATION_TIMER_DEF;
 module_param(nss_dp_rx_mitigation_timer, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_rx_mitigation_timer, "Rx mitigation timer value in microseconds");
@@ -1368,11 +1372,11 @@ EXPORT_SYMBOL(nss_dp_get_port_num);
  * nss_dp_ppeds_get_ops()
  *	API to get PPE-DS operations
  */
-struct nss_dp_ppeds_ops *nss_dp_ppeds_get_ops(void)
+struct nss_dp_ppeds_ops *nss_dp_ppeds_get_wifi_arch_mode_ops(uint32_t mode)
 {
-	return nss_dp_ppeds_ops_get();
+	return nss_dp_ppeds_wifi_arch_mode_ops_get(mode);
 }
-EXPORT_SYMBOL(nss_dp_ppeds_get_ops);
+EXPORT_SYMBOL(nss_dp_ppeds_get_wifi_arch_mode_ops);
 
 /*
  * nss_dp_nsm_sawf_sc_stats_read()

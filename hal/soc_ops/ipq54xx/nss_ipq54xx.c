@@ -586,10 +586,10 @@ void nss_dp_hal_cleanup(void)
 }
 
 /*
- * nss_dp_ppeds_ops_get()
- *	API to get PPE-DS operations
+ * nss_dp_ppeds_wifi_arch_mode_ops_get()
+ *	API to get PPE-DS operations()
  */
-struct nss_dp_ppeds_ops *nss_dp_ppeds_ops_get(void)
+struct nss_dp_ppeds_ops *nss_dp_ppeds_wifi_arch_mode_ops_get(uint32_t mode)
 {
 #ifdef NSS_DP_PPEDS_SUPPORT
 	return &edma_ppeds_ops;

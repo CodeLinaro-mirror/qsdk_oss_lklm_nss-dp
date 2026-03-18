@@ -168,12 +168,18 @@
 #define EDMA_RING_TYPE_FLAGS_HOST_COMMON	0x1
 #define EDMA_RING_TYPE_FLAGS_HOST_VP		0x2
 #define EDMA_RING_TYPE_FLAGS_HOST_GRO		0x4
+#define EDMA_RING_TYPE_FLAGS_DS			0x8
 
 /*
  * EDMA ring status flags
  */
 #define EDMA_RING_STATUS_FLAGS_IN_USE		0x1
 #define EDMA_RING_STATUS_FLAGS_IS_CONFIGURED	0x2
+
+/*
+ * EDMA ring flags
+*/
+#define EDMA_RING_FLAGS_SEC_RING_VALID	(1UL << 0)
 
 /*
  * edma_port_ucast_queues
@@ -392,6 +398,7 @@ struct edma_rxfill_ring_info {
 	uint32_t buffer_len;				/* buffer length (Max packet length supported per buffer) */
 	bool page_mode;					/* Page mode */
 	uint32_t intr_num;				/* Interrupt number */
+	uint32_t flags;					/* flags */
 };
 
 /*
@@ -477,7 +484,6 @@ struct edma_ds_info {
 #ifdef NSS_DP_PPEDS_SUPPORT
 	struct edma_ppeds_info ppeds_info;		/* PPE-DS config information. */
 #endif
-	struct edma_rings_common_info ppeds_cmn_info;	/* Common information for all PPEDS nodes. */
 };
 
 /*
@@ -756,7 +762,6 @@ struct edma_gbl_ctx {
 	struct edma_hw_gro_ctx hw_gro_ctx;
 			/* HW GRO context */
 #ifdef NSS_DP_PPEDS_SUPPORT
-	uint32_t ppeds_node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
 	struct edma_ppeds_drv ppeds_drv;
 			/* PPE-DS nodes information */
 #endif

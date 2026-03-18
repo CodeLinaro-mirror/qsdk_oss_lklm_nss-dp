@@ -132,7 +132,9 @@ qca-nss-dp-objs += hal/gmac_ops/syn/xgmac/syn_ptp.o
 endif
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
 ifeq ($(dp-ppe-ds),y)
-qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds.o
+qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds_wifi8.o
+qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds_wifi7.o
+qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds_common.o
 ccflags-y += -DNSS_DP_PPEDS_SUPPORT
 endif
 
@@ -160,6 +162,7 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq96xx))
 ccflags-y += -DNSS_DP_IPQ96XX
+ccflags-y += -DNSS_DP_RING_IDX_CONFIG
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx))
@@ -167,6 +170,7 @@ ccflags-y += -DNSS_DP_IPQ52XX
 ccflags-y += -DNSS_DP_PON_SUPPORT
 ccflags-y += -DNSS_DP_HIGHER_RING_MASK_CONFIG
 ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
+ccflags-y += -DNSS_DP_RING_IDX_CONFIG
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))

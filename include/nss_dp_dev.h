@@ -107,6 +107,7 @@
  */
 #define NSS_DP_TX_MITIGATION_TIMER_DEF		250
 #define NSS_DP_TX_MITIGATION_PKT_CNT_DEF	16
+#define NSS_DP_TXCMPL_FC_THRESHOLD_DEF		16
 #define NSS_DP_RX_MITIGATION_TIMER_DEF		25
 #define NSS_DP_RX_MITIGATION_PKT_CNT_DEF	16
 
@@ -324,6 +325,7 @@ extern int nss_dp_rx_fc_xoff;
 extern int nss_dp_rx_ac_fc_threshold;
 extern int nss_dp_tx_mitigation_timer;
 extern int nss_dp_tx_mitigation_pkt_cnt;
+extern int nss_dp_txcmpl_fc_threshold_cnt;
 extern int nss_dp_rx_mitigation_timer;
 extern int nss_dp_rx_mitigation_pkt_cnt;
 extern uint8_t nss_dp_pri_map[EDMA_PRI_MAX];

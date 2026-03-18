@@ -45,7 +45,7 @@ static inline void nss_dp_hal_set_gmac_ops(struct nss_gmac_hal_ops *hal_ops, uin
 extern struct nss_dp_data_plane_ops *nss_dp_hal_get_data_plane_ops(void);
 extern bool nss_dp_hal_init(void);
 extern void nss_dp_hal_cleanup(void);
-extern struct nss_dp_ppeds_ops* nss_dp_ppeds_ops_get(void);
+extern struct nss_dp_ppeds_ops *nss_dp_ppeds_wifi_arch_mode_ops_get(uint32_t mode);
 extern void nss_dp_hal_init_soc_priv_flags(struct nss_dp_dev *dp_priv);
 extern void nss_dp_hal_deinit_soc_priv_flags(struct nss_dp_dev *dp_priv);
 

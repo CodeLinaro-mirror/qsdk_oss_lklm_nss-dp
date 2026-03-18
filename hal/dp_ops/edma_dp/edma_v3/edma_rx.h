@@ -42,6 +42,7 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RXFILL_DESC(R, i)		EDMA_GET_DESC(R, i, struct edma_rxfill_desc)
 #define EDMA_RXDESC_PRI_DESC(R, i)	EDMA_GET_PDESC(R, i, struct edma_rxdesc_desc)
 #define EDMA_RXDESC_SEC_DESC(R, i)	EDMA_GET_SDESC(R, i, struct edma_rxdesc_sec_desc)
+#define EDMA_RXFILL_DESC_8B_MODE(R, i)	EDMA_GET_DESC(R, i, struct edma_rxfill_desc_8B_mode)
 
 /*
  * TODO - Make this a tunable parameter using module-param.
@@ -135,6 +136,7 @@ extern uint32_t rx_ring_sz_high_mem;
 
 #define EDMA_RXFILL_BUF_SIZE_MASK		0xFFFF
 #define EDMA_RXFILL_BUF_SIZE_SHIFT		16
+#define EDMA_RXFILL_DS_OPAQUE_SHIFT	12
 
 /*
  * Opaque values are not accessed by the EDMA HW, so endianness conversion is not needed
@@ -143,6 +145,9 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RXFILL_OPAQUE_HI_SET(desc, ptr)	(((desc)->word3) = (uint32_t)((uint64_t)(ptr) >> 0x20))
 #define EDMA_RXFILL_OPAQUE_GET(desc)		((uintptr_t)((uint64_t)((desc)->word2) | \
 						((uint64_t)((desc)->word3) << 0x20)))
+#define EDMA_RXFILL_DS_OPAQUE_SET(desc, opaque)	{ \
+	(((desc)->word1) = (uint32_t)((((desc)->word1) & ~0xFFFFF000) | ((((uint32_t)opaque) << EDMA_RXFILL_DS_OPAQUE_SHIFT) & 0xFFFFF000))); \
+}
 
 #define EDMA_RXFILL_PACKET_LEN_SET(desc, len)	{ \
 	(((desc)->word1) = (uint32_t)((((desc)->word1) & ~0xFFFF0000) | ((((uint32_t)len) << EDMA_RXFILL_BUF_SIZE_SHIFT) & 0xFFFF0000))); \
@@ -394,6 +399,14 @@ struct edma_rxdesc_sec_desc {
 };
 
 /*
+ * RxFill descriptor for PPEDS HW buffer manager
+ */
+struct edma_rxfill_desc_8B_mode {
+	uint32_t word0;		/* Contains buffer address low */
+	uint32_t word1;		/* Contains  opaque, buffer address high*/
+};
+
+/*
  * RxFill descriptor
  */
 struct edma_rxfill_desc {
@@ -423,6 +436,7 @@ struct edma_rxfill_ring {
 	bool napi_added;		/* Flag to indicate NAPI add status */
 	struct edma_rx_fill_stats rx_fill_stats;
 					/* Rx fill ring statistics */
+	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
 };
 
 /*
@@ -435,6 +449,7 @@ struct edma_rxdesc_ring {
 	uint32_t work_leftover;		/* Leftover descriptors to be processed */
 	uint32_t cons_idx;		/* Ring consumer index */
 	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
+	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
 	struct edma_rxdesc_desc *pdesc;
 					/* Primary descriptor ring virtual address */
 	struct edma_rxdesc_desc *pdesc_head;
