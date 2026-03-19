@@ -90,7 +90,6 @@ module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
 
 #ifdef NSS_DP_DDRQ_SUPPORT
-int32_t edma_passthrough_val_set;
 int edma_passthrough_val = EDMA_PASSTHROUGH_VAL_INVALID;
 module_param(edma_passthrough_val, int, 0640);
 MODULE_PARM_DESC(edma_passthrough_val, "EDMA passthrough value to be set in Tx desc");
@@ -2628,9 +2627,7 @@ int edma_passthrough_handler(struct ctl_table *table, int write,
 		return ret;
 	}
 
-	edma_passthrough_val_set = 1;
-	edma_err("### passthrough mode val set to %d, edma_passthrough_val_set: %d\n",
-			 edma_passthrough_val, edma_passthrough_val_set);
+	edma_err("### passthrough mode val set to %d\n", edma_passthrough_val);
 	return ret;
 }
 #endif

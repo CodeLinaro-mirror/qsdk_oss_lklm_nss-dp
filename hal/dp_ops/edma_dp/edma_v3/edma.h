@@ -809,7 +809,6 @@ extern int edma_rx_ring_mode_bitmask;
 extern int edma_tx_ring_mode_bitmask;
 #ifdef NSS_DP_DDRQ_SUPPORT
 extern int32_t edma_passthrough_val;
-extern int32_t edma_passthrough_val_set;
 extern int edma_ddrq_gbl_en_sw;
 extern int edma_ddrq_gbl_en_hw;
 extern int edma_ddrq_gbl_data_offset0;
