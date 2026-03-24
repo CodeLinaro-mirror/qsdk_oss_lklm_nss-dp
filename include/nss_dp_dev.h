@@ -39,6 +39,7 @@
 #ifdef NSS_DP_PPEDS_SUPPORT
 #include "nss_dp_ppeds.h"
 #endif
+#include "nss_dp_ddrq.h"
 
 #define NSS_DP_ACL_DEV_ID 0
 
@@ -107,6 +108,7 @@
  */
 #define NSS_DP_TX_MITIGATION_TIMER_DEF		250
 #define NSS_DP_TX_MITIGATION_PKT_CNT_DEF	16
+#define NSS_DP_TXCMPL_FC_THRESHOLD_DEF		16
 #define NSS_DP_RX_MITIGATION_TIMER_DEF		25
 #define NSS_DP_RX_MITIGATION_PKT_CNT_DEF	16
 
@@ -220,6 +222,16 @@ struct nss_dp_netstandby_gbl_ctx {
 #endif
 
 /*
+ * nss_dp_dev_pt_info
+ *	Passthrough information structure to be stored in the netdevice priv
+ */
+typedef struct nss_dp_dev_pt_info {
+	uint8_t src_pt_mode_val;		/**< Passthrough mode value based on source */
+	uint8_t dst_pt_mode_val;		/**< Passthrough mode value based on destination */
+	uint32_t sc;				/**< Service code */
+} nss_dp_dev_pt_info_t;
+
+/*
  * nss data plane device structure
  */
 struct nss_dp_dev {
@@ -227,7 +239,7 @@ struct nss_dp_dev {
 	uint32_t vsi;			/* vsi number */
 	unsigned long flags;		/* Status flags */
 	unsigned long drv_flags;	/* Driver specific feature flags */
-
+	nss_dp_dev_pt_info_t pt_info;	/* Passthrough related datapath information */
 	/* Phy related stuff */
 	struct phylink *phylink;	/* Phylink instance */
 	bool phylink_en;		/* Use phylink or not */
@@ -324,6 +336,7 @@ extern int nss_dp_rx_fc_xoff;
 extern int nss_dp_rx_ac_fc_threshold;
 extern int nss_dp_tx_mitigation_timer;
 extern int nss_dp_tx_mitigation_pkt_cnt;
+extern int nss_dp_txcmpl_fc_threshold_cnt;
 extern int nss_dp_rx_mitigation_timer;
 extern int nss_dp_rx_mitigation_pkt_cnt;
 extern uint8_t nss_dp_pri_map[EDMA_PRI_MAX];

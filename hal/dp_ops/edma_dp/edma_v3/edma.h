@@ -25,6 +25,9 @@
 #ifdef NSS_DP_PPEDS_SUPPORT
 #include "edma_ppeds_priv.h"
 #endif
+#ifdef NSS_DP_DDRQ_SUPPORT
+#include "edma_ddrq.h"
+#endif
 
 /*
  * The driver uses kernel DMA constructs that assume an architecture
@@ -99,6 +102,7 @@
 #define EDMA_SWITCH_DEV_ID	0
 #define EDMA_PPE_QUEUE_LEVEL	0
 #define EDMA_BITS_IN_WORD	32
+#define EDMA_PORT_SRC_PROFILE	0
 
 #ifdef NSS_DP_HW_GRO
 #define EDMA_RX_RING_GRO_NUM_MAX 4
@@ -153,6 +157,8 @@
  */
 #define EDMA_MAX_LOOPBACK_BUF 32
 
+#define EDMA_PASSTHROUGH_VAL_INVALID	-1
+
 /*
  * EDMA ring subtypes. Each type can have subtype which can inherit the
  * data from its parent type. For example, EDMA_RING_TYPE_HOST can have
@@ -162,12 +168,18 @@
 #define EDMA_RING_TYPE_FLAGS_HOST_COMMON	0x1
 #define EDMA_RING_TYPE_FLAGS_HOST_VP		0x2
 #define EDMA_RING_TYPE_FLAGS_HOST_GRO		0x4
+#define EDMA_RING_TYPE_FLAGS_DS			0x8
 
 /*
  * EDMA ring status flags
  */
 #define EDMA_RING_STATUS_FLAGS_IN_USE		0x1
 #define EDMA_RING_STATUS_FLAGS_IS_CONFIGURED	0x2
+
+/*
+ * EDMA ring flags
+*/
+#define EDMA_RING_FLAGS_SEC_RING_VALID	(1UL << 0)
 
 /*
  * edma_port_ucast_queues
@@ -386,6 +398,7 @@ struct edma_rxfill_ring_info {
 	uint32_t buffer_len;				/* buffer length (Max packet length supported per buffer) */
 	bool page_mode;					/* Page mode */
 	uint32_t intr_num;				/* Interrupt number */
+	uint32_t flags;					/* flags */
 };
 
 /*
@@ -471,7 +484,6 @@ struct edma_ds_info {
 #ifdef NSS_DP_PPEDS_SUPPORT
 	struct edma_ppeds_info ppeds_info;		/* PPE-DS config information. */
 #endif
-	struct edma_rings_common_info ppeds_cmn_info;	/* Common information for all PPEDS nodes. */
 };
 
 /*
@@ -750,7 +762,6 @@ struct edma_gbl_ctx {
 	struct edma_hw_gro_ctx hw_gro_ctx;
 			/* HW GRO context */
 #ifdef NSS_DP_PPEDS_SUPPORT
-	uint32_t ppeds_node_map[EDMA_PPEDS_MAX_NODES][EDMA_PPEDS_NUM_ENTRY];
 	struct edma_ppeds_drv ppeds_drv;
 			/* PPE-DS nodes information */
 #endif
@@ -770,6 +781,10 @@ struct edma_gbl_ctx {
                         /* Creating work struct */
 	uint32_t edma_timer_rate;
 			/* EDMA clock's timer rate in Mhz */
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+	edma_ddrq_cfg_t ddrq_def_cfg;
+#endif
 
 #ifdef CONFIG_SKB_TIMESTAMP
 	void __iomem *tstamp_sec;
@@ -792,6 +807,34 @@ extern int edma_dp_extension_en;
 
 extern int edma_rx_ring_mode_bitmask;
 extern int edma_tx_ring_mode_bitmask;
+#ifdef NSS_DP_DDRQ_SUPPORT
+extern int32_t edma_passthrough_val;
+extern int edma_ddrq_gbl_en_sw;
+extern int edma_ddrq_gbl_en_hw;
+extern int edma_ddrq_gbl_data_offset0;
+extern int edma_ddrq_desc_pf_thres;
+extern int edma_ddrq_data_offset;
+extern int edma_ddrq_blk_num;
+extern int edma_ddrq_blk_size;
+extern int edma_ddrq_desc_wb_thres;
+extern int edma_ddrq_en_port_bm;;
+extern int edma_ddrq_vp_port_map[NSS_DP_MAX_PORTS];
+extern int edma_ddrq_ac_queue_ac_en;
+extern int edma_ddrq_ac_queue_color_aware;
+extern int edma_ddrq_ac_queue_wred_en;
+extern int edma_ddrq_ac_queue_shared_ceiling;
+extern int edma_ddrq_ac_queue_grp_id;
+extern int edma_ddrq_grp_ac_en;
+extern int edma_ddrq_grp_color_aware;
+extern int edma_ddrq_grp_drop_threshold;
+extern int edma_ddrq_grp_shared_limit;
+extern int edma_ddrq_grp_id_bm;
+extern int edma_ddrq_isq_base;
+extern int edma_ddrq_lp_queue_base;
+extern int edma_ddrq_lp_num_queues;
+extern int edma_ddrq_lp_id;
+extern int edma_ddrq_lp_fc_grp_id;
+#endif
 
 int edma_irq_init(void);
 irqreturn_t edma_misc_handle_irq(int irq, void *ctx);

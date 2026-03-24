@@ -10,7 +10,9 @@
 #include <linux/netdevice.h>
 #include <linux/debugfs.h>
 #include <asm/cacheflush.h>
-
+#ifdef NSS_DP_PON_SUPPORT
+#include <fal/fal_pon.h>
+#endif
 #include "nss_dp_dev.h"
 #include "edma_regs.h"
 #include "edma_debug.h"
@@ -425,7 +427,7 @@ static inline bool edma_tx_is_tso_eligible(struct sk_buff *skb)
  *	Process Tx for skb with nr_frags
  */
 static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struct edma_pri_txdesc **txdesc,
-		struct sk_buff *skb, uint32_t *hw_next_to_use)
+		struct nss_dp_dev *dp_dev, struct sk_buff *skb, uint32_t *hw_next_to_use)
 {
 	uint8_t i = 0;
 	uint32_t nr_frags = 0, buf_len = 0, num_descs = 0, start_idx = 0, end_idx = 0;
@@ -473,8 +475,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 #if defined(NSS_DP_HIGHMEM_SUPP)
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
-
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
 		edma_dmac_clean_range_no_dsb((void *)skb_frag_address(frag),
 				(void *)(skb_frag_address(frag) + buf_len));
 
@@ -543,9 +544,11 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	if (dptxi->svp) {
 		EDMA_SRC_INFO_SET(txd, dptxi->svp);
 		EDMA_DST_INFO_SET(txd, 0);
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.src_pt_mode_val);
 	} else {
 		EDMA_SRC_INFO_SET(txd, 0);
 		EDMA_DST_INFO_SET(txd, dptxi->dvp);
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
 	}
 }
 
@@ -565,12 +568,9 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 		EDMA_TXDESC_L4_CSUM_SET(txd);
 	}
 
-	/*
-	 * Set destination information in the descriptor
-	 */
-	EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_BYPASS_ALL);
 	EDMA_DST_INFO_SET(txd, dp_dev->macid);
-
+	EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
+	EDMA_TXDESC_SERVICE_CODE_SET(txd, dp_dev->pt_info.sc);
 	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
 
 	/*
@@ -636,16 +636,26 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 
 	edma_tx_desc_init(txd);
 
+	if (unlikely(skb_headroom(skb) < EDMA_DDRQ_PREHEADER_SIZE)) {
+		if (pskb_expand_head(skb, EDMA_DDRQ_PREHEADER_SIZE, 0, GFP_ATOMIC)) {
+			edma_err("Can't expand skb: %px\n", skb);
+			return NULL;
+		}
+	}
+
 	/*
 	 * Set the data pointer as the buffer address in the descriptor.
 	 */
-	buff_addr = (dma_addr_t)virt_to_phys(skb->data);
+	buff_addr = (dma_addr_t)virt_to_phys((skb->data - EDMA_DDRQ_PREHEADER_SIZE));
+#ifdef NSS_DP_PCIE_BUS_ENABLE
+	buff_addr = edma_phy_addr_trans(buff_addr);
+#endif
 	EDMA_TXDESC_BUFFER_ADDR_SET(txd, buff_addr);
 #if defined(NSS_DP_HIGHMEM_SUPP)
 	EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
 
-	EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+	EDMA_TXDESC_DATA_OFFSET_SET(txd, EDMA_DDRQ_PREHEADER_SIZE);
 
 	/*
 	 * Set packet length in the descriptor
@@ -688,7 +698,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 	 * Process skb with nr_frags
 	 */
 	if (unlikely(skb_shinfo(skb)->nr_frags)) {
-		num_descs += edma_tx_skb_nr_frags(txdesc_ring, &txd, skb, hw_next_to_use);
+		num_descs += edma_tx_skb_nr_frags(txdesc_ring, &txd, dp_dev, skb, hw_next_to_use);
 		u64_stats_update_begin(&stats->syncp);
 		stats->tx_nr_frag_pkts++;
 		u64_stats_update_end(&stats->syncp);
@@ -732,7 +742,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 #if defined(NSS_DP_HIGHMEM_SUPP)
 			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+
 			edma_dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
 
@@ -755,7 +765,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 			 */
 skip_primary:
 			if (unlikely(skb_shinfo(iter_skb)->nr_frags)) {
-				num_nr_frag = edma_tx_skb_nr_frags(txdesc_ring, &txd, iter_skb, hw_next_to_use);
+				num_nr_frag = edma_tx_skb_nr_frags(txdesc_ring, &txd, dp_dev, iter_skb, hw_next_to_use);
 				num_descs += num_nr_frag;
 				num_sg_frag_list += num_nr_frag;
 
@@ -929,6 +939,9 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 	 */
 	if (likely(!skb_is_nonlinear(skb))) {
 		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+		if (!txdesc) {
+			return EDMA_TX_FAIL;
+		}
 
 		/* Handle PTP timestamping (PHY priority, XGMAC fallback) */
 		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {
@@ -983,6 +996,9 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 		}
 
 		txdesc = edma_tx_skb_first_desc(dp_dev, txdesc_ring, dptxi, skb, &hw_next_to_use, stats);
+		if (!txdesc) {
+			return EDMA_TX_FAIL;
+		}
 
 		/* Handle PTP timestamping (PHY priority, XGMAC fallback) */
 		if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_HW_TSTAMP)) {

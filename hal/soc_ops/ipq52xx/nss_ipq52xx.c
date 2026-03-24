@@ -21,12 +21,21 @@ int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,2,3,4,5
 int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
 int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10};
 
+int edma_dp_ppe_ds_rx_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+int edma_dp_ppe_ds_rx_queue_map[EDMA_PPEDS_MAX_NODES] = {210, 218};
+int edma_dp_ppe_ds_num_rx_queue[EDMA_PPEDS_MAX_NODES] = {8, 8};
+int edma_dp_ppe_ds_num_rxdesc_per_node[EDMA_PPEDS_MAX_NODES] = {1, 1};
+int edma_dp_ppe_ds_rxfill_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+int edma_dp_ppe_ds_tx_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+int edma_dp_ppe_ds_num_txdesc_per_node[EDMA_PPEDS_MAX_NODES] = {1, 1};
+int edma_dp_ppe_ds_txcmpl_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
+
 /*
  * PPEVP ring info
  */
-int edma_dp_ppe_vp_num_tx_rings = EDMA_MAX_TXDESC_RING_PER_PPEVP;
-int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PER_PPEVP] = {2,3,4,5};
-int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PER_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_num_tx_rings = EDMA_MAX_TXDESC_RING_PPEVP;
+int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP] = {2,3,4,5};
 int edma_dp_ppe_vp_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5};
 
@@ -294,6 +303,126 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
 	return 0;
 }
 
+#ifdef NSS_DP_DDRQ_SUPPORT
+/*
+ * nss_dp_hal_ddrq_cfg_get()
+ *	API to get DDRQ AC queue configurations
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_cfg_tbl_t *ddrq_cfg, uint32_t count)
+{
+	return edma_ddrq_cfg_get(obj, ddrq_cfg, count);
+}
+
+/*
+ * nss_dp_hal_ddrq_cfg_set()
+ *	API to set DDRQ AC queue configurations
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_cfg_tbl_t *ddrq_cfg)
+{
+	return edma_ddrq_cfg_set(obj, ddrq_cfg);
+}
+
+/*
+ * nss_dp_hal_ddrq_grp_cfg_get()
+ *	API to get DDRQ group configurations
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_grp_cfg_get(uint32_t ddrq_grp_id, nss_dp_ddrq_ac_grp_cfg_tbl_t *ddrq_grp_cfg)
+{
+	return edma_ddrq_grp_cfg_get(ddrq_grp_id, ddrq_grp_cfg);
+}
+
+/*
+ * nss_dp_hal_ddrq_grp_cfg_set()
+ *	API to set DDRQ group configurations
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_grp_cfg_set(uint32_t ddrq_grp_id, nss_dp_ddrq_ac_grp_cfg_tbl_t *ddrq_grp_cfg)
+{
+	return edma_ddrq_grp_cfg_set(ddrq_grp_id, ddrq_grp_cfg);
+}
+
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_enqueue_disable(nss_dp_ddrq_obj_id_t *obj, bool disable)
+{
+	return edma_ddrq_enqueue_disable(obj, disable);
+}
+
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_dequeue_drop(nss_dp_ddrq_obj_id_t *obj, bool drop)
+{
+	return edma_ddrq_dequeue_drop(obj, drop);
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_reset()
+ *	API to reset DDRQ occupancy stats
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_reset(void)
+{
+	return edma_ddrq_occupancy_stats_reset();
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_start()
+ *	API to start the DDRQ occupancy test instance
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_start(void)
+{
+	return edma_ddrq_occupancy_stats_start();
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_stop()
+ *	API to stop the DDRQ occupancy test instance
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_stop(void)
+{
+	return edma_ddrq_occupancy_stats_stop();
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_restart()
+ *	API to restart the DDRQ occupancy test instance
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_restart(void)
+{
+	return edma_ddrq_occupancy_stats_restart();
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_threshold_set()
+ *	API to set DDRQ occupancy threshold configuration
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_threshold_set(uint32_t ddrq_id, nss_dp_ddrq_occupancy_threshold_t *threshold)
+{
+	return edma_ddrq_occupancy_stats_threshold_set(ddrq_id, threshold);
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_threshold_get()
+ *	API to get DDRQ occupancy threshold configuration
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_threshold_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_threshold_t *threshold)
+{
+	return edma_ddrq_occupancy_stats_threshold_get(ddrq_id, threshold);
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_get()
+ *	API to get DDRQ occupancy stats
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_stats_t *ddrq_stats)
+{
+	return edma_ddrq_occupancy_stats_get(ddrq_id, ddrq_stats);
+}
+
+/*
+ * nss_dp_hal_ddrq_occupancy_stats_status_get()
+ *	API to get DDRQ occupancy stats run status
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *status)
+{
+	return edma_ddrq_occupancy_stats_status_get(ddrq_id, status);
+}
+#endif 		/* NSS_DP_DDRQ_SUPPORT */
+
 /*
  * nss_dp_hal_init()
  *	Initialize EDMA and set gmac ops.
@@ -329,13 +458,17 @@ void nss_dp_hal_cleanup(void)
 }
 
 /*
- * nss_dp_ppeds_ops_get()
+ * nss_dp_ppeds_wifi_arch_mode_ops_get()
  *	API to get PPE-DS operations()
  */
-struct nss_dp_ppeds_ops *nss_dp_ppeds_ops_get(void)
+struct nss_dp_ppeds_ops *nss_dp_ppeds_wifi_arch_mode_ops_get(uint32_t mode)
 {
 #ifdef NSS_DP_PPEDS_SUPPORT
-	return &edma_ppeds_ops;
+	if (mode == EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8) {
+		return &edma_ppeds_ops_wifi8;
+	} else {
+		return &edma_ppeds_ops_wifi7;
+	}
 #else
 	return NULL;
 #endif

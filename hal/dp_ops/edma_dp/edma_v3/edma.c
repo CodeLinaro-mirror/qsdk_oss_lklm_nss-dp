@@ -33,6 +33,9 @@
 #include "edma_procfs.h"
 #include "nss_dp_dev.h"
 #include "nss_dp_vp.h"
+#ifdef NSS_DP_DDRQ_SUPPORT
+#include "edma_ddrq.h"
+#endif
 
 int edma_dp_extension_en = 0;
 module_param(edma_dp_extension_en, int, 0640);
@@ -70,7 +73,7 @@ int edma_dp_host_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 module_param(edma_dp_host_num_tx_rings_per_core, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_tx_rings_per_core, "Number of Host TX rings");
 
-int edma_dp_host_num_txcmpl_rings = NR_CPUS + EDMA_MAX_TXDESC_RING_PER_PPEVP;
+int edma_dp_host_num_txcmpl_rings = NR_CPUS + EDMA_MAX_TXDESC_RING_PPEVP;
 module_param(edma_dp_host_num_txcmpl_rings, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_txcmpl_rings, "Number of Host TX cmpl rings");
 
@@ -85,6 +88,112 @@ MODULE_PARM_DESC(edma_dp_host_txcmpl_map, "TX to txcmpl map rings for host");
 
 module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+int edma_passthrough_val = EDMA_PASSTHROUGH_VAL_INVALID;
+module_param(edma_passthrough_val, int, 0640);
+MODULE_PARM_DESC(edma_passthrough_val, "EDMA passthrough value to be set in Tx desc");
+
+int edma_ddrq_gbl_en_hw = EDMA_DDRQ_GBL_EN_HW_DEF;
+module_param(edma_ddrq_gbl_en_hw, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_gbl_en_hw, "Disable/enable DDRQ feature from EDMA hardware");
+
+int edma_ddrq_gbl_en_sw = EDMA_DDRQ_GBL_EN_SW_DEF;
+module_param(edma_ddrq_gbl_en_sw, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_gbl_en_sw, "Disable/enable DDRQ feature from EDMA module");
+
+int edma_ddrq_desc_pf_thres = EDMA_DDRQ_GBL_PF_THRES;
+module_param(edma_ddrq_desc_pf_thres, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_desc_pf_thres, "EDMA hardware's prefetch threshold for DDRQ descriptor");
+
+int edma_ddrq_data_offset = EDMA_DDRQ_DATA_OFFSET_DEF;
+module_param(edma_ddrq_data_offset, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_data_offset, "Offset bitmap beyond which the packet will be written to DDR buffer");
+
+int edma_ddrq_blk_num = NSS_DP_EDMA_DDRQ_BLK_NUM_DEF;
+module_param(edma_ddrq_blk_num, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_blk_num, "Number of blocks for DDRQ");
+
+int edma_ddrq_blk_size = NSS_DP_EDMA_DDRQ_BLK_SIZE_DEF;
+module_param(edma_ddrq_blk_size, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_blk_size, "Size of one DDRQ block");
+
+int edma_ddrq_desc_wb_thres = EDMA_DDRQ_GBL_WB_THRES;
+module_param(edma_ddrq_desc_wb_thres, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_desc_wb_thres, "EDMA hardware's writeback threshold for DDRQ descriptor");
+
+int edma_ddrq_gbl_data_offset0 = EDMA_DDRQ_GBL_DATA_OFFSET_REG0_VAL;
+module_param(edma_ddrq_gbl_data_offset0, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_gbl_data_offset0, "DDRQ data offset 0 value");
+
+int edma_ddrq_en_port_bm = NSS_DP_EDMA_DDRQ_EN_PORT_BM;
+module_param(edma_ddrq_en_port_bm, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_en_port_bm, "DDRQ enable bitmap per port");
+
+int edma_ddrq_vp_port_map[NSS_DP_MAX_PORTS] = {0x9, 0xa, 0xb, 0xc, 0xd, 0xe};
+module_param_array(edma_ddrq_vp_port_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_vp_port_map, "DDRQ virtual port mapping");
+
+int edma_ddrq_ac_queue_ac_en = EDMA_DDRQ_AC_Q_AC_EN_DEF;
+module_param(edma_ddrq_ac_queue_ac_en, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_ac_en, "DDRQ per queue AC configuration");
+
+int edma_ddrq_ac_queue_color_aware = EDMA_DDRQ_AC_Q_COLOR_AWARE_DEF;
+module_param(edma_ddrq_ac_queue_color_aware, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_color_aware, "DDRQ per queue color aware configuration");
+
+int edma_ddrq_ac_queue_wred_en = EDMA_DDRQ_AC_Q_WRED_EN_DEF;
+module_param(edma_ddrq_ac_queue_wred_en, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_wred_en, "DDRQ per queue WRED configuration");
+
+int edma_ddrq_ac_queue_shared_ceiling = EDMA_DDRQ_AC_Q_SHD_CEILING;
+module_param(edma_ddrq_ac_queue_shared_ceiling, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_shared_ceiling, "DDRQ per queue shared ceiling configuration");
+
+int edma_ddrq_ac_queue_grp_id = EDMA_DDRQ_AC_Q_GRP_ID_DEF;
+module_param(edma_ddrq_ac_queue_grp_id, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_grp_id, "DDRQ per queue group id configuration");
+
+int edma_ddrq_grp_ac_en = EDMA_DDRQ_AC_GRP_AC_EN_DEF;
+module_param(edma_ddrq_grp_ac_en, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_ac_en, "DDRQ group AC configuration");
+
+int edma_ddrq_grp_color_aware = EDMA_DDRQ_AC_GRP_COLOR_AWARE_DEF;
+module_param(edma_ddrq_grp_color_aware, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_color_aware, "DDRQ group color aware configuration");
+
+int edma_ddrq_grp_drop_threshold = EDMA_DDRQ_AC_GRP_DRP_THD;
+module_param(edma_ddrq_grp_drop_threshold, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_drop_threshold, "DDRQ group's drop threshold configuration");
+
+int edma_ddrq_grp_shared_limit = EDMA_DDRQ_AC_GRP_SHRD_LIMIT;
+module_param(edma_ddrq_grp_shared_limit, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_shared_limit, "DDRQ group's shared limit configuration");
+
+int edma_ddrq_grp_id_bm = EDMA_DDRQ_AC_GRP_ID_BM_DEF;
+module_param(edma_ddrq_grp_id_bm, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_id_bm, "DDRQ group id bitmask");
+
+int edma_ddrq_isq_base = EDMA_DDRQ_ISQ_BASE;
+module_param(edma_ddrq_isq_base, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_isq_base, "DDRQ ingress SRAM queue base");
+
+int edma_ddrq_lp_queue_base = EDMA_DDRQ_LP_QUEUE_BASE_DEF;
+module_param(edma_ddrq_lp_queue_base, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_queue_base, "DDRQ loopback queue base");
+
+int edma_ddrq_lp_num_queues = EDMA_DDRQ_LP_NUM_QUEUES_DEF;
+module_param(edma_ddrq_lp_num_queues, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_num_queues, "DDRQ loopback queue count");
+
+int edma_ddrq_lp_id = EDMA_DDRQ_LP_ID;
+module_param(edma_ddrq_lp_id, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_id, "DDRQ EDMA loopback id to be used");
+
+int edma_ddrq_lp_fc_grp_id = EDMA_DDRQ_LP_FC_GRP_ID;
+module_param(edma_ddrq_lp_fc_grp_id, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_lp_fc_grp_id, "DDRQ EDMA loopback id's FC GRP ID to map");
+#endif
 
 /*
  * PPE-VP ring information
@@ -149,6 +258,33 @@ int edma_dp_gro_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {16, 17, 18, 19, -1,
 module_param_array(edma_dp_gro_rxfill_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_gro_rxfill_map, "RX ring to RX fill ring mapping");
 #endif
+
+/*
+ * PPE-DS ring information
+ */
+module_param_array(edma_dp_ppe_ds_rx_rings, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_rx_rings, "Rx desc ring ID for ppeds");
+
+module_param_array(edma_dp_ppe_ds_rx_queue_map, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_rx_queue_map, "RX queue map for for ppeds");
+
+module_param_array(edma_dp_ppe_ds_num_rx_queue, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_num_rx_queue, "RX num queue map per ring for for ppeds");
+
+module_param_array(edma_dp_ppe_ds_rxfill_rings, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_rxfill_rings, "RxFill ring ID for ppeds");
+
+module_param_array(edma_dp_ppe_ds_tx_rings, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_tx_rings, "Tx desc ring ID for ppeds");
+
+module_param_array(edma_dp_ppe_ds_num_txdesc_per_node, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_num_txdesc_per_node, "Txdesc rings per ppeds node");
+
+module_param_array(edma_dp_ppe_ds_num_rxdesc_per_node, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_num_rxdesc_per_node, "Rxdesc rings per ppeds node");
+
+module_param_array(edma_dp_ppe_ds_txcmpl_rings, int, NULL, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_ds_txcmpl_rings, "Tx completion ring ID for ppeds");
 
 /*
  * Module parameters for the bp stats enabled txcmpl, rxdesc, and rxfill rings config
@@ -930,6 +1066,133 @@ static int edma_validate_gro_ring_info(void)
 }
 #endif
 
+#ifdef NSS_DP_PPEDS_SUPPORT
+/*
+ * edma_validate_ppeds_ring_info()
+ *	Validate PPE-DS ring information
+ */
+static int edma_validate_ppeds_ring_info(void)
+{
+	struct edma_ds_info *ds_info = &init_info.ds_info;
+	struct edma_ppeds_info *ppeds_info = &ds_info->ppeds_info;
+	uint32_t rxfill_ring_bitmap = 0;
+	uint32_t txcmpl_ring_bitmap = 0;
+	uint32_t rx_ring_bitmap = 0;
+	uint32_t tx_ring_bitmap = 0;
+	int i, j;
+
+	/*
+	 * Validate each PPE-DS node
+	 */
+	for (i = 0; i < ppeds_info->num_nodes; i++) {
+		struct edma_ppeds_node_info *node_info = &ppeds_info->node_info[i];
+
+		/*
+		 * Validate RX ring counts
+		 */
+		if ((node_info->num_rx_rings <= 0) || (node_info->num_rx_rings > EDMA_PPEDS_MAX_RINGS_PER_NODE)) {
+			edma_err("Node %d: Invalid num_rx_rings (%d), valid range: 1-%d\n",
+				i, node_info->num_rx_rings, EDMA_PPEDS_MAX_RINGS_PER_NODE);
+			return -EINVAL;
+		}
+
+		/*
+		 * Validate TX ring counts
+		 */
+		if ((node_info->num_tx_rings <= 0) || (node_info->num_tx_rings > EDMA_PPEDS_MAX_RINGS_PER_NODE)) {
+			edma_err("Node %d: Invalid num_tx_rings (%d), valid range: 1-%d\n",
+				i, node_info->num_tx_rings, EDMA_PPEDS_MAX_RINGS_PER_NODE);
+			return -EINVAL;
+		}
+
+		/*
+		 * Validate RX ring mappings
+		 */
+		for (j = 0; j < node_info->num_rx_rings; j++) {
+			uint32_t rx_ring_id = node_info->rx_map[j].rx_ring_id;
+			uint32_t rx_fill_ring_id = node_info->rx_map[j].rx_fill_ring_id;
+
+			if ((rx_ring_id < 0) || (rx_ring_id >= EDMA_MAX_RXDESC_RINGS)) {
+				edma_err("Node %d, RX ring %d: Invalid rx_ring_id (%d), max allowed: %d\n",
+					i, j, rx_ring_id, EDMA_MAX_RXDESC_RINGS - 1);
+				return -EINVAL;
+			}
+
+			if ((rx_fill_ring_id < 0) || (rx_fill_ring_id >= EDMA_MAX_RXFILL_RINGS)) {
+				edma_err("Node %d, RX ring %d: Invalid rx_fill_ring_id (%d), max allowed: %d\n",
+					i, j, rx_fill_ring_id, EDMA_MAX_RXFILL_RINGS - 1);
+				return -EINVAL;
+			}
+
+			/*
+			 * Check for duplicate RX ring ID across all nodes
+			 */
+			if (rx_ring_bitmap & (1 << rx_ring_id)) {
+				edma_err("Node %d, RX ring %d: Duplicate rx_ring_id (%d)\n",
+					i, j, rx_ring_id);
+				return -EINVAL;
+			}
+
+			rx_ring_bitmap |= (1 << rx_ring_id);
+
+			/*
+			 * Track RX fill rings used by PPE-DS
+			 */
+			rxfill_ring_bitmap |= (1 << rx_fill_ring_id);
+		}
+
+		/*
+		 * Validate TX ring mappings
+		 */
+		for (j = 0; j < node_info->num_tx_rings; j++) {
+			uint32_t tx_ring_id = node_info->tx_map[j].tx_ring_id;
+			uint32_t tx_cmpl_ring_id = node_info->tx_map[j].tx_cmpl_ring_id;
+
+			if ((tx_ring_id < 0) || (tx_ring_id >= EDMA_MAX_TXDESC_RINGS)) {
+				edma_err("Node %d, TX ring %d: Invalid tx_ring_id (%d), max allowed: %d\n",
+					i, j, tx_ring_id, EDMA_MAX_TXDESC_RINGS - 1);
+				return -EINVAL;
+			}
+
+			if ((tx_cmpl_ring_id < 0) || (tx_cmpl_ring_id >= EDMA_MAX_TXCMPL_RINGS)) {
+				edma_err("Node %d, TX ring %d: Invalid tx_cmpl_ring_id (%d), max allowed: %d\n",
+					i, j, tx_cmpl_ring_id, EDMA_MAX_TXCMPL_RINGS - 1);
+				return -EINVAL;
+			}
+
+			/*
+			 * Check for duplicate TX ring ID across all nodes
+			 */
+			if (tx_ring_bitmap & (1 << tx_ring_id)) {
+				edma_err("Node %d, TX ring %d: Duplicate tx_ring_id (%d)\n",
+					i, j, tx_ring_id);
+				return -EINVAL;
+			}
+
+			tx_ring_bitmap |= (1 << tx_ring_id);
+
+			/*
+			 * Track TX completion rings used by PPE-DS
+			 */
+			txcmpl_ring_bitmap |= (1 << tx_cmpl_ring_id);
+		}
+
+		/*
+		 * Validate number of queues per ring
+		 */
+		if (node_info->num_queues_per_ring <= 0) {
+			edma_err("Node %d: Invalid num_queues_per_ring (%d)\n",
+				i, node_info->num_queues_per_ring);
+			return -EINVAL;
+		}
+	}
+
+	edma_info("PPE-DS ring validation successful: %d nodes validated, rxfill_bitmap=0x%x, txcmpl_bitmap=0x%x\n",
+		  ppeds_info->num_nodes, rxfill_ring_bitmap, txcmpl_ring_bitmap);
+	return 0;
+}
+#endif
+
 /*
  * edma_parse_ini()
  *	parse the ini file and config EDMA rings, queue, mappings, etc.
@@ -937,6 +1200,7 @@ static int edma_validate_gro_ring_info(void)
 static int edma_parse_ini(void)
 {
 	int i;
+
 	/*
 	 * TO-DO: Remove the module params and replace them with the
 	 * parsing logic to fetch the information from INI file.
@@ -949,6 +1213,10 @@ static int edma_parse_ini(void)
 	struct edma_rx_rings_info *rx_info = &host_info->sfe_info.rx_info;
 	struct edma_tx_rings_info *tx_info = &host_info->sfe_info.tx_info;
 	fal_portscheduler_resource_t cfg = {0};
+#ifdef NSS_DP_PPEDS_SUPPORT
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	uint8_t txdesc = 0, rxdesc = 0;
+#endif
 #ifdef NSS_DP_HW_GRO
 	struct edma_rx_rings_info *rx_gro_info;
 #endif
@@ -1057,6 +1325,67 @@ static int edma_parse_ini(void)
 		edma_err("Validating host rings failed\n");
 		return -EINVAL;
 	}
+
+#ifdef NSS_DP_PPEDS_SUPPORT
+	/*
+	 * Configure ppeds parameter.
+	 */
+	if (drv->num_nodes > EDMA_PPEDS_MAX_NODES) {
+		edma_err("Invalid number of ppeds nodes (%d), maximum possible"
+				" ppeds node count is %u\n",
+				drv->num_nodes,
+				EDMA_PPEDS_MAX_NODES);
+		return -EINVAL;
+	}
+
+	for (int j = 0; j < drv->num_nodes; j++) {
+		struct edma_ds_info *ds_info = &init_info.ds_info;
+		struct edma_ppeds_node_info *node_info = &ds_info->ppeds_info.node_info[j];
+		int32_t num_txdesc = edma_dp_ppe_ds_num_txdesc_per_node[j];
+		int32_t num_rxdesc = edma_dp_ppe_ds_num_rxdesc_per_node[j];
+
+		if ((num_txdesc <= 0) || (num_txdesc > EDMA_PPEDS_MAX_RINGS_PER_NODE)) {
+			edma_err("invalid number of txdesc per node %d\n", num_txdesc);
+			return -EINVAL;
+		}
+
+		if ((num_rxdesc <= 0) || (num_rxdesc > EDMA_PPEDS_MAX_RINGS_PER_NODE)) {
+			edma_err("invalid number of rxdesc per node %d\n", num_rxdesc);
+			return -EINVAL;
+		}
+
+		if (txdesc >= EDMA_PPEDS_MAX_TX_RINGS || rxdesc >= EDMA_PPEDS_MAX_RX_RINGS) {
+			edma_err("TXDESC %d RXDESC %d not available for PPEDS\n", txdesc, rxdesc);
+			return -EINVAL;
+		}
+
+		for (int i = 0; i < num_rxdesc; i++) {
+			node_info->rx_map[i].rx_ring_id = edma_dp_ppe_ds_rx_rings[rxdesc];
+			node_info->rx_map[i].ppe_queue_base = edma_dp_ppe_ds_rx_queue_map[rxdesc];
+			node_info->rx_map[i].rx_fill_ring_id = edma_dp_ppe_ds_rxfill_rings[rxdesc];
+			node_info->num_queues_per_ring = edma_dp_ppe_ds_num_rx_queue[rxdesc];
+			node_info->num_rx_rings++;
+			rxdesc++;
+		}
+
+		for (int i = 0; i < num_txdesc; i++) {
+			node_info->tx_map[i].tx_ring_id = edma_dp_ppe_ds_tx_rings[txdesc];
+			node_info->tx_map[i].tx_cmpl_ring_id = edma_dp_ppe_ds_txcmpl_rings[txdesc];
+			node_info->num_tx_rings++;
+			txdesc++;
+		}
+
+		ds_info->ppeds_info.num_nodes++;
+	}
+
+	/*
+	 * Validate PPE-DS ring information
+	 */
+	if (edma_validate_ppeds_ring_info()) {
+		edma_err("Validating PPE-DS rings failed\n");
+		return -EINVAL;
+	}
+#endif
 
 	return 0;
 }
@@ -1438,19 +1767,9 @@ skip_loopback:
 #endif
 
 #ifdef NSS_DP_PPEDS_SUPPORT
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,ppeds-num",
-					&edma_gbl_ctx.ppeds_drv.num_nodes) != 0) {
-		edma_err("Unable to read number of PPE-DS nodes\n");
-		goto fail;
-	}
-
-	if (edma_gbl_ctx.ppeds_drv.num_nodes > EDMA_PPEDS_MAX_NODES) {
-		edma_err("Invalid number of ppeds nodes (%d), maximum possible"
-				" ppeds node count is %u\n",
-				edma_gbl_ctx.ppeds_drv.num_nodes,
-				EDMA_PPEDS_MAX_NODES);
-		goto fail;
-	}
+	edma_gbl_ctx.ppeds_drv.num_nodes = EDMA_PPEDS_MAX_NODES;
+	edma_debug("PPE-DS num nodes: %d\n", edma_gbl_ctx.ppeds_drv.num_nodes);
+#endif
 
 #if defined(NSS_DP_POINT_OFFLOAD)
 	if (edma_gbl_ctx.ppeds_drv.num_nodes == EDMA_PPEDS_MAX_NODES) {
@@ -1472,25 +1791,10 @@ skip_loopback:
 	}
 #endif
 
-	edma_debug("PPE-DS num nodes: %d\n", edma_gbl_ctx.ppeds_drv.num_nodes);
-
-	if (edma_gbl_ctx.ppeds_drv.num_nodes > 0) {
-		ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
-				"qcom,ppeds-map",
-				(int32_t *)edma_gbl_ctx.ppeds_node_map,
-				(edma_gbl_ctx.ppeds_drv.num_nodes * EDMA_PPEDS_NUM_ENTRY));
-		if (ret) {
-			edma_err("Unable to read PPE-DS map array. ret: %d\n", ret);
-			goto fail;
-		}
-	}
-#endif
 	return 0;
 
-#if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT) || defined(NSS_DP_PPEDS_SUPPORT)
-fail:
-#endif
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
+fail:
 	if (edma_gbl_ctx.loopback_en) {
 		kfree(edma_gbl_ctx.rxfill_loopback_ring_id_arr);
 		kfree(edma_gbl_ctx.rxdesc_loopback_ring_id_arr);
@@ -2036,6 +2340,14 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	}
 	edma_set_init_stage(EDMA_INIT_STAGE_HW_RESET_DONE);
 
+#ifdef NSS_DP_DDRQ_SUPPORT
+	if (edma_ddrq_init(&egc->ddrq_def_cfg) != 0) {
+		edma_err("Error in EDMA DDRQ initialization\n");
+		return -EINVAL;
+	}
+	edma_warn("DDRQ init successful\n");
+#endif
+
 	/*
 	 * Set EDMA global page mode and jumbo MRU
 	 */
@@ -2183,7 +2495,8 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	/*
 	 * Global EDMA enable and padding enable
 	 */
-	data = EDMA_PORT_PAD_EN | EDMA_PORT_EDMA_EN;
+	data = edma_reg_read(EDMA_REG_PORT_CTRL);
+	data |= EDMA_PORT_PAD_EN | EDMA_PORT_EDMA_EN;
 	edma_reg_write(EDMA_REG_PORT_CTRL, data);
 
 	/*
@@ -2297,6 +2610,27 @@ static int32_t edma_configure_clocks(void)
 
 	return 0;
 }
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+/*
+ * edma_passthrough_handler()
+ *	API to set EDMA passthrough value dynamically
+ */
+int edma_passthrough_handler(struct ctl_table *table, int write,
+		void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	edma_err("### passthrough mode val set to %d\n", edma_passthrough_val);
+	return ret;
+}
+#endif
 
 #ifdef NSS_DP_HW_GRO
 /*
@@ -2457,6 +2791,15 @@ static struct ctl_table edma_sub[] = {
 		.maxlen         =       sizeof(int),
 		.mode           =       0644,
 		.proc_handler   =       edma_rx_gro_max_desc_count_cfg
+	},
+#endif
+#ifdef NSS_DP_DDRQ_SUPPORT
+	{
+		.procname       =       "edma_passthrough_val",
+		.data           =       &edma_passthrough_val,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_passthrough_handler
 	},
 #endif
 	{}
@@ -2769,50 +3112,6 @@ int edma_irq_init(void)
 		edma_debug("%s: rxfill_intr[%u] = %u\n", (edma_gbl_ctx.device_node)->name,
 				 i, edma_gbl_ctx.rxfill_info[i].intr_num);
 	}
-
-#ifdef NSS_DP_PPEDS_SUPPORT
-	/*
-	 * Get PPE-DS IRQ numbers
-	 */
-	for (i = 0; i < edma_gbl_ctx.ppeds_drv.num_nodes; i++) {
-		int32_t val;
-
-		entry_num++;
-#ifdef NSS_DP_MHT_SW_PORT_MAP
-		ppeds_nodes++;
-#endif
-		val = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
-		if (val < 0) {
-			edma_err("%s: Invalid value: ppeds_txcomp_intr[%u]: %d\n",
-					(edma_gbl_ctx.device_node)->name, i, val);
-			return -1;
-		}
-		edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_TXCOMP_IRQ_IDX] = val;
-
-		entry_num++;
-		val = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
-		if (val < 0) {
-			edma_err("%s: Invalid value: ppeds_rxdesc_intr[%u]: %d\n",
-					(edma_gbl_ctx.device_node)->name, i, val);
-			return -1;
-		}
-		edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXDESC_IRQ_IDX] = val;
-
-		entry_num++;
-		val = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
-		if (val < 0) {
-			edma_err("%s: Invalid value: ppeds_rxfill_intr[%u]: %d\n",
-					(edma_gbl_ctx.device_node)->name, i, val);
-			return -1;
-		}
-		edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXFILL_IRQ_IDX] = val;
-
-		edma_debug("PPE-DS IRQ: TxComplete: %d, Rx: %d, Rxfill: %d\n",
-			edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_TXCOMP_IRQ_IDX],
-			edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXDESC_IRQ_IDX],
-			edma_gbl_ctx.ppeds_drv.ppeds_node_cfg[i].irq_map[EDMA_PPEDS_RXFILL_IRQ_IDX]);
-	}
-#endif
 
 	/*
 	 * Get TXCMPL rings IRQ numbers for MHT txcmpl rings.

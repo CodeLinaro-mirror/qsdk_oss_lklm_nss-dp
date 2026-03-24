@@ -113,6 +113,10 @@ int nss_dp_tx_mitigation_pkt_cnt = NSS_DP_TX_MITIGATION_PKT_CNT_DEF;
 module_param(nss_dp_tx_mitigation_pkt_cnt, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_tx_mitigation_pkt_cnt, "Tx mitigation packet count value");
 
+int nss_dp_txcmpl_fc_threshold_cnt = NSS_DP_TXCMPL_FC_THRESHOLD_DEF;
+module_param(nss_dp_txcmpl_fc_threshold_cnt, int, 0444);
+MODULE_PARM_DESC(nss_dp_txcmpl_fc_threshold_cnt, "Txcmpl FC threshold count value");
+
 int nss_dp_rx_mitigation_timer = NSS_DP_RX_MITIGATION_TIMER_DEF;
 module_param(nss_dp_rx_mitigation_timer, int, S_IRUGO);
 MODULE_PARM_DESC(nss_dp_rx_mitigation_timer, "Rx mitigation timer value in microseconds");
@@ -189,22 +193,20 @@ MODULE_PARM_DESC(tx_ring_sz_high_mem, "edma tx ring size for high memory");
 static int nss_dp_eth_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {
 	struct nss_dp_dev *dp_priv;
-	int ret;
 
 	if (!netdev || !ifr)
-		return -EINVAL;
-
-	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
-	if (!dp_priv)
 		return -EINVAL;
 
 	/*
 	 * Try PHY-level PTP first (higher priority, more accurate)
 	 * PHY timestamping is closer to the wire and typically more precise
 	 */
-	ret = phy_do_ioctl_running(netdev, ifr, cmd);
-	if (!ret)
-		return ret;
+	if (phy_has_hwtstamp(netdev->phydev))
+		return phy_do_ioctl_running(netdev, ifr, cmd);
+
+	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
+	if (!dp_priv)
+		return -EINVAL;
 
 	/*
 	 * Fall back to MAC-level PTP (XGMAC) if PHY doesn't support it
@@ -1208,7 +1210,6 @@ static int32_t nss_dp_probe(struct platform_device *pdev)
 		pr_info("tstamp_sec: 0x%llx, tstamp_nsec: 0x%llx\n", sec_addr, nsec_addr);
 	}
 #endif
-
 	return 0;
 
 #if defined(NSS_DP_PPE_SUPPORT)
@@ -1363,11 +1364,11 @@ EXPORT_SYMBOL(nss_dp_get_port_num);
  * nss_dp_ppeds_get_ops()
  *	API to get PPE-DS operations
  */
-struct nss_dp_ppeds_ops *nss_dp_ppeds_get_ops(void)
+struct nss_dp_ppeds_ops *nss_dp_ppeds_get_wifi_arch_mode_ops(uint32_t mode)
 {
-	return nss_dp_ppeds_ops_get();
+	return nss_dp_ppeds_wifi_arch_mode_ops_get(mode);
 }
-EXPORT_SYMBOL(nss_dp_ppeds_get_ops);
+EXPORT_SYMBOL(nss_dp_ppeds_get_wifi_arch_mode_ops);
 
 /*
  * nss_dp_nsm_sawf_sc_stats_read()

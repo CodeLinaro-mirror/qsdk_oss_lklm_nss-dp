@@ -17,6 +17,17 @@
 #ifndef __NSS_DP_PPEDS_H__
 #define __NSS_DP_PPEDS_H__
 
+#define EDMA_PPEDS_MAX_RINGS_PER_NODE	2
+
+/**
+ * edma_ppeds_wifi_arch_mode
+ *	WiFi architecture mode enumeration
+ */
+enum edma_ppeds_wifi_arch_mode {
+	EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7 = 7,
+	EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8 = 8,
+};
+
 /**
  * nss_dp_ppeds_rx_fill_elem
  *	PPE-DS Rx fill buffer info
@@ -56,13 +67,97 @@ struct nss_dp_ppeds_wifi7_handle {
 };
 
 /**
+ * nss_dp_ppeds_reg_addr_info
+ * 	physical and virtual address of registers
+ */
+struct nss_dp_ppeds_reg_addr_info {
+	void __iomem *vaddr;	/**< Virtual address */
+	dma_addr_t paddr;	/*< Physical address */
+};
+
+/**
+ * nss_dp_ppeds_wlan_reg_data_ring_cfg
+ *	Data ring information
+ */
+struct nss_dp_ppeds_wlan_reg_data_ring_cfg {
+	uint8_t num_reo2ppe;	/**< Number of REO2PPE ring*/
+	uint8_t num_ppe2tcl;	/**< Number of PPE2TCL ring*/
+	dma_addr_t ppe2tcl_ba[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< PPE2TCL ring base address */
+	dma_addr_t reo2ppe_ba[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< REO2PPE ring base address */
+	uint32_t ppe2tcl_num_desc[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< PPE2TCL ring descriptor count */
+	uint32_t reo2ppe_num_desc[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< REO2PPE ring descriptor count */
+};
+
+/**
+ * nss_dp_ppeds_wlan_reg_data_ring_hptp_cfg
+ *	Data ring TX RX information.
+ */
+struct nss_dp_ppeds_wlan_reg_data_ring_hptp_cfg {
+	struct nss_dp_ppeds_reg_addr_info wlan_ppe2tcl_hp_addr[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< edma PPE2TCL Producer register address */
+	struct nss_dp_ppeds_reg_addr_info wlan_reo2ppe_tp_addr[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< edma REO2PPE consumer register address */
+	struct nss_dp_ppeds_reg_addr_info edma_txdesc_prod_addr[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< edma TXDESC producer register address */
+	struct nss_dp_ppeds_reg_addr_info edma_rxdesc_cons_addr[EDMA_PPEDS_MAX_RINGS_PER_NODE];	/**< edma RXDESC consumer register address */
+};
+
+/**
+ * nss_dp_ppeds_wlan_reg_hbm_ring_cfg
+ *	HW buffer ring information
+ */
+struct nss_dp_ppeds_wlan_reg_hbm_ring_cfg {
+	dma_addr_t tqm2ppe_ba;	/**< TQM2PPE ring's base address */
+	dma_addr_t ppe2wbm_ba;	/**< PPE2WBM ring's base address */
+	uint32_t tqm2ppe_num_desc;	/**< TQM2PPE descriptor count */
+	uint32_t ppe2wbm_num_desc;	/**< PPE2WBM descriptor count */
+};
+
+/**
+ * nss_dp_ppeds_wlan_reg_hbm_ring_hptp_cfg
+ *	HW buffer ring TX RX information.
+ */
+struct nss_dp_ppeds_wlan_reg_hbm_ring_hptp_cfg {
+	struct nss_dp_ppeds_reg_addr_info edma_txcmpl_cons_addr;	/**< edma TXCMPL consumer register physical address */
+	struct nss_dp_ppeds_reg_addr_info edma_rxfill_prod_addr;	/**< edma RXFILL Producer register physical address */
+	struct nss_dp_ppeds_reg_addr_info wlan_ppe2wbm_hp_addr;	/**< edma PPE2WBM Producer register physical address */
+	struct nss_dp_ppeds_reg_addr_info wlan_tqm2ppe_tp_addr;	/**< edma PPE2TCL Producer register physical address */
+};
+
+/**
+ * nss_dp_ppeds_wifi8_handle
+ *	PPE-DS DP wifi8 handle information.
+ */
+struct nss_dp_ppeds_wifi8_handle {
+	uint8_t data_ring_auto_index_en;	/**< Auto index Enabled / Disabled */
+	uint8_t hw_buff_mgmt_en;	/**< HW buffer manager Enabled / Disabled */
+
+	struct {
+		struct nss_dp_ppeds_wlan_reg_data_ring_cfg ring_info;
+		struct nss_dp_ppeds_wlan_reg_data_ring_hptp_cfg txrx_info;
+	} data_ring;
+
+	struct {
+		struct nss_dp_ppeds_wlan_reg_hbm_ring_cfg ring_info;
+		struct nss_dp_ppeds_wlan_reg_hbm_ring_hptp_cfg txrx_info;
+	} hw_buf_mgmt;
+
+	uint32_t ppe2tcl_rxfill_num_desc;	/**< PPE2TCL Rxfill descriptor count */
+	uint32_t reo2ppe_txcmpl_num_desc;	/**< REO2PPE Txcomplete descriptor count */
+	uint32_t eth_rxfill_low_thr;	/**< RxFill ring's low threshold interrupt value */
+	uint32_t eth_txcomp_budget;	/**< Tx complete's budget */
+	uint32_t eth_rxfill_budget;	/**< RxFill ring's budget value */
+	uint32_t eth_txcomp_chnk_of_reap;	/**< PPEDS Tx complete's chunk of reap */
+	struct nss_dp_ppeds_rx_fill_elem *rx_fill_arr;	/**< RxFill buffer array */
+	struct nss_dp_ppeds_tx_cmpl_elem *tx_cmpl_arr;	/**< TxComplete buffer array */
+};
+
+/**
  * nss_dp_ppeds_handle
  *	PPE-DS DP handle info
  */
 typedef struct nss_dp_ppeds_handle {
-	uint8_t wifi_arch_mode;	/* 7 == wifi7, 8 == wifi8 */
+	enum edma_ppeds_wifi_arch_mode wifi_arch_mode;	/**< WiFi architecture mode (wifi7 or wifi8) */
 	union {
-		struct nss_dp_ppeds_wifi7_handle wifi7_cfg;	/**< wifi7 config applicable for IPQ54XX, IPQ95XX , IPQ53XX */
+		struct nss_dp_ppeds_wifi7_handle wifi7_hdl;	/**< wifi7 config applicable for IPQ54XX, IPQ95XX , IPQ53XX */
+		struct nss_dp_ppeds_wifi8_handle wifi8_hdl;	/**< wifi8 config applicable for IPQ96XX IPQ52XX */
 	};
 	char priv[] __aligned(NETDEV_ALIGN);	/**< Private area */
 } nss_dp_ppeds_handle_t;
@@ -149,7 +244,13 @@ struct nss_dp_ppeds_ops {
  */
 static inline struct nss_dp_ppeds_rx_fill_elem *nss_dp_ppeds_get_rx_fill_arr(nss_dp_ppeds_handle_t *ppeds_handle)
 {
-	return ppeds_handle->wifi7_cfg.rx_fill_arr;
+	if (ppeds_handle->wifi_arch_mode == EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+		return ppeds_handle->wifi7_hdl.rx_fill_arr;
+	} else if (ppeds_handle->wifi_arch_mode == EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8) {
+		return ppeds_handle->wifi8_hdl.rx_fill_arr;
+	}
+
+	return NULL;
 }
 
 /**
@@ -167,7 +268,13 @@ static inline struct nss_dp_ppeds_rx_fill_elem *nss_dp_ppeds_get_rx_fill_arr(nss
  */
 static inline struct nss_dp_ppeds_tx_cmpl_elem *nss_dp_ppeds_get_tx_cmpl_arr(nss_dp_ppeds_handle_t *ppeds_handle)
 {
-	return ppeds_handle->wifi7_cfg.tx_cmpl_arr;
+	if (ppeds_handle->wifi_arch_mode == EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+		return ppeds_handle->wifi7_hdl.tx_cmpl_arr;
+	} else if (ppeds_handle->wifi_arch_mode == EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8) {
+		return ppeds_handle->wifi8_hdl.tx_cmpl_arr;
+	}
+
+	return NULL;
 }
 
 /**
@@ -199,4 +306,5 @@ static inline void *nss_dp_ppeds_priv(nss_dp_ppeds_handle_t *ppeds_handle)
  */
 struct nss_dp_ppeds_ops *nss_dp_ppeds_get_ops(void);
 
+struct nss_dp_ppeds_ops *nss_dp_ppeds_get_wifi_arch_mode_ops(uint32_t mode);
 #endif	/** __NSS_DP_PPEDS_H__*/

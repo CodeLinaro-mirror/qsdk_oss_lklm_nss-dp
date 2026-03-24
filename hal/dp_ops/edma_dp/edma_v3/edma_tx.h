@@ -27,6 +27,8 @@ struct edma_tx_cb {
 #define EDMA_TXCMPL_DESC(R, i)		EDMA_GET_DESC(R, i, struct edma_txcmpl_desc)
 #define EDMA_TXDESC_PRI_DESC(R, i)	EDMA_GET_PDESC(R, i, struct edma_pri_txdesc)
 #define EDMA_TXDESC_SEC_DESC(R, i)	EDMA_GET_SDESC(R, i, struct edma_sec_txdesc)
+#define EDMA_TXCMPL_DESC_8B_MODE(R, i)	EDMA_GET_DESC(R, i, struct edma_txcmpl_desc_8B_mode)
+
 
 #define EDMA_MAX_TXDESC_RINGS		NSS_DP_EDMA_MAX_TXDESC_RINGS
 #define EDMA_MAX_TXCMPL_RINGS		NSS_DP_EDMA_MAX_TXCMPL_RINGS
@@ -101,14 +103,18 @@ struct edma_tx_cb {
 
 #define EDMA_TXDESC_DATA_LEN_SET_MASK	0xFFFF
 
-#define EDMA_TXDESC_PASS_THROUGH_MODE_FULL_192B	0x0
-#define EDMA_TXDESC_PASS_THROUGH_MODE_FULL_128B	0x1
-#define EDMA_TXDESC_PASS_THROUGH_MODE_FULL_NO_HEADER	0x2
+#define EDMA_TXDESC_PASS_THROUGH_MODE_192B	0x0
+#define EDMA_TXDESC_PASS_THROUGH_MODE_128B	0x1
+#define EDMA_TXDESC_PASS_THROUGH_MODE_0B	0x2
 #define EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA	0x3
 
 #define EDMA_TXDESC_PASS_THROUGH_MODE_SHIFT	14
 #define EDMA_TXDESC_PASS_THROUGH_MODE_MASK	(0x3 << EDMA_TXDESC_PASS_THROUGH_MODE_SHIFT)
 #define EDMA_TXDESC_PASS_THROUGH_MODE_SET(desc, x)	((desc)->word1 |= (((x) << EDMA_TXDESC_PASS_THROUGH_MODE_SHIFT) & EDMA_TXDESC_PASS_THROUGH_MODE_MASK))
+
+#define EDMA_TXDESC_DATA_OFFSET_SHIFT1	0
+#define EDMA_TXDESC_DATA_OFFSET_MASK1	(0xfff << EDMA_TXDESC_DATA_OFFSET_SHIFT1)
+#define EDMA_TXDESC_DATA_OFFSET_SET(desc, x)	((desc)->word6 |= (((x) << EDMA_TXDESC_DATA_OFFSET_SHIFT1) & EDMA_TXDESC_DATA_OFFSET_MASK1))
 
 #define EDMA_TXDESC_DATA_LEN_SET(desc, x)	((desc)->word5 |= ((x) & EDMA_TXDESC_DATA_LEN_SET_MASK))
 
@@ -161,6 +167,10 @@ struct edma_tx_cb {
 
 #define EDMA_TXCOMP_RING_ERROR_MASK	0x7fffff
 #define EDMA_TXCOMP_RING_ERROR_GET(x)	((le32_to_cpu(x)) & EDMA_TXCOMP_RING_ERROR_MASK)
+
+#define EDMA_TXCMPL_DS_OPAQUE_SHIFT	12
+#define EDMA_TXCMPL_DS_OPAQUE_GET(desc)	(((desc)->word1 & GENMASK(31, 12)) >> EDMA_TXCMPL_DS_OPAQUE_SHIFT)
+
 
 /*
  * Construct the MHT SW Port metadata
@@ -314,6 +324,15 @@ struct edma_sec_txdesc {
 };
 
 /*
+ * edma_txcmpl_desc_8B_mode
+ *	EDMA TX complete descriptor for PPEDS HW buffer manager.
+ */
+struct edma_txcmpl_desc_8B_mode {
+	uint32_t word0;		/* Buffer address low */
+	uint32_t word1;		/* Buffer address high, opaque */
+};
+
+/*
  * edma_txcmpl_desc
  *	EDMA TX complete descriptor.
  */
@@ -340,6 +359,7 @@ struct edma_txdesc_ring {
 	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	uint32_t count;			/* Number of descriptors */
+	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
 	uint8_t fc_grp_id;		/* Flow control group ID */
 };
 
@@ -357,6 +377,7 @@ struct edma_txcmpl_ring {
 					/* Tx complete ring statistics */
 	dma_addr_t dma;			/* Descriptor ring physical address */
 	uint32_t count;			/* Number of descriptors in the ring */
+	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
 	bool napi_added;		/* Flag to indicate NAPI add status */
 };
 
