@@ -688,11 +688,6 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 				EDMA_SRC_INFO_SET(txd, src_port_id);
 			}
 		}
-		/* service code */
-		if (gem_txi->service_code == EDMA_TX_SC_GEM_LOOKUP) {
-			EDMA_TXDESC_SERVICE_CODE_CLEAR(txd);
-			EDMA_TXDESC_SERVICE_CODE_SET(txd, gem_txi->service_code);
-		}
 	}
 #endif
 	edma_dmac_clean_range_no_dsb((void *)skb->data, (void *)(skb->data + buf_len));

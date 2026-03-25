@@ -927,6 +927,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
 	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
 	u32 src_info;
+	u32 src_dst_info;
 
 	/*
 	 * Get packet and invalidate length as per the descriptor mode
@@ -1145,11 +1146,15 @@ process_next_scatter:
 	}
 
 	src_info = EDMA_RXDESC_SRC_INFO_GET(rxdesc_desc);
+	src_dst_info = EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc);
 
 	/*
 	 * Check if packet is meant for VP processing
 	 */
-	if (unlikely(EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK)) {
+	if (unlikely(((src_dst_info & EDMA_RXDESC_SRCINFO_TYPE_PORTID) &&
+					(src_dst_info & EDMA_RXDESC_SRC_VP_MASK)) ||
+				((src_dst_info & EDMA_RXDESC_DSTINFO_TYPE_PORTID) &&
+				 (src_dst_info & EDMA_RXDESC_DST_VP_MASK)))) {
 		mem_debug_update_skb(skb_head);
 #ifdef NSS_DP_HW_GRO
 		if (unlikely(rxdesc_ring->gro_enabled))
@@ -1342,6 +1347,7 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
 	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
 	u32 src_info;
+	u32 src_dst_info;
 
 	mem_debug_update_skb(skb);
 	/*
@@ -1454,11 +1460,15 @@ send_to_stack:
 	}
 
 	src_info = EDMA_RXDESC_SRC_INFO_GET(rxdesc_desc);
+	src_dst_info = EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc);
 
 	/*
 	 * Check if packet is meant for VP processing
 	 */
-	if (EDMA_RXDESC_SRC_DST_INFO_GET(rxdesc_desc) & EDMA_RXDESC_SRC_DST_VP_MASK) {
+	if (((src_dst_info & EDMA_RXDESC_SRCINFO_TYPE_PORTID) &&
+				(src_dst_info & EDMA_RXDESC_SRC_VP_MASK)) ||
+			((src_dst_info & EDMA_RXDESC_DSTINFO_TYPE_PORTID) &&
+			 (src_dst_info & EDMA_RXDESC_DST_VP_MASK))) {
 		mem_debug_update_skb(skb);
 #ifdef NSS_DP_HW_GRO
 		if (unlikely(rxdesc_ring->gro_enabled))
