@@ -493,7 +493,7 @@ static int edma_dp_init(struct nss_dp_data_plane_ctx *dpc)
 	/*
 	 * Store DDRQ datapath related information in the DP DEV
 	 */
-	if (edma_ddrq_dp_dev_set(netdev, dp_dev->macid)) {
+	if (edma_ddrq_dp_dev_set(netdev)) {
 		netdev_err(netdev, "Failed to set DDRQ DP dev info for port %d\n", dp_dev->macid);
 		free_percpu(dp_dev->dp_info.pcpu_stats.rx_stats);
 		free_percpu(dp_dev->dp_info.pcpu_stats.tx_stats);
