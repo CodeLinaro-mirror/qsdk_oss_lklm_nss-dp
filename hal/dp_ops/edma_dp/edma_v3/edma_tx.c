@@ -767,6 +767,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 #if defined(NSS_DP_HIGHMEM_SUPP)
 			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
 
 			edma_dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
