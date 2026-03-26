@@ -1232,9 +1232,9 @@ static int edma_ddrq_mem_region_init(void)
 	 * Update Higher DDRQ data & descriptor space addresses in the hardware
 	 */
 	addr = 0;
-	data = (uint32_t)((egc->ddrq_def_cfg.ddrq_data_mem_reg.phy_addr >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+	data = (uint32_t)(((uint64_t)egc->ddrq_def_cfg.ddrq_data_mem_reg.phy_addr >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	addr = EDMA_REG_DDRQ_DATA_BLK_BASE_ADDR_H_SET(data);
-	data = (uint32_t)((egc->ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr >> 32) & EDMA_RING_DMA_HIGHER_MASK);
+	data = (uint32_t)(((uint64_t)egc->ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr >> 32) & EDMA_RING_DMA_HIGHER_MASK);
 	addr |= EDMA_REG_DDRQ_DESC_BLK_BASE_ADDR_H_SET(data);
 	addr |= EDMA_REG_DDRQ_LINKLIST_INI_EN;
 	edma_reg_write(EDMA_REG_DDRQ_RX_BASE_ADDR_H_OFFSET, addr);
