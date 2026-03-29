@@ -162,6 +162,8 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq96xx))
 ccflags-y += -DNSS_DP_IPQ96XX
+ccflags-y += -DNSS_DP_HIGHER_RING_MASK_CONFIG
+ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
 ccflags-y += -DNSS_DP_RING_IDX_CONFIG
 endif
 
