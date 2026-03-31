@@ -410,6 +410,63 @@ static int nss_dp_get_ts_info(struct net_device *dev, struct ethtool_ts_info *in
 }
 
 /*
+ * nss_dp_get_fecparam()
+ *	Get FEC parameter
+ */
+static int nss_dp_get_fecparam(struct net_device *dev, struct ethtool_fecparam *fecparam)
+{
+	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(dev);
+	fal_port_fec_config_t ptfec = {0};
+	uint32_t port_id;
+	sw_error_t ret;
+
+	port_id = dp_priv->macid;
+
+	ret = fal_port_fec_get(NSS_DP_ACL_DEV_ID, port_id, &ptfec);
+	if (ret != SW_OK) {
+		if (ret == SW_NOT_SUPPORTED) {
+			return -EOPNOTSUPP;
+		} else {
+			netdev_dbg(dev, "Could not fetch fec settings err = %d\n", ret);
+			return -EIO;
+		}
+	}
+
+	fecparam->fec = ptfec.configured_fec;
+	fecparam->active_fec = ptfec.active_fec;
+
+	return 0;
+}
+
+/*
+ * nss_dp_set_fecparam
+ *	Set FEC parameter
+ */
+static int nss_dp_set_fecparam(struct net_device *dev, struct ethtool_fecparam *fecparam)
+{
+	struct nss_dp_dev *dp_priv = (struct nss_dp_dev *)netdev_priv(dev);
+	fal_port_fec_config_t ptfec = {0};
+	uint32_t port_id;
+	sw_error_t ret;
+
+	port_id = dp_priv->macid;
+
+	ptfec.configured_fec = fecparam->fec;
+
+	ret = fal_port_fec_set(NSS_DP_ACL_DEV_ID, port_id, &ptfec);
+	if (ret != SW_OK) {
+		if (ret == SW_NOT_SUPPORTED) {
+			return -EOPNOTSUPP;
+		} else {
+			netdev_dbg(dev, "Could not set fec settings err = %d\n", ret);
+			return -EIO;
+		}
+	}
+
+	return 0;
+}
+
+/*
  * nss_dp_get_ethtool_link_ksetting()
  *	get link settings
  */
@@ -424,7 +481,36 @@ static int nss_dp_get_ethtool_link_ksetting(struct net_device *dev, struct ethto
 
 #ifdef CONFIG_PHYLINK
 	if (dp_priv->phylink_en && dp_priv->phylink) {
-		return phylink_ethtool_ksettings_get(dp_priv->phylink, cmd);
+		fal_port_fec_config_t ptfec = {0};
+		int rv;
+
+		rv = phylink_ethtool_ksettings_get(dp_priv->phylink, cmd);
+		if (rv != 0)
+			return rv;
+
+		/* Fetch FEC settings if available */
+		ret = fal_port_fec_get(NSS_DP_ACL_DEV_ID, dp_priv->macid, &ptfec);
+		if (ret == SW_OK) {
+			if (ptfec.supported_fec & ETHTOOL_FEC_RS)
+				linkmode_set_bit(ETHTOOL_LINK_MODE_FEC_RS_BIT,
+						cmd->link_modes.supported);
+			if (ptfec.supported_fec & ETHTOOL_FEC_BASER)
+				linkmode_set_bit(ETHTOOL_LINK_MODE_FEC_BASER_BIT,
+						cmd->link_modes.supported);
+			if (ptfec.supported_fec & ETHTOOL_FEC_OFF)
+				linkmode_set_bit(ETHTOOL_LINK_MODE_FEC_NONE_BIT,
+						cmd->link_modes.supported);
+			if (ptfec.configured_fec & ETHTOOL_FEC_RS)
+				linkmode_set_bit(ETHTOOL_LINK_MODE_FEC_RS_BIT,
+						cmd->link_modes.advertising);
+			if (ptfec.configured_fec & ETHTOOL_FEC_BASER)
+				linkmode_set_bit(ETHTOOL_LINK_MODE_FEC_BASER_BIT,
+						cmd->link_modes.advertising);
+			if (ptfec.configured_fec & ETHTOOL_FEC_OFF)
+				linkmode_set_bit(ETHTOOL_LINK_MODE_FEC_NONE_BIT,
+						cmd->link_modes.advertising);
+		}
+		return 0;
 	}
 #endif
 
@@ -521,6 +607,8 @@ struct ethtool_ops nss_dp_ethtool_ops = {
 	.get_priv_flags = nss_dp_get_priv_flags,
 	.set_priv_flags = nss_dp_set_priv_flags,
 	.get_ts_info = nss_dp_get_ts_info,
+	.get_fecparam = nss_dp_get_fecparam,
+	.set_fecparam = nss_dp_set_fecparam,
 };
 
 /*
