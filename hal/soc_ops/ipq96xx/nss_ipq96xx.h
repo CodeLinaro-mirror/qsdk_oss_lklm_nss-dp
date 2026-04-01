@@ -10,6 +10,13 @@
 #ifndef __NSS_DP_ARCH_H__
 #define __NSS_DP_ARCH_H__
 
+/*
+ * Set the flag only for 64-bit DMA address.
+ */
+#ifdef CONFIG_ARCH_DMA_ADDR_T_64BIT
+#define NSS_DP_HIGHMEM_SUPP
+#endif
+
 #define NSS_DP_VP_HAL_MAX_PORTS		1
 #define NSS_DP_HAL_MAX_PORTS		6
 #define NSS_DP_MAX_PORTS		(NSS_DP_HAL_MAX_PORTS + NSS_DP_VP_HAL_MAX_PORTS)
