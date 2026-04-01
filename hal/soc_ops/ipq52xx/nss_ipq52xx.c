@@ -40,6 +40,15 @@ int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP] = {2,3,4,5};
 int edma_dp_ppe_vp_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5};
 
+/*
+ * VP features ring info - disabled for ipq52xx
+ */
+int edma_dp_ppe_vp_feat_num_rings = 0;
+int edma_dp_ppe_vp_feat_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {-1};
+int edma_dp_ppe_vp_feat_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {-1};
+int edma_dp_ppe_vp_feat_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {-1};
+int edma_dp_ppe_vp_feat_type_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {-1};
+
 #ifdef NSS_DP_HW_GRO
 int edma_dp_gro_ppe_queue_base = EDMA_GRO_PPE_QUEUE_BASE;
 #endif

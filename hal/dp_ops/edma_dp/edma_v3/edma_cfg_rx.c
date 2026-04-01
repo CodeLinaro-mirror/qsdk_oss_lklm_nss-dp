@@ -22,7 +22,6 @@ uint32_t edma_cfg_rx_queue_tail_drop_enable = EDMA_RX_QUEUE_TAIL_DROP_ENABLE;
 uint32_t edma_cfg_rx_rps_num_cores = NR_CPUS;
 uint32_t edma_cfg_rx_sec_desc_inval = 0;
 uint32_t edma_cfg_rx_rps_bitmap_cores = EDMA_RX_DEFAULT_BITMAP;
-extern uint32_t nss_dp_capwap_vp_rx_core;
 extern struct nss_dp_vp_ctx g_vp_ctx;
 
 /*
@@ -1794,7 +1793,7 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		 * Assign the reap function pointer based on the ring type.
 		 * GRO rings use page pool backed buffers via the associated rxfill ring.
 		 */
-		if (nss_dp_capwap_vp_rx_core == ring_idx) {
+		if (rxdesc_info[ring_idx].vp_feat_type == EDMA_VP_FEAT_TYPE_CAPWAP) {
 			rxdesc_ring->rx_reap = edma_rx_reap_capwap;
 		} else if (egc->rxdesc_info[ring_idx].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO) {
 			rxdesc_ring->rx_reap = edma_rx_reap_pages;

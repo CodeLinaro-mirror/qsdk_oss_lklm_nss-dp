@@ -155,6 +155,17 @@ extern int edma_dp_ppe_ds_tx_rings[EDMA_PPEDS_MAX_NODES];
 extern int edma_dp_ppe_ds_num_txdesc_per_node[EDMA_PPEDS_MAX_NODES];
 extern int edma_dp_ppe_ds_txcmpl_rings[EDMA_PPEDS_MAX_NODES];
 
+/*
+ * PPE VP feature ring arrays
+ */
+extern int edma_dp_ppe_vp_feat_num_rings;
+extern int edma_dp_ppe_vp_feat_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE];
+extern int edma_dp_ppe_vp_feat_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE];
+extern int edma_dp_ppe_vp_feat_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE];
+extern int edma_dp_ppe_vp_feat_type_map[EDMA_MAX_RXDESC_RING_PER_TYPE];
+
+#define NSS_DP_VP_FEAT_NUM_RINGS	1
+
 /**
  * nss_dp_hal_gmac_stats
  *	The per-GMAC statistics structure.

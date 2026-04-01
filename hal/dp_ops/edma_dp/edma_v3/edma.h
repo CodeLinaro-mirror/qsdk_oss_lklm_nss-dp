@@ -165,10 +165,11 @@
  * required.
  */
 #define EDMA_RING_TYPE_FLAGS_HOST_COMMON	0x1
-#define EDMA_RING_TYPE_FLAGS_HOST_VP		0x2
+#define EDMA_RING_TYPE_FLAGS_HOST_VP		0x2	/* General PPE VP TX/RX data rings */
 #define EDMA_RING_TYPE_FLAGS_HOST_GRO		0x4
 #define EDMA_RING_TYPE_FLAGS_DS			0x8
 #define EDMA_RING_TYPE_FLAGS_PAGE_POOL		0x10	/* Page pool alloc mode */
+#define EDMA_RING_TYPE_FLAGS_HOST_VP_FEAT	0x20	/* VP feature-classified RX rings (e.g. CAPWAP) */
 
 /*
  * EDMA ring status flags
@@ -374,6 +375,16 @@ struct edma_txcmpl_ring_info {
 };
 
 /*
+ * edma_vp_feat_type
+ *	VP feature ring sub-types
+ */
+typedef enum edma_vp_feat_type {
+	EDMA_VP_FEAT_TYPE_NONE = 0,	/* Not a VP feature ring */
+	EDMA_VP_FEAT_TYPE_CAPWAP,	/* CAPWAP VP feature ring */
+	EDMA_VP_FEAT_TYPE_MAX,		/* Sentinel — keep last */
+} edma_vp_feat_type_t;
+
+/*
  * edma_rxdesc_ring_info
  *	RX desc ring information
  */
@@ -387,6 +398,7 @@ struct edma_rxdesc_ring_info {
 	uint32_t type_flags;				/* Ring type flags */
 	uint32_t status_flags;				/* Ring status flags */
 	uint32_t intr_num;				/* Interrupt number */
+	edma_vp_feat_type_t vp_feat_type;		/* VP feature sub-type */
 };
 
 /*
@@ -513,8 +525,16 @@ struct edma_host_sfe_info {
  *	VP mode configuration information.
  */
 struct edma_host_vp_info {
-	struct edma_rx_rings_info rx_info;	/* RX rings information */
-	struct edma_tx_rings_info tx_info;	/* TX rings information */
+	struct edma_rx_rings_info rx_info;		/* RX rings information */
+	struct edma_tx_rings_info tx_info;		/* TX rings information */
+};
+
+/*
+ * edma_host_vp_feat_info
+ *	VP feature rings configuration information (e.g. CAPWAP).
+ */
+struct edma_host_vp_feat_info {
+	struct edma_rx_rings_info rx_info;		/* RX rings information */
 };
 
 /*
@@ -526,6 +546,7 @@ struct edma_host_info {
 	struct edma_host_sfe_info sfe_info;		/* Host SFE specific information. */
 	struct edma_host_vp_info vp_info;		/* Host VP specific information. */
 	struct edma_host_gro_info gro_info;		/* Host GRO specific information. */
+	struct edma_host_vp_feat_info vp_feat_info;	/* Host VP feature specific information. */
 };
 
 /*
