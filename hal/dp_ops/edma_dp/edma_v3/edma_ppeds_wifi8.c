@@ -342,11 +342,6 @@ static void edma_ppeds_txcmpl_hw_buff_conf(uint32_t txcmpl_ring_id, dma_addr_t w
 	reg_val = edma_reg_read(EDMA_REG_TXCMPL_SEC_RING_REG);
 	reg_val |= (1 << txcmpl_ring_id);
 	edma_reg_write(EDMA_REG_TXCMPL_SEC_RING_REG, reg_val);
-
-	txcmpl_ring_id += 1;
-	reg_val = edma_reg_read(EDMA_REG_TXCMPL_CTRL(txcmpl_ring_id));
-	reg_val |= EDMA_REG_TXCMPL_IDX_UNIT(1);
-	edma_reg_write(EDMA_REG_TXCMPL_CTRL(txcmpl_ring_id), reg_val);
 }
 
 static void edma_ppeds_txdesc_auto_index_conf(uint32_t tx_ring_id, dma_addr_t wlan_reo2ppe_tp_addr)
@@ -578,11 +573,6 @@ static void edma_ppeds_rxfill_hw_buff_conf(uint32_t rxfill_ring_id, dma_addr_t w
 	reg_val |= EDMA_REG_RXFILL_UP_IDX_ENABLE;
 	edma_reg_write(EDMA_REG_RXFILL_UPLOAD_IDX_ADDR_H(rxfill_ring_id), reg_val);
 
-	reg_val = edma_reg_read(EDMA_REG_RXFILL_DISABLE(rxfill_ring_id));
-	reg_val |= EDMA_REG_RXFILL_IDX_UNIT(1);
-	edma_reg_write(EDMA_REG_RXFILL_DISABLE(rxfill_ring_id), reg_val);
-
-	rxfill_ring_id += 1;
 	reg_val = edma_reg_read(EDMA_REG_RXFILL_DISABLE(rxfill_ring_id));
 	reg_val |= EDMA_REG_RXFILL_IDX_UNIT(1);
 	edma_reg_write(EDMA_REG_RXFILL_DISABLE(rxfill_ring_id), reg_val);
