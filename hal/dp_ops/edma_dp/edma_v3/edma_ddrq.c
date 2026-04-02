@@ -360,52 +360,85 @@ static int32_t edma_ddrq_dbg_cnt_occ_stats_get(uint32_t index, edma_ddrq_occupan
 }
 
 /*
+ * edma_ddrq_pon_dp_dev_set()
+ *	API to set PON related DDRQ passthrough and SC related information in the dp_dev
+ */
+void edma_ddrq_pon_dp_dev_set(struct nss_dp_dev *dp_dev)
+{
+	/*
+	 * Check whether DDRQs on the PON port are set
+	 */
+	if (edma_ddrq_en_port_bm & (1 << (PON_PORT_ID - 1))) {
+		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+			dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_128B;
+		} else {
+			dp_dev->pt_info.dst_pt_mode_val = edma_passthrough_val;
+		}
+		dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_PON_PT_MODE;
+	} else {
+		/*
+		 * DDRQs on the PON port are not set
+		 */
+		dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+		dp_dev->pt_info.sc = PPE_DRV_SC_GEM_LOOKUP;
+	}
+}
+
+/*
  * edma_ddrq_dp_dev_set()
  *	API to set DDRQ passthrough and SC related information in the dp_dev
  */
-int32_t edma_ddrq_dp_dev_set(struct net_device *dev, uint32_t mac_id)
+int32_t edma_ddrq_dp_dev_set(struct net_device *dev)
 {
 	struct nss_dp_dev *dp_dev;
+	uint32_t mac_id;
 
 	if (!dev) {
 		edma_err("Invalid netdevice passed (for port: %d) for DDRQ DP dev information set\n", mac_id);
 		return -EINVAL;
 	}
 
+	dp_dev = netdev_priv(dev);
+	mac_id = dp_dev->macid;
 	if (mac_id > (NSS_DP_HAL_MAX_PORTS + 2)) {
 		edma_err("Invalid mac_id (%d) passed for DDRQ dp dev set operation\n", mac_id);
 		return -EINVAL;
 	}
 
-	dp_dev = netdev_priv(dev);
 	/*
 	 * Set DDRQ related datapath informations in the NSS-DP ETH port's DP DEV
 	 */
 	if (mac_id <= NSS_DP_HAL_MAX_PORTS) {
 		/*
-		 * DDRQs on the particular port is set
+		 * Check for the PON device
 		 */
-		if (edma_ddrq_en_port_bm & (1 << (mac_id - 1))) {
-			if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-				dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_0B;
-			} else {
-				dp_dev->pt_info.dst_pt_mode_val = edma_passthrough_val;
-			}
-
-			if (dp_dev->macid == PON_PORT_ID) {
-				dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_PON_PT_MODE;
-			} else {
-				dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_ETH_PT_MODE;
-			}
+		if (dp_dev->macid == PON_PORT_ID) {
+			edma_ddrq_pon_dp_dev_set(dp_dev);
 		} else {
 			/*
-			 * DDRQs on the particular port is not set
+			 * ETH device.
+			 *
+			 * Check whether DDRQs on the particular port is set
 			 */
-			dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
-			dp_dev->pt_info.sc = PPE_DRV_SC_BYPASS_ALL;
+			if (edma_ddrq_en_port_bm & (1 << (mac_id - 1))) {
+				if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+					dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_0B;
+				} else {
+					dp_dev->pt_info.dst_pt_mode_val = edma_passthrough_val;
+				}
+				dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_ETH_PT_MODE;
+			} else {
+				/*
+				 * DDRQs on the particular port is not set
+				 */
+				dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+				dp_dev->pt_info.sc = PPE_DRV_SC_BYPASS_ALL;
+			}
 		}
 	} else {
 		/*
+		 * VP device.
+		 *
 		 * TODO:
 		 * Currently assigning full packet passthrough mode to any
 		 * of the DP VP interfaces.
@@ -1018,7 +1051,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 				edma_err("Not able to find the netdev for %d port\n", (obj->cfg_id - 1));
 				return DDRQ_RET_ERR;
 			}
-			if (edma_ddrq_dp_dev_set(dev, obj->cfg_id)) {
+			if (edma_ddrq_dp_dev_set(dev)) {
 				edma_err("Error in setting DP DEV information for %d port\n", obj->cfg_id);
 				return DDRQ_RET_ERR;
 			}
