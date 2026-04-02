@@ -60,6 +60,10 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 		 * Transmit the packet
 		 */
 		ret = edma_tx_ring_xmit(vpdev, dptxi, skb, txdesc_ring, stats);
+#ifdef CONFIG_IPQ_PON
+		if (ret == EDMA_TX_GEM_CONSUMED)
+                        return NETDEV_TX_OK;
+#endif
 		if (unlikely(ret != EDMA_TX_OK)) {
 			dev_kfree_skb_any(skb);
 			u64_stats_update_begin(&stats->syncp);
@@ -89,6 +93,10 @@ netdev_tx_t edma_dp_vp_xmit(struct nss_dp_data_plane_ctx *dpc, struct nss_dp_vp_
 		 * Transmit the packet
 		 */
 		ret = edma_tx_ring_xmit(vpdev, dptxi, skb, txdesc_ring, stats);
+#ifdef CONFIG_IPQ_PON
+		if (ret == EDMA_TX_GEM_CONSUMED)
+                        return NETDEV_TX_OK;
+#endif
 		if (unlikely(ret != EDMA_TX_OK)) {
 			dev_kfree_skb_any(skb);
 			u64_stats_update_begin(&stats->syncp);

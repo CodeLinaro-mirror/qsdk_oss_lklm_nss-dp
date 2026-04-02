@@ -22,9 +22,19 @@
 #include "nss_dp_dev.h"
 #include "syn_dev.h"
 
+#ifdef CONFIG_IPQ_PON
+#include "nss_dp_gem.h"
+#endif
+
 extern nss_dp_vp_rx_cb_t nss_dp_vp_rx_reg_cb;
 extern nss_dp_vp_list_rx_cb_t nss_dp_vp_list_rx_reg_cb;
 extern struct nss_dp_vp_ctx g_vp_ctx;
+
+#ifdef CONFIG_IPQ_PON
+/* Extern for GEM callbacks */
+extern nss_dp_gem_rx_cb_t nss_dp_gem_rx_reg_cb_g;
+extern void *nss_dp_gem_rx_app_data_g;
+#endif
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 #define EDMA_MAX_ORDER 10
@@ -852,6 +862,49 @@ static int edma_rx_dp_extension_process(struct nss_dp_dev *dp_dev, struct sk_buf
 	return -1;
 }
 
+#ifdef CONFIG_IPQ_PON
+/*
+ * edma_rx_process_gem()
+ *    API to process GEM RX handling for a packet.
+ */
+bool edma_rx_process_gem(const struct edma_rxdesc_desc *rxdesc_desc,
+		struct sk_buff *skb)
+{
+	nss_dp_gem_rx_cb_t gem_rx_cb;
+	struct gem_skb_ext *gem_ext;
+	void *app_data;
+
+	rcu_read_lock();
+	gem_rx_cb = rcu_dereference(nss_dp_gem_rx_reg_cb_g);
+	if (unlikely(!gem_rx_cb)) {
+		rcu_read_unlock();
+		return false;
+	}
+
+	/* Attach GEM id to skb for downstream consumers. */
+	gem_ext = skb_ext_add(skb, SKB_EXT_GEM);
+	if (unlikely(!gem_ext)) {
+		mem_debug_update_skb(skb);
+		rcu_read_unlock();
+		return false;
+	}
+
+	gem_ext->gem_id = EDMA_RXDESC_SRC_PORT_ID_GET(rxdesc_desc) & 0x7f;
+
+	mem_debug_update_skb(skb);
+
+	app_data  = rcu_dereference(nss_dp_gem_rx_app_data_g);
+	if (unlikely(gem_rx_cb(app_data, skb))) {
+		mem_debug_update_skb(skb);
+		rcu_read_unlock();
+		return true;
+	}
+
+	rcu_read_unlock();
+	return false;
+}
+#endif
+
 /*
  * edma_rx_handle_scatter_frames()
  *	Handle scattered packets in Rx direction
@@ -873,6 +926,7 @@ static void edma_rx_handle_scatter_frames(struct edma_gbl_ctx *egc,
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
 	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
+	u32 src_info;
 
 	/*
 	 * Get packet and invalidate length as per the descriptor mode
@@ -1090,6 +1144,8 @@ process_next_scatter:
 		}
 	}
 
+	src_info = EDMA_RXDESC_SRC_INFO_GET(rxdesc_desc);
+
 	/*
 	 * Check if packet is meant for VP processing
 	 */
@@ -1106,6 +1162,20 @@ process_next_scatter:
 		return;
 	}
 
+#ifdef CONFIG_IPQ_PON
+	/*
+	 * Check if packet is meant for OMCI PON Processsing.
+	 * Only handle GEM port packets.
+	 */
+	if ((src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK) == EDMA_RXDESC_SRCINFO_TYPE_GEM_PORT) {
+		if (unlikely(edma_rx_process_gem(rxdesc_desc, skb))) {
+			rxdesc_ring->head = NULL;
+			rxdesc_ring->last = NULL;
+			rxdesc_ring->pdesc_head = NULL;
+			return;
+		}
+	}
+#endif
 	/*
 	 * Perform the RX DP Extension processing
 	 * using the relevant details as configured.
@@ -1271,6 +1341,7 @@ static inline bool edma_rx_handle_linear_packets(struct edma_gbl_ctx *egc,
 	skb_frag_t *frag = NULL;
 	bool page_mode = rxdesc_ring->rxfill->page_mode;
 	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
+	u32 src_info;
 
 	mem_debug_update_skb(skb);
 	/*
@@ -1382,6 +1453,8 @@ send_to_stack:
 		edma_rx_handle_wifi_qos_packets(egc, rxdesc_ring, rxdesc_desc, skb, &vprxi);
 	}
 
+	src_info = EDMA_RXDESC_SRC_INFO_GET(rxdesc_desc);
+
 	/*
 	 * Check if packet is meant for VP processing
 	 */
@@ -1401,6 +1474,17 @@ send_to_stack:
 		return false;
 	}
 
+#ifdef CONFIG_IPQ_PON
+	/*
+	 * Check if packet is meant for OMCI PON Processsing.
+	 * Only handle GEM port packets.
+	 */
+	if ((src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK) == EDMA_RXDESC_SRCINFO_TYPE_GEM_PORT) {
+		if (unlikely(edma_rx_process_gem(rxdesc_desc, skb))) {
+			return false;
+		}
+	}
+#endif
 	/*
 	 * Perform the RX DP Extension processing
 	 * using the relevant details as configured.

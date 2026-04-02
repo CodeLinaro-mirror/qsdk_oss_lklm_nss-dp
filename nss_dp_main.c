@@ -34,7 +34,9 @@
 #endif
 #include "nss_dp_hal.h"
 #include <ppe_drv.h>
-
+#ifdef CONFIG_IPQ_PON
+#include "nss_dp_gem.h"
+#endif
 #define JUMBO_MRU_3K 3072
 #define NSS_DP_CAPWAP_VP_RX_CORE_INVALID 0XFFFF
 
@@ -48,7 +50,13 @@ struct ipq40xx_mdio_data {
 /* Global data */
 struct nss_dp_global_ctx dp_global_ctx;
 struct nss_dp_data_plane_ctx dp_global_data_plane_ctx[NSS_DP_MAX_PORTS];
-
+#ifdef CONFIG_IPQ_PON
+/* Define GEM callbacks */
+nss_dp_gem_rx_cb_t nss_dp_gem_rx_reg_cb_g = NULL;
+void * nss_dp_gem_rx_app_data_g = NULL;
+nss_dp_gem_tx_cb_t nss_dp_gem_tx_reg_cb_g = NULL;
+void * nss_dp_gem_tx_app_data_g = NULL;
+#endif
 /* Module params */
 static int page_mode;
 module_param(page_mode, int, 0);
@@ -1379,6 +1387,58 @@ bool nss_dp_nsm_sawf_sc_stats_read(struct nss_dp_hal_nsm_sawf_sc_stats *nsm_stat
 	return nss_dp_hal_nsm_sawf_sc_stats_read(nsm_stats, service_class);
 }
 EXPORT_SYMBOL(nss_dp_nsm_sawf_sc_stats_read);
+
+#ifdef CONFIG_IPQ_PON
+/*
+ * nss_dp_gem_rx_register_cb()
+ *	Register handler for GEM rx processing.
+ */
+bool nss_dp_gem_rx_register_cb(void *app_data, bool (*cb)(void *app_data, struct sk_buff *skb))
+{
+	rcu_assign_pointer(nss_dp_gem_rx_app_data_g, app_data);
+	rcu_assign_pointer(nss_dp_gem_rx_reg_cb_g, cb);
+	synchronize_rcu();
+	return true;
+}
+EXPORT_SYMBOL(nss_dp_gem_rx_register_cb);
+
+/*
+ * nss_dp_gem_rx_unregister_cb()
+ *	Unregister GEM handler for GEM rx processing.
+ */
+void nss_dp_gem_rx_unregister_cb(void)
+{
+	rcu_assign_pointer(nss_dp_gem_rx_app_data_g, NULL);
+	rcu_assign_pointer(nss_dp_gem_rx_reg_cb_g, NULL);
+	synchronize_rcu();
+}
+EXPORT_SYMBOL(nss_dp_gem_rx_unregister_cb);
+
+/*
+ * nss_dp_gem_tx_register_cb()
+ *	Register handler for GEM tx processing.
+ */
+bool nss_dp_gem_tx_register_cb(void *app_data, bool (*cb)(void *app_data, struct sk_buff *skb, struct nss_dp_gem_tx_info *gem_txi))
+{
+	rcu_assign_pointer(nss_dp_gem_tx_app_data_g, app_data);
+	rcu_assign_pointer(nss_dp_gem_tx_reg_cb_g, cb);
+	synchronize_rcu();
+	return true;
+}
+EXPORT_SYMBOL(nss_dp_gem_tx_register_cb);
+
+/*
+ * nss_dp_gem_tx_unregister_cb()
+ *	Unregister GEM handler for GEM tx processing.
+ */
+void nss_dp_gem_tx_unregister_cb(void)
+{
+	rcu_assign_pointer(nss_dp_gem_tx_app_data_g, NULL);
+	rcu_assign_pointer(nss_dp_gem_tx_reg_cb_g, NULL);
+	synchronize_rcu();
+}
+EXPORT_SYMBOL(nss_dp_gem_tx_unregister_cb);
+#endif
 
 /*
  * nss_dp_init()
