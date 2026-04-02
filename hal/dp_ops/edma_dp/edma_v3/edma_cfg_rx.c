@@ -871,9 +871,10 @@ static void edma_cfg_rx_desc_ring_configure(struct edma_rxdesc_ring *rxdesc_ring
 #endif
 	} else {
 		/*
-		 * Configure Rx ring in a preheader mode
+		 * Read the default Rxdesc control configuration and configure it in a preheader mode
 		 */
-		data = EDMA_RXDESC_CTRL_PH_EN_SET(EDMA_RXDESC_PH_EN);
+		data = edma_reg_read(EDMA_REG_RXDESC_CTRL(rxdesc_ring->ring_id));
+		data |= EDMA_RXDESC_CTRL_PH_EN_SET(EDMA_RXDESC_PH_EN);
 		edma_reg_write(EDMA_REG_RXDESC_CTRL(rxdesc_ring->ring_id), data);
 		edma_info("EDMA_REG_RXDESC_CTRL reg (%d) configured value is 0x%0x, read: 0x%0x \n",
 					 rxdesc_ring->ring_id, data,
