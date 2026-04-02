@@ -70,6 +70,7 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RXDESC_OPAQUE_GET(desc)		((uintptr_t)((uint64_t)((desc)->word2) | \
 						((uint64_t)((desc)->word3) << 0x20)))
 #define EDMA_RXDESC_SRCINFO_TYPE_PORTID		0x2000
+#define EDMA_RXDESC_DSTINFO_TYPE_PORTID		EDMA_RXDESC_SRCINFO_TYPE_PORTID << 16
 #define EDMA_RXDESC_SRCINFO_TYPE_GEM_PORT	0x0000
 #define EDMA_RXDESC_SRCINFO_TYPE_SHIFT		8
 #define EDMA_RXDESC_SRCINFO_TYPE_MASK		0xF000
@@ -123,7 +124,8 @@ extern uint32_t rx_ring_sz_high_mem;
  * Note: PPE virtual port start from 64 onwards
  */
 #define EDMA_RXDESC_VP_PORT_MASK	0x00c0
-#define EDMA_RXDESC_SRC_DST_VP_MASK	(EDMA_RXDESC_VP_PORT_MASK | (EDMA_RXDESC_VP_PORT_MASK << 16))
+#define EDMA_RXDESC_SRC_VP_MASK		EDMA_RXDESC_VP_PORT_MASK
+#define EDMA_RXDESC_DST_VP_MASK		EDMA_RXDESC_VP_PORT_MASK << 16
 
 #define EDMA_RXDESC_L3CSUM_STATUS_GET(desc)	(le32_to_cpu(((desc)->word6)) & \
 						EDMA_RXDESC_L3CSUM_STATUS_MASK)
