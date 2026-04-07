@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2022, 2024-2025 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022, 2024-2026 Qualcomm Innovation Center, Inc. All rights reserved.
  *
  * Permission to use, copy, modify, and/or distribute this software for any
  * purpose with or without fee is hereby granted, provided that the above
@@ -33,42 +33,66 @@ struct nss_dp_vp_tx_info {
 	bool fake_mac;			/**< Needs Fake Mac. */
 };
 
+#define NSS_DP_VP_MAX_BUF_DESCS  (MAX_SKB_FRAGS + 1)
+
 /*
- * nss_vp_rx_custom_gro_mdata
- *	VP RX custom GRO metadata
+ * nss_dp_vp_rx_type
+ *	VP Rx payload type
  */
-struct nss_vp_rx_custom_gro_mdata {
-	bool hw_gro_en;			/* HW gro is enabled */
-	bool hw_gro_more;		/* HW gro more segments */
-	bool hw_gro_fin;		/* HW gro fin segments */
-	bool hw_gro_psh;		/* HW gro psh segments */
+enum nss_dp_vp_rx_type {
+	NSS_DP_VP_RX_TYPE_SKB = 0,	/**< Payload type is SKB */
+	NSS_DP_VP_RX_TYPE_SKB_LIST,	/**< Payload type is SKB list */
+	NSS_DP_VP_RX_TYPE_XDP,		/**< Payload type is a single XDP buffer */
+	NSS_DP_VP_RX_TYPE_XDP_VEC,	/**< Payload type is an array of XDP buffers */
 };
 
 /*
- * nss_vp_rx_custom_mdata
- *	VP RX custom metadata
+ * nss_dp_vp_rx_data
+ *	VP Rx data container
  */
-struct nss_vp_rx_custom_mdata {
+struct nss_dp_vp_rx_data {
+	enum nss_dp_vp_rx_type type;		/* Payload type: SKB, list, or pages */
 	union {
-		struct nss_vp_rx_custom_gro_mdata gro_mdata;
-	} rx_mdata;
+		struct sk_buff *skb;		/* Single SKB (NSS_DP_VP_RX_TYPE_SKB) */
+		struct sk_buff_head *skb_head;	/* SKB list head (NSS_DP_VP_RX_TYPE_SKB_LIST) */
+		struct xdp_buff *xdp;		/* Single XDP payload (NSS_DP_VP_RX_TYPE_XDP) */
+		struct xdp_buff **xdp_vec;	/* Array of XDP buffers (NSS_DP_VP_RX_TYPE_XDP_VEC) */
+	};
 };
+
+/*
+ * nss_dp_vp_rx_hw_gro_bit
+ *      HW GRO flags in nss_dp_vp_rx_info.hw_gro_flags.
+ */
+enum nss_dp_vp_rx_hw_gro_bit {
+	NSS_DP_VP_RX_HW_GRO_EN_BIT = 0,		/* HW GRO is enabled */
+	NSS_DP_VP_RX_HW_GRO_MORE_BIT,		/* HW GRO more segments */
+	NSS_DP_VP_RX_HW_GRO_TCP_FIN_BIT,	/* HW GRO fin segment */
+	NSS_DP_VP_RX_HW_GRO_TCP_PSH_BIT,	/* HW GRO psh segment */
+	NSS_DP_VP_RX_HW_GRO_MAX,
+};
+
+#define NSS_DP_VP_RX_HW_GRO_EN		BIT(NSS_DP_VP_RX_HW_GRO_EN_BIT)
+#define NSS_DP_VP_RX_HW_GRO_MORE	BIT(NSS_DP_VP_RX_HW_GRO_MORE_BIT)
+#define NSS_DP_VP_RX_HW_GRO_TCP_FIN	BIT(NSS_DP_VP_RX_HW_GRO_TCP_FIN_BIT)
+#define NSS_DP_VP_RX_HW_GRO_TCP_PSH	BIT(NSS_DP_VP_RX_HW_GRO_TCP_PSH_BIT)
 
 /*
  * nss_dp_vp_rx_info
  *	VP info struct struct
  */
 struct nss_dp_vp_rx_info {
-	struct nss_vp_rx_custom_mdata vp_rx_mdata; /* VP Rx metadata */
 	struct napi_struct *napi;	/* RX NAPI */
-	uint32_t batch_bytes;		/* Total bytes carried by batch of skbs */
+	uint32_t total_bytes;		/* Total bytes carried by batch of skbs or pages */
 	int32_t flow_idx;		/* Flow index of a packet */
 	uint16_t l3offset;		/* L3 offset of packet */
 	uint8_t dvp;			/* Destination VP number */
 	uint8_t svp;			/* Source VP number */
 	uint8_t ip_summed;		/* IP checksum */
-	bool fake_mac;			/* Fake Mac Present */
-	bool qdisc_valid;		/* Qdisc valid */
+	uint8_t fake_mac:1,		/* Fake Mac Present */
+		qdisc_valid:1,		/* Qdisc valid */
+		reserved:6;		/* Reserved */
+	uint32_t hw_gro_flags;		/* HW GRO flags (NSS_DP_VP_HW_GRO_FLAGS_*) */
 };
 
 /*
@@ -90,26 +114,10 @@ struct nss_dp_vp_node {
 };
 
 /*
- * nss_dp_vp_list_rx_cb_t
- *	Vp rx handler callback typedef
- */
-typedef void (*nss_dp_vp_list_rx_cb_t)(struct sk_buff_head *head, struct nss_dp_vp_rx_info *rx_info);
-
-/*
  * nss_dp_vp_rx_cb_t
  *	Vp rx handler callback typedef
  */
-typedef void (*nss_dp_vp_rx_cb_t)(struct sk_buff *skb, struct nss_dp_vp_rx_info *vprxi);
-
-/*
- * nss_dp_vp_rx_ops
- *	VP rx operations
- */
-struct nss_dp_vp_rx_ops {
-	nss_dp_vp_list_rx_cb_t list_cb;
-	nss_dp_vp_rx_cb_t cb;
-	void *app_data;
-};
+typedef void (*nss_dp_vp_rx_cb_t)(struct nss_dp_vp_rx_data *rx_data, struct nss_dp_vp_rx_info *vprxi);
 
 /*
  * nss_dp_vp_ctx
@@ -118,7 +126,6 @@ struct nss_dp_vp_rx_ops {
 struct nss_dp_vp_ctx {
 	DECLARE_BITMAP(active_vps, PPE_DRV_VIRTUAL_MAX);
 	struct nss_dp_vp_node nodes[PPE_DRV_VIRTUAL_MAX];
-	struct nss_dp_vp_rx_ops ops;
 };
 
 /**
@@ -132,38 +139,8 @@ struct nss_dp_vp_ctx {
  *
  * @return
  * True or false.
- *
- * @note: This API needs to deprecated and replaced with nss_dp_vp_rx_register_ops()
  */
 bool nss_dp_vp_rx_register_cb(nss_dp_vp_rx_cb_t cb);
-
-/**
- * nss_dp_vp_rx_register_ops
- *	Register ops for VP rx processing.
- *
- * @datatypes
- * struct nss_dp_vp_rx_ops
- *
- * @param[in] ops Pointer to VP rx ops.
- *
- * @return
- * True or false.
- */
-void nss_dp_vp_rx_register_ops(struct nss_dp_vp_rx_ops *ops);
-
-/**
- * nss_dp_vp_rx_unregister_ops
- *	Unregister ops for VP rx processing.
- *
- * @datatypes
- * None
- *
- * @param[in]
- *
- * @return
- * None.
- */
-void nss_dp_vp_rx_unregister_ops(void);
 
 /**
  * nss_dp_vp_rx_unregister_cb

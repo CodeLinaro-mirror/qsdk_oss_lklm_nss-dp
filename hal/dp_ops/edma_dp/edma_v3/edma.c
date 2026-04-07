@@ -3013,8 +3013,6 @@ int edma_init(void)
 	for_each_online_cpu(cpu) {
 		struct nss_dp_vp_ctx *ctx = per_cpu_ptr(&g_vp_ctx, cpu);
 
-		memset(&ctx->ops, 0, sizeof(ctx->ops));
-
 		for (idx = 0; idx < PPE_DRV_VIRTUAL_MAX; idx++) {
 			struct nss_dp_vp_node *node = &ctx->nodes[idx];
 

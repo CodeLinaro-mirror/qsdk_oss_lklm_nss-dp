@@ -28,7 +28,6 @@
 #endif
 
 extern nss_dp_vp_rx_cb_t nss_dp_vp_rx_reg_cb;
-extern nss_dp_vp_list_rx_cb_t nss_dp_vp_list_rx_reg_cb;
 extern struct nss_dp_vp_ctx g_vp_ctx;
 
 #ifdef CONFIG_IPQ_PON
@@ -49,16 +48,23 @@ extern void *nss_dp_gem_rx_app_data_g;
  */
 static void edma_rx_fill_gro_mdata(struct edma_gbl_ctx *egc, struct nss_dp_vp_rx_info *vprxi, uint32_t ring_id, uint32_t word7)
 {
-	struct nss_vp_rx_custom_gro_mdata *gro_mdata;
+	uint32_t desc_flags = EDMA_RXDESC_GRO_INFO_GET(word7);
 
-	if (unlikely((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN))) {
-		if (unlikely(egc->rxdesc_info[ring_id].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO)) {
-			gro_mdata = &vprxi->vp_rx_mdata.rx_mdata.gro_mdata;
-			gro_mdata->hw_gro_en = true;
-			gro_mdata->hw_gro_more = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_MORE_MASK));
-			gro_mdata->hw_gro_fin = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_FIN_MASK));
-			gro_mdata->hw_gro_psh = !!((EDMA_RXDESC_GRO_INFO_GET(word7) & EDMA_RXDESC_GRO_EN_PSH_MASK));
-		}
+	/*
+	 * Access secondary desc GRO Bit only if this ring enabled with GRO Feature.
+	 */
+	if (likely(egc->rxdesc_info[ring_id].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO)) {
+		if (desc_flags & EDMA_RXDESC_GRO_EN)
+			vprxi->hw_gro_flags = NSS_DP_VP_RX_HW_GRO_EN;
+
+		if (desc_flags & EDMA_RXDESC_GRO_EN_MORE_MASK)
+			vprxi->hw_gro_flags |= NSS_DP_VP_RX_HW_GRO_MORE;
+
+		if (desc_flags & EDMA_RXDESC_GRO_EN_FIN_MASK)
+			vprxi->hw_gro_flags |= NSS_DP_VP_RX_HW_GRO_TCP_FIN;
+
+		if (desc_flags & EDMA_RXDESC_GRO_EN_PSH_MASK)
+			vprxi->hw_gro_flags |= NSS_DP_VP_RX_HW_GRO_TCP_PSH;
 	}
 }
 #endif
@@ -116,10 +122,14 @@ static inline uint8_t edma_rx_checksum_verify(struct edma_rxdesc_desc *rxdesc_de
  *	Forward packet to VP module for processing.
  */
 static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, struct edma_rxdesc_ring *rxdesc_ring,
-				       struct sk_buff *skb, struct nss_dp_vp_rx_info *vprxi_p)
+		struct sk_buff *skb, struct nss_dp_vp_rx_info *vprxi_p)
 {
-	uint32_t dst_port;
+	struct nss_dp_vp_rx_data rx_data = {
+		.type = NSS_DP_VP_RX_TYPE_SKB,
+		.skb = skb,
+	};
 	nss_dp_vp_rx_cb_t edma_rx_vp_cb;
+	uint32_t dst_port;
 
 	rcu_read_lock();
 
@@ -164,7 +174,7 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 	 * Pass the packet to VP to process
 	 */
 	mem_debug_update_skb(skb);
-	edma_rx_vp_cb(skb, vprxi_p);
+	edma_rx_vp_cb(&rx_data, vprxi_p);
 	rcu_read_unlock();
 }
 
@@ -1855,6 +1865,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 	struct nss_dp_vp_ctx *ctx = this_cpu_ptr(&g_vp_ctx);
 	uint32_t work_to_do, work_done = 0;
 	uint16_t prod_idx, cons_idx, end_idx;
+	nss_dp_vp_rx_cb_t edma_rx_vp_cb;
 	uint16_t cons_idx_1 = 0;
 	uint16_t cons_idx_2 = 0;
 	struct list_head rx_list;
@@ -2008,14 +2019,17 @@ next_rx_desc:
 
 	edma_dsb();
 
+	rcu_read_lock();
+	edma_rx_vp_cb = rcu_dereference(nss_dp_vp_rx_reg_cb);
 	for_each_set_bit(bit, ctx->active_vps, PPE_DRV_VIRTUAL_MAX) {
 		struct nss_dp_vp_node *node = &ctx->nodes[bit];
 		struct nss_dp_vp_rx_info rx_info = {0};
+		struct nss_dp_vp_rx_data rx_data = {0};
 		struct sk_buff_head tmp;
 
 		rx_info.dvp = node->info.dvp;
 		rx_info.napi = &rxdesc_ring->napi;
-		rx_info.batch_bytes = node->info.bytes;
+		rx_info.total_bytes = node->info.bytes;
 
 		skb_queue_head_init(&tmp);
 		skb_queue_splice_init(&node->head, &tmp);
@@ -2023,13 +2037,16 @@ next_rx_desc:
 		clear_bit(bit, ctx->active_vps);
 		memset(&node->info, 0, sizeof(node->info));
 
-		if (unlikely(!ctx->ops.list_cb)) {
+		if (unlikely(!edma_rx_vp_cb)) {
 			dev_kfree_skb_list_fast(&tmp);
 			continue;
 		}
 
-		ctx->ops.list_cb(&tmp, &rx_info);
+		rx_data.type = NSS_DP_VP_RX_TYPE_SKB_LIST;
+		rx_data.skb_head = &tmp;
+		edma_rx_vp_cb(&rx_data, &rx_info);
 	}
+	rcu_read_unlock();
 
 	edma_reg_write(EDMA_REG_RXDESC_CONS_IDX(rxdesc_ring->ring_id), cons_idx);
 	rxdesc_ring->cons_idx = cons_idx;
