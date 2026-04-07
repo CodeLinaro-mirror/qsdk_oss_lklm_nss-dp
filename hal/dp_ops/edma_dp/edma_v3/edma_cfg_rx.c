@@ -426,6 +426,7 @@ static int32_t edma_cfg_rx_desc_ring_reset_queue_config(struct edma_gbl_ctx *egc
 {
 	int32_t i;
 	int rx_queue_start = 0;
+	bool gro_ring = false;
 
 	/*
 	 * Unmap Rxdesc ring to PPE queue mapping to reset its backpressure configuration
@@ -443,15 +444,15 @@ static int32_t edma_cfg_rx_desc_ring_reset_queue_config(struct edma_gbl_ctx *egc
 			switch (egc->rxdesc_info[i].type_flags) {
 			case EDMA_RING_TYPE_FLAGS_HOST_GRO:
 				rx_queue_start = egc->hw_gro_ctx.rx_gro_queue_start;
+				gro_ring = true;
 				break;
 			default:
 				rx_queue_start = egc->rx_queue_start;
 				break;
 			}
 
-			if (edma_cfg_rx_desc_ring_reset_queue_priority(egc, egc->rxdesc_info[i].ppe_queue_base + rx_queue_start, i)) {
-				edma_err("Error in resetting ring:%d queue's priority\n",
-					 i);
+			if (!gro_ring && edma_cfg_rx_desc_ring_reset_queue_priority(egc, egc->rxdesc_info[i].ppe_queue_base + rx_queue_start, i)) {
+				edma_err("Error in resetting ring:%d queue's priority\n", i);
 				return -1;
 			}
 		}
@@ -467,7 +468,7 @@ static int32_t edma_cfg_rx_desc_ring_reset_queue_config(struct edma_gbl_ctx *egc
 static void edma_cfg_fill_ring_to_queue_bitmap(uint32_t ring_id, uint32_t *bitmap)
 {
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-	uint32_t queue_id, word_idx = 0;
+	uint32_t queue_id, word_idx = 0, bit_idx = 0;
 	uint32_t num_queues = 0;
 	int rx_queue_start = 0;
 
@@ -487,8 +488,9 @@ static void edma_cfg_fill_ring_to_queue_bitmap(uint32_t ring_id, uint32_t *bitma
 
 	for (int idx = 0; idx < num_queues; idx++) {
 		word_idx = (queue_id / EDMA_BITS_IN_WORD);
+		bit_idx = queue_id % EDMA_BITS_IN_WORD;
 
-		bitmap[word_idx] |= 1 << queue_id;
+		bitmap[word_idx] |= (1 << bit_idx);
 		queue_id ++;
 	}
 }
