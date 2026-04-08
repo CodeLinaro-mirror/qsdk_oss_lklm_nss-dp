@@ -66,7 +66,13 @@ extern uint32_t rx_ring_sz_high_mem;
 #define EDMA_RX_PID_IS_IPV4(pid)	(!((pid) & (~EDMA_RX_PID_IPV4_MAX)))
 #define EDMA_RX_PID_IS_IPV6(pid)	(!(!((pid) & EDMA_RX_PID_IPV6)))
 
+#if defined(NSS_DP_HIGHMEM_SUPP)
+#define EDMA_RXDESC_BUFFER_ADDR_GET(desc)	((uint64_t)(le32_to_cpu((desc)->word0)) | \
+						(((uint64_t)(le32_to_cpu((desc)->word1) & 0x000000FF)) << 32))
+#else
 #define EDMA_RXDESC_BUFFER_ADDR_GET(desc)	((uint32_t)(le32_to_cpu((desc)->word0)))
+#endif
+
 #define EDMA_RXDESC_OPAQUE_GET(desc)		((uintptr_t)((uint64_t)((desc)->word2) | \
 						((uint64_t)((desc)->word3) << 0x20)))
 #define EDMA_RXDESC_SRCINFO_TYPE_PORTID		0x2000
