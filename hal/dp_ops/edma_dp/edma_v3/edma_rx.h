@@ -6,6 +6,8 @@
 #ifndef __EDMA_RX_H__
 #define __EDMA_RX_H__
 
+struct edma_gbl_ctx;
+
 extern uint32_t rx_ring_sz_low_mem;
 extern uint32_t rx_ring_sz_medium_mem;
 extern uint32_t rx_ring_sz_high_mem;
@@ -455,6 +457,8 @@ struct edma_rxfill_ring {
 	struct edma_rx_fill_stats rx_fill_stats;
 					/* Rx fill ring statistics */
 	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
+	int (*rx_refill)(struct edma_rxfill_ring *rxfill_ring, int count);
+					/* Refill function pointer */
 };
 
 /*
@@ -490,6 +494,9 @@ struct edma_rxdesc_ring {
 #ifdef EDMA_ALLOC_PAGE_POOL_MODE
 	bool page_pool_alloc_mode;			/* Page pool enabled */
 #endif
+	uint32_t (*rx_reap)(struct edma_gbl_ctx *egc, int budget,
+			    struct edma_rxdesc_ring *rxdesc_ring);
+					/* Reap function pointer */
 };
 
 irqreturn_t edma_rx_handle_irq(int irq, void *ctx);
@@ -497,10 +504,11 @@ irqreturn_t edma_rxfill_handle_irq(int irq, void *ctx);
 void edma_rx_free_buffer_loopback(void);
 bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
+uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget, struct edma_rxdesc_ring *rxdesc_ring);
+uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget, struct edma_rxdesc_ring *rxdesc_ring);
 int edma_rx_napi_poll(struct napi_struct *napi, int budget);
 int edma_rxfill_napi_poll(struct napi_struct *napi, int budget);
 void edma_rxfill_intr_timer(struct timer_list *tm);
 bool edma_rx_tstamp_buf(void *app_data, struct sk_buff *skb, void *sc_data);
-int edma_rx_napi_capwap_poll(struct napi_struct *napi, int budget);
 
 #endif	/* __EDMA_RX_H__ */

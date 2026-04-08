@@ -5,6 +5,7 @@
 
 #include <asm/cacheflush.h>
 #include <linux/debug_mem_usage.h>
+#include <linux/indirect_call_wrapper.h>
 #include <linux/version.h>
 #include <linux/netdevice.h>
 #include <ppe_drv_public.h>
@@ -1857,7 +1858,7 @@ struct net_device *edma_rx_get_src_capwap_dev(struct edma_gbl_ctx *egc,
  * edma_rx_reap_capwap()
  *	Reap Rx descriptors
  */
-static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
+uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 				struct edma_rxdesc_ring *rxdesc_ring)
 {
 	struct edma_rxdesc_desc *rxdesc_desc, *pf_desc = NULL;
@@ -2162,7 +2163,7 @@ static void edma_rx_hwtstamp(struct sk_buff *skb,
  * edma_rx_reap()
  *	Reap Rx descriptors
  */
-static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
+uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 				struct edma_rxdesc_ring *rxdesc_ring)
 {
 	struct edma_rxdesc_desc *rxdesc_desc, *pf_desc = NULL;
@@ -2426,45 +2427,6 @@ next_rx_desc:
 }
 
 /*
- * edma_rx_napi_capwap_poll()
- *	EDMA RX NAPI handler
- */
-int edma_rx_napi_capwap_poll(struct napi_struct *napi, int budget)
-{
-	struct edma_rxdesc_ring *rxdesc_ring = (struct edma_rxdesc_ring *)napi;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-	int32_t work_done = 0;
-	uint32_t status;
-
-	do {
-		work_done += edma_rx_reap_capwap(egc, budget - work_done, rxdesc_ring);
-		if (likely(work_done >= budget)) {
-			return work_done;
-		}
-
-		/*
-		 * Check if there are more packets to process
-		 */
-		status = EDMA_RXDESC_RING_INT_STATUS_MASK &
-			edma_reg_read(
-				EDMA_REG_RXDESC_INT_STAT(rxdesc_ring->ring_id));
-	} while (likely(status));
-
-	/*
-	 * No more packets to process. Finish NAPI processing.
-	 */
-	napi_complete(napi);
-
-	/*
-	 * Set RXDESC ring interrupt mask
-	 */
-	edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id),
-						egc->rxdesc_intr_mask);
-
-	return work_done;
-}
-
-/*
  * edma_rx_napi_poll()
  *	EDMA RX NAPI handler
  */
@@ -2476,7 +2438,10 @@ int edma_rx_napi_poll(struct napi_struct *napi, int budget)
 	uint32_t status;
 
 	do {
-		work_done += edma_rx_reap(egc, budget - work_done, rxdesc_ring);
+		work_done += INDIRECT_CALL_2(rxdesc_ring->rx_reap,
+					     edma_rx_reap,
+					     edma_rx_reap_capwap,
+					     egc, budget - work_done, rxdesc_ring);
 		if (likely(work_done >= budget)) {
 			return work_done;
 		}
@@ -2565,7 +2530,9 @@ int edma_rxfill_napi_poll(struct napi_struct *napi, int budget)
 	 * low threshold interrrupt immediately without allowing rx-reap to proceed.
 	 */
 	do {
-		edma_rx_alloc_buffer(rxfill_ring, 0);
+		INDIRECT_CALL_1(rxfill_ring->rx_refill,
+				edma_rx_alloc_buffer,
+				rxfill_ring, 0);
 		if (likely(!rxfill_ring->num_rxfill_pending)) {
 			break;
 		}

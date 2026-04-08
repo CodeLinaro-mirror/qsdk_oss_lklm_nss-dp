@@ -1715,6 +1715,7 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 			return -ENOMEM;
 		}
 
+		rxfill_ring->rx_refill = edma_rx_alloc_buffer;
 		rxfill_info[ring_idx].status_flags |= EDMA_RING_STATUS_FLAGS_IS_CONFIGURED;
 	}
 
@@ -1781,6 +1782,15 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 			edma_err("Error in setting up %d rxdesc ring. ret: %d",
 					 rxdesc_ring->ring_id, ret);
 			return -ENOMEM;
+		}
+
+		/*
+		 * Assign the reap function pointer based on the ring type.
+		 */
+		if (nss_dp_capwap_vp_rx_core == ring_idx) {
+			rxdesc_ring->rx_reap = edma_rx_reap_capwap;
+		} else {
+			rxdesc_ring->rx_reap = edma_rx_reap;
 		}
 
 		rxdesc_info[ring_idx].status_flags |= EDMA_RING_STATUS_FLAGS_IS_CONFIGURED;
@@ -2172,23 +2182,11 @@ void edma_cfg_rx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev)
 		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
 
 #if (LINUX_VERSION_CODE < KERNEL_VERSION(6, 1, 0))
-		if (nss_dp_capwap_vp_rx_core == i) {
-			edma_info("Adding capwap napi for ring_id %d for core3\n", nss_dp_capwap_vp_rx_core);
-			netif_napi_add(netdev, &rxdesc_ring->napi,
-				edma_rx_napi_capwap_poll, nss_dp_rx_napi_budget);
-		} else {
-			netif_napi_add(netdev, &rxdesc_ring->napi,
-				edma_rx_napi_poll, nss_dp_rx_napi_budget);
-		}
+		netif_napi_add(netdev, &rxdesc_ring->napi,
+			edma_rx_napi_poll, nss_dp_rx_napi_budget);
 #else
-		if (nss_dp_capwap_vp_rx_core == i) {
-			edma_info("Adding capwap napi for ring_id %d for core3\n", nss_dp_capwap_vp_rx_core);
-			netif_napi_add_weight(netdev, &rxdesc_ring->napi,
-				edma_rx_napi_capwap_poll, nss_dp_rx_napi_budget);
-		} else {
-			netif_napi_add_weight(netdev, &rxdesc_ring->napi,
-				 edma_rx_napi_poll, nss_dp_rx_napi_budget);
-		}
+		netif_napi_add_weight(netdev, &rxdesc_ring->napi,
+			edma_rx_napi_poll, nss_dp_rx_napi_budget);
 #endif
 		rxdesc_ring->napi_added = true;
 	}
