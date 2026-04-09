@@ -441,6 +441,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 	uint32_t nr_frags = 0, buf_len = 0, num_descs = 0, start_idx = 0, end_idx = 0;
 	struct edma_pri_txdesc *txd = *txdesc;
 	dma_addr_t buff_addr;
+	uint8_t pt_val = (unlikely(skb_cloned(skb)) ? EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA : dp_dev->pt_info.dst_pt_mode_val);
 
 	/*
 	 * Hold onto the index mapped to *txdesc.
@@ -483,7 +484,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 #if defined(NSS_DP_HIGHMEM_SUPP)
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, pt_val);
 		edma_dmac_clean_range_no_dsb((void *)skb_frag_address(frag),
 				(void *)(skb_frag_address(frag) + buf_len));
 
@@ -675,6 +676,11 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	} else {
 		edma_tx_fill_pp_desc(dp_dev, txd, skb, stats);
 	}
+
+	if (unlikely(skb_cloned(skb))) {
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+	}
+
 #ifdef CONFIG_IPQ_PON
 	struct nss_dp_gem_tx_info *gem_txi = (struct nss_dp_gem_tx_info *)gem_txi_info;
 
@@ -710,6 +716,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 	uint32_t num_sg_frag_list = 0;
 	struct edma_pri_txdesc *txd = *txdesc;
 	dma_addr_t buff_addr;
+	uint8_t pt_val = 0;
 
 	/*
 	 * Head skb processed already
@@ -726,6 +733,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 		u64_stats_update_end(&stats->syncp);
 	}
 
+	pt_val = (unlikely(skb_cloned(skb)) ? EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA : dp_dev->pt_info.dst_pt_mode_val);
 	if (unlikely(skb_has_frag_list(skb))) {
 		struct edma_pri_txdesc *start_desc = NULL;
 		uint32_t start_idx = 0, end_idx = 0;
@@ -764,7 +772,7 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 #if defined(NSS_DP_HIGHMEM_SUPP)
 			EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, pt_val);
 
 			edma_dmac_clean_range_no_dsb((void *)iter_skb->data,
 					(void *)(iter_skb->data + buf_len));
