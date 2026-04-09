@@ -776,6 +776,7 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 				   struct nss_gmac_hal_platform_data *hal_pdata)
 {
 	uint8_t *maddr;
+	uint32_t val = 0;
 	struct nss_dp_dev *dp_priv;
 	struct resource memres_devtree = {0};
 #if (LINUX_VERSION_CODE > KERNEL_VERSION(6, 1, 0))
@@ -905,7 +906,8 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	}
 #endif
 
-	dp_priv->ppe_offload_disabled = of_property_read_bool(np, "qcom,ppe-offload-disabled");
+	of_property_read_u32(np, "qcom,ppe-offload-disabled", &val);
+	dp_priv->ppe_offload_disabled = !!val;
 	pr_debug("%s: ppe offload disabled: %d for macid %d\n", np->name,
 				dp_priv->ppe_offload_disabled, dp_priv->macid);
 #ifdef NSS_DP_PON_SUPPORT
