@@ -1435,14 +1435,15 @@ static int edma_ddrq_lp_cpu_code_cfg(edma_ddrq_lp_cfg_t *lp_cfg)
 	fal_passthrough_cpucode_t cc = {0};
 
 	/*
-	 * Get the CPU_CODE_0/CPU_CODE_1 values
+	 * Get the CPU_CODE_0/CPU_CODE_1/Drop CPU code values
 	 */
 	err = fal_qm_passthrough_cpucode_get(EDMA_SWITCH_DEV_ID, &cc);
 	if (err != SW_OK) {
 		edma_err("Error in getting pt cpu code cfg\n");
 		return -EINVAL;
 	}
-	edma_warn("cpucode0: %d, cpucode1: %d, qbase: %d\n", cc.cpucode[0], cc.cpucode[1], lp_cfg->queue_base);
+	edma_warn("cpucode0: %d, cpucode1: %d, drop cc: %d, qbase: %d\n", cc.cpucode[0], cc.cpucode[1],
+					 cc.drop_cpucode, lp_cfg->queue_base);
 
 	if (!ppe_drv_cc_ucast_qbase_profile_set(cc.cpucode[0], lp_cfg->queue_base)) {
 		edma_err("Error in DDRQ loopback CPU code 0 (%d) queue base config\n", cc.cpucode[0]);
@@ -1451,6 +1452,11 @@ static int edma_ddrq_lp_cpu_code_cfg(edma_ddrq_lp_cfg_t *lp_cfg)
 
 	if (!ppe_drv_cc_ucast_qbase_profile_set(cc.cpucode[1], lp_cfg->queue_base)) {
 		edma_err("Error in DDRQ loopback CPU code 1 (%d) queue base config\n", cc.cpucode[1]);
+		return -EINVAL;
+	}
+
+	if (!ppe_drv_cc_ucast_qbase_profile_set(cc.drop_cpucode, lp_cfg->queue_base)) {
+		edma_err("Error in DDRQ loopback drop cpu code (%d) queue base config\n", cc.drop_cpucode);
 		return -EINVAL;
 	}
 
