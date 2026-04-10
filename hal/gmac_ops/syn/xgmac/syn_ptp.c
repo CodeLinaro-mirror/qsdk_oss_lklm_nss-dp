@@ -326,7 +326,22 @@ static int qcom_nss_ptp_gettimex(struct ptp_clock_info *ptp,
 	struct syn_ptp_priv *ptp_priv = container_of(ptp, struct syn_ptp_priv, caps);
 	u32 sec, nsec;
 
+	/*
+	 * Capture the system clock immediately before and after reading the
+	 * XGMAC hardware clock.  These timestamps are used by the kernel's
+	 * PTP_SYS_OFFSET_PRECISE and PTP_SYS_OFFSET_EXTENDED ioctls to
+	 * compute an accurate PHC-to-system-clock offset for phc2sys.
+	 *
+	 * Without these calls ptp_sys_offset_precise.sys_realtime is left as
+	 * zero, causing phc2sys to compute a ~70-year offset and fail with
+	 * "failed to step clock: Invalid argument".
+	 *
+	 * ptp_read_system_prets/postts are no-ops when sts == NULL (e.g.
+	 * when called from the PTP_CLOCK_GETTIME ioctl path).
+	 */
+	ptp_read_system_prets(sts);
 	syn_ptp_read_sys_time(ptp_priv, &sec, &nsec);
+	ptp_read_system_postts(sts);
 
 	ts->tv_sec  = sec;
 	ts->tv_nsec = nsec;
