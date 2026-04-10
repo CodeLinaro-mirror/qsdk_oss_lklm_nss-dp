@@ -144,6 +144,11 @@ qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_cfg_rx_loopback.o \
 		   hal/dp_ops/edma_dp/edma_v3/edma_cfg_tx_loopback.o
 ccflags-y += -DNSS_DP_EDMA_LOOPBACK_SUPPORT
 endif
+
+ifeq ($(dp-udp-st),y)
+qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_cfg_tx_udp_st.o
+ccflags-y += -DNSS_DP_UDP_ST_SUPPORT
+endif
 NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/edma_dp/edma_v3
 NSS_DP_INCLUDE += -I$(obj)/hal/dp_ops/edma_dp/edma_v3/include
 ccflags-y += -DNSS_DP_ENABLE_NAPI_GRO -DNSS_DP_VP_SUPPORT -DNSS_DP_EDMA_V3 -DNSS_DP_MAC_POLL_SUPPORT -DNSS_DP_SW_BR_OPS -DNSS_DP_ETHTOOL_MRR_OPS

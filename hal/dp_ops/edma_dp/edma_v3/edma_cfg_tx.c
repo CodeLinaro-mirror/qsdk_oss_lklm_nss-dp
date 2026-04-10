@@ -90,7 +90,7 @@ static void edma_cfg_tx_cmpl_ring_cleanup(struct edma_gbl_ctx *egc,
  * edma_cfg_tx_cmpl_ring_setup()
  *	Setup resources for one TxCmpl ring
  */
-static int edma_cfg_tx_cmpl_ring_setup(struct edma_txcmpl_ring *txcmpl_ring)
+int edma_cfg_tx_cmpl_ring_setup(struct edma_txcmpl_ring *txcmpl_ring)
 {
 	txcmpl_ring->desc = kmalloc(roundup((sizeof(struct edma_txcmpl_desc) * txcmpl_ring->count),
 						SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
@@ -167,7 +167,7 @@ static void edma_cfg_tx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
  * edma_cfg_tx_desc_ring_setup()
  *	Setup resources for one TxDesc ring
  */
-static int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
+int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring)
 {
 	/*
 	 * Allocate Tx ring descriptors

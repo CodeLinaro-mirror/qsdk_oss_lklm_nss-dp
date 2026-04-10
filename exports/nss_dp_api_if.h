@@ -318,6 +318,50 @@ extern bool nss_dp_nsm_sawf_sc_stats_read(struct nss_dp_hal_nsm_sawf_sc_stats *n
  * True - success, False - Failure
  */
 bool nss_dp_get_eth_info(struct nss_dp_eth_netdev_info ethlist[], uint8_t array_size);
+
+/**
+ * nss_dp_udp_st_xmit
+ *	Transmit the UDP-ST packet to EDMA tx ring
+ *
+ * @param[in] skb Pointer to the packet.
+ * @param[in] skb_idx Index of this skb in the ring.
+ * @param[in] skb_count Total number of skbs in the ring.
+ * @param[in] vp_num VP port number.
+ *
+ * @return
+ * Returns 0 on success, negative errno on failure.
+ */
+int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t vp_num);
+
+/**
+ * nss_dp_udp_st_reset_indices
+ *	Reset the UDP-ST TX ring producer and completion ring consumer indices to 0.
+ *
+ * @return
+ * None
+ */
+void nss_dp_udp_st_reset_indices(void);
+
+/**
+ * nss_dp_udp_st_init
+ *	Initialise the UDP-ST TX ring context.
+ *
+ * @return
+ * Returns 0 on success, negative errno on failure.
+ */
+int nss_dp_udp_st_init(void);
+
+/**
+ * nss_dp_udp_st_deinit
+ *	Disable the UDP-ST TX ring and release loaded SKBs.
+ *
+ * Must be called before the PPE VP or WAN interface is torn down.
+ *
+ * @return
+ * None
+ */
+void nss_dp_udp_st_deinit(void);
+
 /**
  *@}
  */

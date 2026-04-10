@@ -28,6 +28,9 @@
 #ifdef NSS_DP_DDRQ_SUPPORT
 #include "edma_ddrq.h"
 #endif
+#ifdef NSS_DP_UDP_ST_SUPPORT
+#include "edma_cfg_tx_udp_st.h"
+#endif
 
 /*
  * The driver uses kernel DMA constructs that assume an architecture
@@ -176,6 +179,11 @@
  * EDMA ring flags
 */
 #define EDMA_RING_FLAGS_SEC_RING_VALID	(1UL << 0)
+
+/*
+ * EDMA invalid ring id
+ */
+#define EDMA_RING_FLAGS_INVALID_ID	-1
 
 /*
  * edma_port_ucast_queues
@@ -794,6 +802,10 @@ struct edma_gbl_ctx {
 			/* Tracks main initialization stages */
 	uint32_t clk_init_bitmap;
 			/* Tracks clock initialization stages */
+#ifdef NSS_DP_UDP_ST_SUPPORT
+	struct edma_udp_st_ctx udp_st_ctx;
+			/* UDP-ST TX ring context */
+#endif
 };
 
 extern struct edma_gbl_ctx edma_gbl_ctx;
@@ -803,6 +815,17 @@ extern int edma_dp_extension_en;
 
 extern int edma_rx_ring_mode_bitmask;
 extern int edma_tx_ring_mode_bitmask;
+
+#ifdef NSS_DP_UDP_ST_SUPPORT
+/*
+ * UDP-ST module parameters
+ */
+extern int edma_udp_st_tx_ring;
+extern int edma_udp_st_tx_cmpl_ring;
+extern int edma_udp_st_fc_grp_id;
+extern int edma_udp_st_ring_size;
+#endif
+
 #ifdef NSS_DP_DDRQ_SUPPORT
 extern int32_t edma_passthrough_val;
 extern int edma_ddrq_gbl_en_sw;

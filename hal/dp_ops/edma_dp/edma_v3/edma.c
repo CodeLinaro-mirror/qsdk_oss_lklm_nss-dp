@@ -36,6 +36,9 @@
 #ifdef NSS_DP_DDRQ_SUPPORT
 #include "edma_ddrq.h"
 #endif
+#ifdef NSS_DP_UDP_ST_SUPPORT
+#include "edma_cfg_tx_udp_st.h"
+#endif
 
 int edma_dp_extension_en = 0;
 module_param(edma_dp_extension_en, int, 0640);
@@ -299,6 +302,27 @@ MODULE_PARM_DESC(edma_bp_stats_en_rxdesc_rings, "bp_stats_en_rxdesc_rings");
 int edma_bp_stats_en_rxfill_rings[EDMA_REG_PER_RING_TYPE_BP_COUNTER_MAX] = {0,1,7,8,9,10};
 module_param_array(edma_bp_stats_en_rxfill_rings, bp_stats_en_rxfill_ring_id, NULL, 0640);
 MODULE_PARM_DESC(edma_bp_stats_en_rxfill_rings, "bp_stats_en_rxfill_rings");
+
+#ifdef NSS_DP_UDP_ST_SUPPORT
+/*
+ * Module parameters for UDP-ST TX rings
+ */
+int edma_udp_st_tx_ring = -1;
+module_param(edma_udp_st_tx_ring, int, 0640);
+MODULE_PARM_DESC(edma_udp_st_tx_ring, "TX ring ID for UDP speed test");
+
+int edma_udp_st_tx_cmpl_ring = -1;
+module_param(edma_udp_st_tx_cmpl_ring, int, 0640);
+MODULE_PARM_DESC(edma_udp_st_tx_cmpl_ring, "TX completion ring ID for UDP speed test");
+
+int edma_udp_st_fc_grp_id = 0;
+module_param(edma_udp_st_fc_grp_id, int, 0640);
+MODULE_PARM_DESC(edma_udp_st_fc_grp_id, "Flow Control group ID for UDP-ST TX ring (TXDESC_CTRL FC_GRP_ID field)");
+
+int edma_udp_st_ring_size = EDMA_TX_UDP_ST_RING_SIZE;
+module_param(edma_udp_st_ring_size, int, 0640);
+MODULE_PARM_DESC(edma_udp_st_ring_size, "Ring size for UDP-ST TX descriptor ring");
+#endif
 
 /*
  * Input String length for VLAN insertion.
@@ -704,6 +728,13 @@ void edma_cleanup(bool is_dp_override)
 	 */
 	edma_cfg_tx_rings_cleanup(&edma_gbl_ctx);
 	edma_cfg_rx_rings_cleanup(&edma_gbl_ctx);
+
+#ifdef NSS_DP_UDP_ST_SUPPORT
+	if (edma_udp_st_tx_ring > EDMA_RING_FLAGS_INVALID_ID) {
+		edma_cfg_tx_udp_st_ring_disable(&edma_gbl_ctx);
+		edma_cfg_tx_udp_st_ring_cleanup(&edma_gbl_ctx);
+	}
+#endif
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	if (edma_gbl_ctx.loopback_en) {
@@ -2590,6 +2621,26 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	}
 #endif
 
+#ifdef NSS_DP_UDP_ST_SUPPORT
+	/*
+	 * Alloc and setup the software resources for UDP-ST ring.
+	 */
+	if (edma_udp_st_tx_ring > EDMA_RING_FLAGS_INVALID_ID) {
+		ret = edma_cfg_tx_udp_st_ring_alloc(egc);
+		if (ret) {
+			edma_err("Error in initializaing the rings. ret: %d\n", ret);
+			return ret;
+		}
+		edma_set_init_stage(EDMA_INIT_STAGE_RINGS_ALLOCATED);
+
+		edma_cfg_tx_udp_st_ring_disable(egc);
+		edma_cfg_tx_udp_st_mapping(egc);
+		edma_cfg_tx_udp_st_ring(egc);
+
+		edma_cfg_tx_udp_st_ring_enable(egc);
+	}
+#endif
+
 	egc->edma_initialized = true;
 	edma_set_init_stage(EDMA_INIT_STAGE_PORT_ENABLED);
 
@@ -3357,6 +3408,13 @@ static void edma_recovery_cleanup(bool is_dp_override)
 	 */
 	edma_cfg_tx_rings_cleanup(&edma_gbl_ctx);
 	edma_cfg_rx_rings_cleanup(&edma_gbl_ctx);
+
+#ifdef NSS_DP_UDP_ST_SUPPORT
+	if (edma_udp_st_tx_ring > EDMA_RING_FLAGS_INVALID_ID) {
+		edma_cfg_tx_udp_st_ring_disable(&edma_gbl_ctx);
+		edma_cfg_tx_udp_st_ring_cleanup(&edma_gbl_ctx);
+	}
+#endif
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 	if (edma_gbl_ctx.loopback_en) {
