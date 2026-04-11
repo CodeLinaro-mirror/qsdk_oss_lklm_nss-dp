@@ -649,7 +649,7 @@ static irqreturn_t qcom_nss_ptp_irq_handler_thread(int irq, void *priv)
 			if (dist <= SYN_PTP_PPS_BOUNDARY_THRESHOLD_NS) {
 				ptp_priv->aux_ts_was_synced = true;
 			} else if (ptp_priv->aux_ts_was_synced) {
-				dev_warn_ratelimited(ptp_priv->dev,
+				dev_dbg(ptp_priv->dev,
 					"PPS glitch: ts=%u.%09u dist=%u ns from boundary, skipped\n",
 					sec, nsec, dist);
 				ptp_priv->aux_ts_glitch++;
@@ -831,9 +831,6 @@ static struct syn_ptp_platform_mgr *syn_ptp_platform_mgr_get(struct platform_dev
 
 	/* Get PPS_IN interrupt from DTS by name */
 	mgr->pps_in_irq = platform_get_irq_byname_optional(pdev, "pps_in");
-	if (mgr->pps_in_irq >= 0) {
-		dev_info(&pdev->dev, "PPS_IN IRQ from DTS: %d\n", mgr->pps_in_irq);
-	}
 
 	/* Detect platform type */
 	mgr->platform = syn_ptp_platform_detect();
@@ -928,7 +925,7 @@ static int pps_in_source_show(struct seq_file *m, void *v)
 		source_str = "pon_mac";
 		break;
 	case 2:
-		source_str = "gephy";
+		source_str = "internal_phy";
 		break;
 	default:
 		source_str = "unknown";
@@ -951,7 +948,7 @@ static int pps_in_source_open(struct inode *inode, struct file *file)
  * pps_in_source_write()
  *	Write callback for pps_in_source debugfs file
  *
- * Valid values: "external_phy", "pon_mac", "gephy"
+ * Valid values: "external_phy", "pon_mac", "internal_phy"
  */
 static ssize_t pps_in_source_write(struct file *file, const char __user *user_buf,
 				    size_t count, loff_t *ppos)
@@ -982,10 +979,13 @@ static ssize_t pps_in_source_write(struct file *file, const char __user *user_bu
 		value = 0;
 	else if (strcmp(buf, "pon_mac") == 0)
 		value = 1;
-	else if (strcmp(buf, "gephy") == 0)
+	else if (strcmp(buf, "internal_phy") == 0)
 		value = 2;
-	else
+	else {
+		pr_err("PPS_IN source: invalid value '%s'. Valid values: external_phy, pon_mac, internal_phy\n",
+		       buf);
 		return -EINVAL;
+	}
 
 	/* Write to TCSR PPS_IN register */
 	writel(value, mgr->tcsr_pps_in);
@@ -995,7 +995,7 @@ static ssize_t pps_in_source_write(struct file *file, const char __user *user_bu
 
 	pr_info("PPS_IN source set to %s (value=%u)\n",
 		value == 0 ? "external_phy" :
-		value == 1 ? "pon_mac" : "gephy", value);
+		value == 1 ? "pon_mac" : "internal_phy", value);
 
 	return count;
 }
@@ -1087,8 +1087,11 @@ static ssize_t pps_out_source_write(struct file *file, const char __user *user_b
 		value = 0;
 	else if (strcmp(buf, "external_pps") == 0)
 		value = 1;
-	else
+	else {
+		pr_err("PPS_OUT source: invalid value '%s'. Valid values: nss_pps, external_pps\n",
+		       buf);
 		return -EINVAL;
+	}
 
 	/* Write to TCSR PPS_OUT register */
 	writel(value, mgr->tcsr_pps_out);
@@ -1184,8 +1187,8 @@ static int calculate_ptp_parameters(u32 ptp_clock_rate,
 		return -EINVAL;
 	}
 
-	pr_info("PTP params: clock=%u Hz, ssinc=%u ns, addend=0x%08x\n",
-		ptp_clock_rate, *ssinc, *default_addend);
+	pr_debug("PTP params: clock=%u Hz, ssinc=%u ns, addend=0x%08x\n",
+		 ptp_clock_rate, *ssinc, *default_addend);
 
 	return 0;
 }
