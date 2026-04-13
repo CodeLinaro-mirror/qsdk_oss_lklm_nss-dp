@@ -36,8 +36,8 @@
  * Note that this may not be compatible for platforms where this
  * assumption is not true, for example IO devices with IOMMU support.
  */
-#if defined(CONFIG_ARM_SMMU) || \
-	defined(CONFIG_IOMMU_SUPPORT)
+#if !defined(NSS_DP_IPQ96XX) && \
+	(defined(CONFIG_ARM_SMMU) || defined(CONFIG_IOMMU_SUPPORT))
 #error "Build Error: Platform is enabled with IOMMU/SMMU support."
 #endif
 
