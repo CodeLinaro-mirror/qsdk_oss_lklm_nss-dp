@@ -14,6 +14,7 @@
 #include "edma_cfg_rx.h"
 #include "edma_regs.h"
 #include "edma_debug.h"
+#include "edma_rx.h"
 #include "nss_dp_dev.h"
 
 uint32_t edma_cfg_rx_fc_enable = EDMA_RX_FC_ENABLE;
@@ -34,7 +35,6 @@ extern struct nss_dp_vp_ctx g_vp_ctx;
  */
 #define EDMA_CPU_PORT_QUEUE_MAX(queue_start)	queue_start + (EDMA_MAX_PRI_PER_CORE * NR_CPUS) - 1
 
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
 /*
  * edma_cfg_rx_pp_alloc()
  *	Allocate Page pool.
@@ -70,14 +70,13 @@ static inline struct page_pool *edma_cfg_rx_pp_alloc(uint32_t pool_size, uint32_
  */
 static inline void edma_cfg_rx_pp_free(struct edma_rxfill_ring *rxfill_ring)
 {
-	if (!rxfill_ring->page_pool_alloc_mode) {
+	if (!rxfill_ring->page_pool) {
 		return;
 	}
 
 	page_pool_destroy(rxfill_ring->page_pool);
 	rxfill_ring->page_pool = NULL;
 }
-#endif
 
 #ifdef NSS_DP_HW_GRO
 /*
@@ -237,12 +236,10 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 			continue;
 		}
 
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
-		if (rxfill_ring->page_pool_alloc_mode) {
+		if (rxfill_ring->page_pool) {
 			napi_pp_put_page(virt_to_page(opaque), false);
 			continue;
 		}
-#endif
 
 		dev_kfree_skb_any((struct sk_buff *)opaque);
 	}
@@ -263,9 +260,7 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 	rxfill_ring->desc = NULL;
 	rxfill_ring->dma = (dma_addr_t)0;
 
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
 	edma_cfg_rx_pp_free(rxfill_ring);
-#endif
 }
 
 /*
@@ -274,9 +269,10 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
  */
 static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 {
+	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	uint32_t type_flags = egc->rxfill_info[rxfill_ring->ring_id].type_flags;
 
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
-	if (rxfill_ring->page_pool_alloc_mode) {
+	if (type_flags & EDMA_RING_TYPE_FLAGS_PAGE_POOL){
 		rxfill_ring->page_pool = edma_cfg_rx_pp_alloc(rxfill_ring->count, rxfill_ring->alloc_size, rxfill_ring->buf_len);
 		if (IS_ERR(rxfill_ring->page_pool)) {
 			int err = PTR_ERR(rxfill_ring->page_pool);
@@ -286,7 +282,6 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 			return err;
 		}
 	}
-#endif
 
 #ifdef CONFIG_IO_COHERENCY
 	/*
@@ -295,12 +290,12 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 	rxfill_ring->desc = kmalloc(roundup((sizeof(struct edma_rxfill_desc) * rxfill_ring->count),
 					    SMP_CACHE_BYTES), GFP_KERNEL | __GFP_ZERO);
 	if (!rxfill_ring->desc) {
-                edma_err("Descriptor alloc for RXFILL ring %u failed\n",
-                                rxfill_ring->ring_id);
+		edma_err("Descriptor alloc for RXFILL ring %u failed\n",
+				rxfill_ring->ring_id);
 
-                goto desc_fail;
-        }
-        rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
+		goto desc_fail;
+	}
+	rxfill_ring->dma = (dma_addr_t)virt_to_phys(rxfill_ring->desc);
 #else
 	struct platform_device *pdev = edma_gbl_ctx.pdev;
 
@@ -323,9 +318,7 @@ static int edma_cfg_rx_fill_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 	return 0;
 
 desc_fail:
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
 	edma_cfg_rx_pp_free(rxfill_ring);
-#endif
 	return -ENOMEM;
 }
 
@@ -384,6 +377,7 @@ int edma_cfg_rx_desc_ring_setup(struct edma_rxdesc_ring *rxdesc_ring)
 void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 				struct edma_rxdesc_ring *rxdesc_ring)
 {
+	bool page_pool_en = rxdesc_ring->rxfill && rxdesc_ring->rxfill->page_pool;
 	uint16_t prod_idx, cons_idx;
 
 	/*
@@ -417,12 +411,10 @@ void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 			continue;
 		}
 
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
-		if (rxdesc_ring->page_pool_alloc_mode) {
+		if (page_pool_en) {
 			napi_pp_put_page(virt_to_page(opaque), false);
 			continue;
 		}
-#endif
 
 		dev_kfree_skb_any((struct sk_buff *)opaque);
 	}
@@ -1095,9 +1087,9 @@ void edma_cfg_gro_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring)
 	edma_reg_write(EDMA_REG_RXFILL_RING_SIZE(rxfill_ring->ring_id), edma_gbl_ctx.rxfill_info[rxfill_ring->ring_id].buffer_len);
 
 	/*
-	 * Alloc Rx buffers
+	 * Alloc Rx buffers using page pool directly for GRO rings.
 	 */
-	edma_rx_alloc_buffer(rxfill_ring, rxfill_ring->count - 1);
+	edma_rx_alloc_pages(rxfill_ring, rxfill_ring->count - 1);
 	timer_setup(&rxfill_ring->delayed_intr, edma_rxfill_intr_timer, TIMER_PINNED);
 }
 #endif
@@ -1681,8 +1673,9 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 	 * Allocate Rx fill ring descriptors
 	 */
 	for (ring_idx = 0; ring_idx < egc->rxfill_ring_max; ring_idx++) {
-		int32_t ret;
+		uint32_t type_flags = rxfill_info[ring_idx].type_flags;
 		struct edma_rxfill_ring *rxfill_ring = NULL;
+		int32_t ret;
 
 		if (!(rxfill_info[ring_idx].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 			continue;
@@ -1693,20 +1686,6 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		rxfill_ring->alloc_size = rxfill_info[ring_idx].alloc_size;
 		rxfill_ring->buf_len = rxfill_info[ring_idx].buffer_len;
 		rxfill_ring->page_mode = rxfill_info[ring_idx].page_mode;
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
-		/*
-		 * TODO: Now rx_page_mode looks confusing. May be support as rx_jumbo_mru=PAGE_SIZE ?
-		 */
-		rxfill_ring->page_mode = false;
-		rxfill_ring->page_pool_alloc_mode = true;
-
-		/*
-		 * Add Shinfo size.
-		 */
-		rxfill_ring->alloc_size = SKB_HEAD_ALIGN(rxfill_ring->alloc_size);
-		edma_debug("EDMA rx_fill_ring(%u) Page pool mode enabled with alloc_size(%d) buf_len(%d)\n",
-				ring_idx, rxfill_ring->alloc_size, rxfill_ring->buf_len);
-#endif
 
 		ret = edma_cfg_rx_fill_ring_setup(rxfill_ring);
 		if (ret != 0) {
@@ -1715,7 +1694,12 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 			return -ENOMEM;
 		}
 
-		rxfill_ring->rx_refill = edma_rx_alloc_buffer;
+		if (type_flags & EDMA_RING_TYPE_FLAGS_PAGE_POOL) {
+			rxfill_ring->rx_refill = edma_rx_alloc_pages;
+		} else {
+			rxfill_ring->rx_refill = edma_rx_alloc_buffer;
+		}
+
 		rxfill_info[ring_idx].status_flags |= EDMA_RING_STATUS_FLAGS_IS_CONFIGURED;
 	}
 
@@ -1733,9 +1717,6 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 		rxdesc_ring = rxdesc_info[ring_idx].rxdesc_ring;
 		rxdesc_ring->count = rxdesc_info[ring_idx].desc_count;
 		rxdesc_ring->count_mask = rxdesc_ring->count - 1;
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
-		rxdesc_ring->page_pool_alloc_mode = true;
-#endif
 
 		/*
 		 * Fetch the mode in which the particular ring has to be configured
@@ -1757,15 +1738,12 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 
 		rxdesc_ring->rxfill = rxfill_info[rxfill_id].rxfill_ring;
 
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
 		/*
 		 * As We are refilling in Rx NAPI context, update PP napi pointer.
 		 */
-		WARN_ON(rxdesc_ring->page_pool_alloc_mode != rxdesc_ring->rxfill->page_pool_alloc_mode);
 		if (rxdesc_ring->rxfill->page_pool)
 			WRITE_ONCE(rxdesc_ring->rxfill->page_pool->p.napi, &rxdesc_ring->napi);
 
-#endif
 
 		/*
 		 * ASSERT if the mapped Rxfill ring has a valid mode set and the mode is not
@@ -1786,9 +1764,12 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 
 		/*
 		 * Assign the reap function pointer based on the ring type.
+		 * GRO rings use page pool backed buffers via the associated rxfill ring.
 		 */
 		if (nss_dp_capwap_vp_rx_core == ring_idx) {
 			rxdesc_ring->rx_reap = edma_rx_reap_capwap;
+		} else if (egc->rxdesc_info[ring_idx].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO) {
+			rxdesc_ring->rx_reap = edma_rx_reap_pages;
 		} else {
 			rxdesc_ring->rx_reap = edma_rx_reap;
 		}

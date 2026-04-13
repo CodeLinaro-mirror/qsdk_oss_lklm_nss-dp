@@ -2088,6 +2088,11 @@ static void edma_init_rxfill_rings(struct edma_gbl_ctx *egc,
 	struct edma_rxfill_ring_info *rxfill_info = egc->rxfill_info;
 	int i, ring_id;
 
+	if (type_flags & EDMA_RING_TYPE_FLAGS_PAGE_POOL) {
+		page_mode = false;
+		alloc_size = SKB_HEAD_ALIGN(alloc_size);
+	}
+
 	for (i = 0; i < num_rxfill_rings; i++) {
 		ring_id = rxfill_ring_map[i];
 		rxfill_info[ring_id].ring_type = ring_type;
@@ -2250,14 +2255,23 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 
 	/*
 	 * Mark the GRO RX rings into the global RX rings pool.
+	 * GRO rings use a fixed page pool buffer size.
 	 * TODO: Parameters will be extracted from GRO structure rather than
 	 * module param
 	 */
+	alloc_size = EDMA_RX_GRO_BUFFER_SIZE;
+	buf_len = alloc_size - EDMA_RX_SKB_HEADROOM - NET_IP_ALIGN;
+
 	edma_init_rxfill_rings(egc, edma_dp_gro_rxfill_map,
 				edma_dp_gro_num_rxfill_rings, EDMA_RING_TYPE_HOST,
-				EDMA_RING_TYPE_FLAGS_HOST_GRO, edma_dp_gro_rx_ring_sz,
+				EDMA_RING_TYPE_FLAGS_HOST_GRO | EDMA_RING_TYPE_FLAGS_PAGE_POOL,
+				edma_dp_gro_rx_ring_sz,
 				alloc_size, buf_len, egc->rx_page_mode);
 
+	/*
+	 * TODO: EDMA_RING_TYPE_FLAGS_PAGE_POOL to be added for rxdesc as well.
+	 * This requires fixing multiple switch cases using the type_flags.
+	 */
 	edma_init_rxdesc_rings(egc, gro_rx_rings->rx_map, edma_dp_gro_num_rx_rings,
 				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_GRO,
 				edma_dp_gro_rx_ring_sz, gro_rx_rings->num_queues_per_ring);

@@ -6,6 +6,8 @@
 #ifndef __EDMA_RX_H__
 #define __EDMA_RX_H__
 
+#include <net/xdp.h>
+
 struct edma_gbl_ctx;
 
 extern uint32_t rx_ring_sz_low_mem;
@@ -14,6 +16,7 @@ extern uint32_t rx_ring_sz_high_mem;
 
 #if defined(NSS_DP_HW_GRO)
 extern uint32_t edma_dp_gro_rx_ring_sz;
+#define EDMA_RX_GRO_BUFFER_SIZE (SKB_WITH_OVERHEAD(2048))
 #endif
 
 #define EDMA_RXFILL_RING_PER_CORE_MAX	1
@@ -450,10 +453,7 @@ struct edma_rxfill_ring {
 	struct timer_list delayed_intr; /* Timer used to delay the low threshold interrupt */
 	bool page_mode;			/* Page mode for Rx processing */
 	bool napi_added;		/* Flag to indicate NAPI add status */
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
-	bool page_pool_alloc_mode;	/* Page pool enabled */
 	struct page_pool *page_pool;
-#endif
 	struct edma_rx_fill_stats rx_fill_stats;
 					/* Rx fill ring statistics */
 	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
@@ -491,9 +491,6 @@ struct edma_rxdesc_ring {
 	dma_addr_t sdma;		/* Secondary descriptor ring physical address */
 	struct sk_buff *head;		/* Head of the skb list in case of scatter-gather frame */
 	struct sk_buff *last;		/* Last skb of the skb list in case of scatter-gather frame */
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
-	bool page_pool_alloc_mode;			/* Page pool enabled */
-#endif
 	uint32_t (*rx_reap)(struct edma_gbl_ctx *egc, int budget,
 			    struct edma_rxdesc_ring *rxdesc_ring);
 					/* Reap function pointer */
@@ -506,6 +503,8 @@ bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int all
 int edma_rx_alloc_buffer(struct edma_rxfill_ring *rxfill_ring, int alloc_count);
 uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget, struct edma_rxdesc_ring *rxdesc_ring);
 uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget, struct edma_rxdesc_ring *rxdesc_ring);
+uint32_t edma_rx_reap_pages(struct edma_gbl_ctx *egc, int budget, struct edma_rxdesc_ring *rxdesc_ring);
+int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int reap_count);
 int edma_rx_napi_poll(struct napi_struct *napi, int budget);
 int edma_rxfill_napi_poll(struct napi_struct *napi, int budget);
 void edma_rxfill_intr_timer(struct timer_list *tm);

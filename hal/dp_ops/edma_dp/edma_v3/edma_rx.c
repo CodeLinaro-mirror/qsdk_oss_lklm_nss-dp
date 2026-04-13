@@ -23,6 +23,7 @@
 #include "nss_dp_dev.h"
 #include "syn_dev.h"
 #include <net/page_pool/helpers.h>
+#include <net/xdp.h>
 
 #ifdef CONFIG_IPQ_PON
 #include "nss_dp_gem.h"
@@ -531,12 +532,11 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 	return num_alloc;
 }
 
-#ifdef EDMA_ALLOC_PAGE_POOL_MODE
 /*
  * edma_rx_alloc_pages()
- *	Write a given list of Rx buffers to the Rx fill ring
+ *	Write a given list of Rx buffers to the Rx fill.
  */
-static inline int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int reap_count)
+int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int reap_count)
 {
 	struct edma_rx_fill_stats *rxfill_stats = &rxfill_ring->rx_fill_stats;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
@@ -545,7 +545,7 @@ static inline int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int 
 	uint32_t phdr_sz = rxfill_ring->pre_hdr_mode_en ? EDMA_RX_PH_SIZE : 0;
 	uint32_t rx_alloc_size = rxfill_ring->alloc_size;
 	uint32_t buf_len = rxfill_ring->buf_len;
-	uint16_t prod_idx, start_idx, cons_idx;
+	uint16_t prod_idx, cons_idx;
 	uint16_t num_alloc = 0, alloc_count;
 	uint16_t avail_desc = 0;
 
@@ -553,7 +553,12 @@ static inline int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int 
 	 * Get RXFILL ring producer index
 	 */
 	prod_idx = rxfill_ring->prod_idx;
-	start_idx = prod_idx;
+
+	/*
+	 * Read HW consumer index and compute available descriptors
+	 */
+	cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) & EDMA_RXFILL_CONS_IDX_MASK;
+	avail_desc = EDMA_DESC_AVAIL_COUNT((cons_idx - 1), prod_idx, rxfill_ring->count);
 
 	/*
 	 * When tracking ring util stats is enabled via procfs,
@@ -561,15 +566,12 @@ static inline int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int 
 	 * Above stats are maintained at ring level.
 	 */
 	if (unlikely(egc->enable_ring_util_stats)) {
-		cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) & EDMA_RXFILL_CONS_IDX_MASK;
-		avail_desc = EDMA_DESC_AVAIL_COUNT(cons_idx, prod_idx, rxfill_ring->count);
-
 		edma_update_ring_stats(avail_desc, rxfill_ring->count,
 				&rxfill_ring->rx_fill_stats.ring_stats);
 	}
 
-	rxfill_ring->num_rxfill_pending += reap_count;
-	alloc_count = rxfill_ring->num_rxfill_pending;
+	alloc_count = rxfill_ring->num_rxfill_pending = avail_desc;
+
 
 	while (likely(alloc_count--)) {
 		dma_addr_t data_addr;
@@ -659,7 +661,6 @@ done:
 
 	return num_alloc;
 }
-#endif
 
 /*
  * edma_rx_alloc_buffer()
@@ -2427,6 +2428,369 @@ next_rx_desc:
 }
 
 /*
+ * edma_rx_fill_xdp_buf()
+ *      Fill a single xdp buffer for page pool VP processing.
+ */
+static inline void edma_rx_fill_xdp_buf(struct xdp_buff *xdp, void *buf, dma_addr_t data_paddr, uint16_t pkt_len, uint16_t alloc_sz, struct xdp_rxq_info *rxq_info)
+{
+	struct skb_shared_info *sinfo;
+	unsigned int data_offset;
+
+	data_offset = (unsigned int)(phys_to_virt(data_paddr) - buf);
+
+	xdp_init_buff(xdp, alloc_sz, rxq_info);
+	xdp_prepare_buff(xdp, buf, data_offset, pkt_len, false);
+	sinfo = xdp_get_shared_info_from_buff(xdp);
+	memset(sinfo, 0, sizeof(*sinfo));
+}
+
+/*
+ * edma_rx_process_vp_xdp()
+ *      Send xdp buffer to VP callback.
+ */
+static inline void edma_rx_process_vp_xdp(struct edma_rxdesc_ring *rxdesc_ring,
+		struct xdp_buff *xdp,
+		struct nss_dp_vp_rx_info *vprxi)
+{
+	struct nss_dp_vp_rx_data rx_data ={0};
+	nss_dp_vp_rx_cb_t edma_rx_vp_cb;
+
+	rcu_read_lock();
+
+	edma_rx_vp_cb = rcu_dereference(nss_dp_vp_rx_reg_cb);
+	if (unlikely(!edma_rx_vp_cb)) {
+		if (net_ratelimit()) {
+			edma_warn("VP XDP packet received but edma vp callback "
+					"not registered yet, xdp:%px\n", xdp);
+		}
+
+		xdp_return_buff(xdp);
+		rcu_read_unlock();
+		return;
+	}
+
+	rx_data.type = NSS_DP_VP_RX_TYPE_XDP;
+	rx_data.xdp = xdp;
+	edma_rx_vp_cb(&rx_data, vprxi);
+	rcu_read_unlock();
+}
+
+/*
+ * edma_rx_reap_scatter_pages()
+ *      Reap scatter-gather fragments and attach to xdp_buff.
+ */
+static inline uint32_t edma_rx_reap_scatter_pages(struct edma_gbl_ctx *egc,
+		struct edma_rxdesc_ring *rxdesc_ring,
+		struct xdp_buff *xdp,
+		uint32_t budget,
+		uint16_t cons_idx,
+		struct nss_dp_vp_rx_info *vprxi)
+{
+	struct edma_rxdesc_desc *rxdesc_desc;
+	struct skb_shared_info *sinfo;
+	uint32_t reap = 0;
+
+	sinfo = xdp_get_shared_info_from_buff(xdp);
+
+	while (budget--) {
+		dma_addr_t buf_paddr, page_paddr;
+		struct page *page;
+		uint16_t buf_len;
+		uint16_t offset;
+		void *buf;
+
+		rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
+		buf = (void *)EDMA_RXDESC_OPAQUE_GET(rxdesc_desc);
+		buf_paddr = EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_desc);
+		buf_len = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_desc);
+		page = virt_to_page(buf);
+
+		cons_idx = (cons_idx + 1) & rxdesc_ring->count_mask;
+
+		/*
+		 * Invalidate fragment data
+		 */
+		edma_dmac_inv_range_no_dsb(phys_to_virt(buf_paddr), (u8 *)phys_to_virt(buf_paddr) + buf_len);
+
+		/*
+		 * Attach page to xdp shinfo
+		 */
+		if (unlikely(sinfo->nr_frags >= MAX_SKB_FRAGS))
+			return 0;
+
+		page_paddr = page_to_phys(page);
+		offset = buf_paddr - page_paddr;
+
+		skb_frag_fill_page_desc(&sinfo->frags[sinfo->nr_frags],
+				page, offset, buf_len);
+
+		sinfo->nr_frags++;
+		sinfo->xdp_frags_size += buf_len;
+		xdp_buff_set_frags_flag(xdp);
+
+		reap++;
+
+		if (!EDMA_RXDESC_MORE_BIT_GET(rxdesc_desc)) {
+#ifdef NSS_DP_HW_GRO
+			edma_rx_fill_gro_mdata(egc, vprxi, rxdesc_ring->ring_id, rxdesc_desc->word7);
+#endif
+			edma_dsb();
+			return reap;
+		}
+	}
+
+	return 0;
+}
+
+
+/*
+ * edma_rx_reap_pages()
+ *      Reap Rx descriptors for page pool VP rings.
+ *
+ * Passes buffer descriptors directly to VP callback instead of building SKBs.
+ * Buffer descriptors are stack-allocated (no dynamic memory allocation).
+ */
+uint32_t edma_rx_reap_pages(struct edma_gbl_ctx *egc, int budget,
+		struct edma_rxdesc_ring *rxdesc_ring)
+{
+	struct edma_rx_desc_stats *rxdesc_stats = &rxdesc_ring->rx_desc_stats;
+	struct edma_rxfill_ring *rxfill_ring = rxdesc_ring->rxfill;
+	struct edma_rxdesc_desc *rxdesc_desc, *pf_desc = NULL;
+	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
+	uint16_t prod_idx, cons_idx, end_idx;
+	uint32_t work_to_do, work_done = 0;
+	struct net_device *src_dev;
+	struct xdp_rxq_info xdp_rxq;
+	uint16_t cons_idx_1 = 0;
+	uint16_t cons_idx_2 = 0;
+	struct xdp_buff xdp;
+
+	cons_idx = rxdesc_ring->cons_idx;
+
+	/*
+	 * HW GRO requires preheader mode to be enabled.
+	 */
+	if (unlikely(!pre_hdr_mode_en)) {
+		edma_warn("Page pool GRO ring requires preheader mode\n");
+		return 0;
+	}
+
+	if (unlikely(egc->enable_ring_util_stats)) {
+		prod_idx = edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) &
+			EDMA_RXDESC_PROD_IDX_MASK;
+		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, rxdesc_ring->count);
+
+		edma_update_ring_stats(work_to_do, rxdesc_ring->count,
+				&rxdesc_ring->rx_desc_stats.ring_stats);
+	}
+
+	if (likely(rxdesc_ring->work_leftover > budget)) {
+		work_to_do = budget;
+	} else {
+		prod_idx = edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) &
+			EDMA_RXDESC_PROD_IDX_MASK;
+		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, rxdesc_ring->count);
+		rxdesc_ring->work_leftover = work_to_do;
+		if (likely(work_to_do > budget)) {
+			work_to_do = budget;
+		}
+	}
+
+	rxdesc_ring->work_leftover -= work_to_do;
+
+	end_idx = (cons_idx + work_to_do) & rxdesc_ring->count_mask;
+
+	rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
+
+	/*
+	 * Invalidate all the cached descriptors that'll be processed.
+	 */
+	if (end_idx > cons_idx) {
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
+				(void *)(rxdesc_desc + work_to_do));
+	} else {
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
+				(void *)(rxdesc_ring->pdesc + end_idx));
+		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
+				(void *)(rxdesc_ring->pdesc + rxdesc_ring->count));
+	}
+
+	/*
+	 * Refill pages directly using page pool allocator.
+	 */
+	edma_rx_alloc_pages(rxfill_ring, work_to_do);
+
+	/*
+	 * Initialize xdp_rxq
+	 */
+	memset(&xdp_rxq, 0, sizeof(xdp_rxq));
+	xdp_rxq_info_unused(&xdp_rxq);
+	xdp_rxq.queue_index = rxdesc_ring->ring_id;
+	xdp_rxq.napi_id = rxdesc_ring->napi.napi_id;
+	xdp_rxq.frag_size = 0;
+	xdp_rxq.mem.type = MEM_TYPE_PAGE_POOL;
+	xdp_rxq.mem.id = rxfill_ring->page_pool->xdp_mem_id;
+
+	/*
+	 * Prefetch upto 3 Rx descriptors.
+	 */
+	prefetch(rxdesc_desc);
+	if (likely(work_to_do >= 3)) {
+		cons_idx_1 = (cons_idx + 1) & rxdesc_ring->count_mask;
+		pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_1);
+		prefetch(pf_desc);
+
+		cons_idx_2 = (cons_idx_1 + 1) & rxdesc_ring->count_mask;
+		pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
+		prefetch(pf_desc);
+	}
+
+	while (likely(work_to_do)) {
+		struct edma_rxdesc_sec_desc *rxdesc_sec;
+		struct nss_dp_vp_rx_info vprxi = {0};
+		dma_addr_t buf_dma_addr;
+		uint32_t sg_reap = 0;
+		uint32_t pkt_len;
+		uint32_t reap = 1;
+		uint32_t dst_info;
+		struct page *page;
+		void *buff;
+
+		src_dev = edma_rx_get_src_dev(egc, rxdesc_stats, rxdesc_desc, NULL);
+		if (!src_dev) {
+			page_pool_put_full_page(rxfill_ring->page_pool,
+					virt_to_page((void *)EDMA_RXDESC_OPAQUE_GET(rxdesc_desc)),
+					false);
+
+			/*
+			 * If this is a scatter-gather head, consume and free all
+			 * fragment descriptors up to and including the EOP descriptor
+			 * to avoid leaving them stranded in the ring.
+			 */
+			while (EDMA_RXDESC_MORE_BIT_GET(rxdesc_desc) && work_to_do > reap) {
+				uint16_t frag_idx = (cons_idx + reap) & rxdesc_ring->count_mask;
+				rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, frag_idx);
+				page_pool_put_full_page(rxfill_ring->page_pool,
+						virt_to_page((void *)EDMA_RXDESC_OPAQUE_GET(rxdesc_desc)),
+						false);
+				reap++;
+			}
+
+			goto next_desc;
+		}
+
+		buff = (void *)EDMA_RXDESC_OPAQUE_GET(rxdesc_desc);
+		buf_dma_addr = EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_desc);
+		pkt_len = EDMA_RXDESC_PACKET_LEN_GET(rxdesc_desc);
+		page = virt_to_page(buff);
+
+		edma_dmac_inv_range(phys_to_virt(buf_dma_addr),
+				phys_to_virt(buf_dma_addr) + EDMA_RX_PH_SIZE + pkt_len);
+
+		if (likely(work_to_do >= 3)) {
+			void *data;
+
+			data = phys_to_virt(EDMA_RXDESC_BUFFER_ADDR_GET(pf_desc));
+			prefetch((uint8_t *)data);
+			cons_idx_2 = (cons_idx_2 + 1) & rxdesc_ring->count_mask;
+
+			pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
+			prefetch(pf_desc);
+		}
+
+		rxdesc_sec = (struct edma_rxdesc_sec_desc *)phys_to_virt(
+				EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_desc));
+
+		/*
+		 * Advance buf_dma_addr past preheader
+		 */
+		buf_dma_addr += EDMA_RX_PH_SIZE;
+
+		xdp_rxq.dev = src_dev;
+		edma_rx_fill_xdp_buf(&xdp, buff, buf_dma_addr, pkt_len,
+				rxfill_ring->alloc_size, &xdp_rxq);
+
+		if (likely(!EDMA_RXDESC_MORE_BIT_GET(rxdesc_desc))) {
+#ifdef NSS_DP_HW_GRO
+			edma_rx_fill_gro_mdata(egc, &vprxi, rxdesc_ring->ring_id, rxdesc_desc->word7);
+#endif
+			goto deliver;
+		}
+
+		/*
+		 * Non-linear case - GRO metadata filled from EOP descriptor inside
+		 */
+		sg_reap = edma_rx_reap_scatter_pages(egc, rxdesc_ring, &xdp, work_to_do - 1, (cons_idx + 1) & rxdesc_ring->count_mask, &vprxi);
+		if (!sg_reap) {
+			/*
+			 * Budget exhausted midway through scatter-gather packet.
+			 * Return the head page and any fragment pages already
+			 * attached to the xdp buffer back to the page pool,
+			 * then signal NAPI to reschedule.
+			 */
+			xdp_return_buff(&xdp);
+			work_done = budget;
+			break;
+		}
+		reap += sg_reap;
+
+deliver:
+		/*
+		 * Validate destination port before processing
+		 */
+		dst_info = EDMA_RXDESC_DST_INFO_GET(rxdesc_desc) & ~EDMA_RXDESC_DST_PORT_ID_MASK;
+
+		if (dst_info != EDMA_RXDESC_DST_PORT) {
+			xdp_return_buff(&xdp);
+			goto next_desc;
+		}
+
+		vprxi.dvp = EDMA_RXDESC_DST_PORT_ID_GET(rxdesc_desc);
+		if ((vprxi.dvp < PPE_DRV_VIRTUAL_START) || (vprxi.dvp >= PPE_DRV_PORTS_MAX)) {
+			xdp_return_buff(&xdp);
+			goto next_desc;
+		}
+
+		/*
+		 * Get flow index from secondary descriptor
+		 */
+		vprxi.flow_idx = EDMA_RX_SDESC_FLOW_IDX_INVALID;
+
+		if (EDMA_RX_SDESC_FLOW_IDX_VALID_GET(rxdesc_sec)) {
+			vprxi.flow_idx = EDMA_RX_SDESC_FLOW_IDX_GET(rxdesc_sec);
+		}
+
+		vprxi.svp = EDMA_RXDESC_SRC_INFO_GET(rxdesc_desc) & EDMA_RXDESC_PORTNUM_BITS;
+		vprxi.napi = &rxdesc_ring->napi;
+		vprxi.total_bytes = xdp_get_buff_len(&xdp);
+		vprxi.l3offset = EDMA_RXDESC_L3_OFFSET_GET(rxdesc_desc);
+		vprxi.fake_mac = EDMA_RXDESC_FAKE_MAC_GET(rxdesc_desc);
+
+		edma_rx_process_vp_xdp(rxdesc_ring, &xdp, &vprxi);
+
+next_desc:
+		cons_idx = (cons_idx + reap) & rxdesc_ring->count_mask;
+		work_done += reap;
+		work_to_do -= reap;
+
+		rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
+	}
+
+	edma_dsb();
+
+	edma_reg_write(EDMA_REG_RXDESC_CONS_IDX(rxdesc_ring->ring_id), cons_idx);
+	rxdesc_ring->cons_idx = cons_idx;
+
+	if (unlikely(rxfill_ring->num_rxfill_pending >=
+				(rxfill_ring->count - EDMA_RXFILL_UGT_THRESHOLD))) {
+		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
+				egc->rxfill_intr_mask);
+	}
+
+	return work_done;
+}
+
+/*
  * edma_rx_napi_poll()
  *	EDMA RX NAPI handler
  */
@@ -2438,10 +2802,11 @@ int edma_rx_napi_poll(struct napi_struct *napi, int budget)
 	uint32_t status;
 
 	do {
-		work_done += INDIRECT_CALL_2(rxdesc_ring->rx_reap,
-					     edma_rx_reap,
-					     edma_rx_reap_capwap,
-					     egc, budget - work_done, rxdesc_ring);
+		work_done += INDIRECT_CALL_3(rxdesc_ring->rx_reap,
+				edma_rx_reap,
+				edma_rx_reap_capwap,
+				edma_rx_reap_pages,
+				egc, budget - work_done, rxdesc_ring);
 		if (likely(work_done >= budget)) {
 			return work_done;
 		}
