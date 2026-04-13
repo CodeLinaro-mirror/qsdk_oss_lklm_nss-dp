@@ -909,7 +909,7 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	pr_debug("%s: ppe offload disabled: %d for macid %d\n", np->name,
 				dp_priv->ppe_offload_disabled, dp_priv->macid);
 #ifdef NSS_DP_PON_SUPPORT
-	dp_priv->gem_port = of_property_read_bool(np, "qcom,gem-port");
+	dp_priv->gem_port = of_property_read_bool(np, "qcom,gem_port");
 	pr_debug("%s: gem port: %d for macid %d\n", np->name,
 			dp_priv->gem_port, dp_priv->macid);
 #endif

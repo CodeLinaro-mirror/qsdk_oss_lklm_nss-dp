@@ -9,7 +9,7 @@
 #include <linux/types.h>
 #include <linux/mutex.h>
 #include <linux/spinlock.h>
-#include <linux/gpio/consumer.h>
+#include <linux/list.h>
 #include <linux/io.h>
 #include <linux/ktime.h>
 #include <linux/ptp_clock_kernel.h>
@@ -32,15 +32,6 @@ enum platform_type {
 };
 
 /*
- * PPS mode enumeration
- */
-enum pps_mode {
-	PPS_MODE_DISABLED,	/* PPS disabled */
-	PPS_MODE_INPUT,		/* PPS input (slave mode) */
-	PPS_MODE_OUTPUT		/* PPS output (master mode) */
-};
-
-/*
  * Platform PTP Manager (Singleton)
  * Manages shared platform-level PTP resources (GPIO, interrupts, TCSR)
  * that are common across all XGMAC instances on the board
@@ -51,16 +42,30 @@ struct syn_ptp_platform_mgr {
 	/* Platform identification */
 	enum platform_type platform;
 
-	/* Shared GPIO and interrupt resources */
-	struct gpio_desc *gpio_desc;	/* GPIO descriptor from DTS */
+	/* Shared interrupt resources */
 	int pps_in_irq;
-	enum pps_mode pps_mode;
+	bool pps_in_irq_registered;	/* True if PPS_IN IRQ has been registered */
+
+	/*
+	 * List of XGMAC instances that currently have PPS capture enabled.
+	 * Each entry is a syn_ptp_priv whose pps_enabled flag is true.
+	 * Managed by qcom_nss_ptp_enable() via PTP_CLK_REQ_EXTTS.
+	 * The IRQ handler iterates this list and delivers a PTP_CLOCK_EXTTS
+	 * event to every active instance independently (each XGMAC has its
+	 * own AUX FIFO and system-time registers).
+	 * Protected by pps_list_lock (spinlock, safe from threaded IRQ context).
+	 */
+	struct list_head pps_active_list;
+	spinlock_t pps_list_lock;		/* Protects pps_active_list */
 
 	/* IPQ52XX-specific TCSR registers and routing */
 	void __iomem *tcsr_pps_in;	/* TCSR PPS_IN register mapping */
 	void __iomem *tcsr_pps_out;	/* TCSR PPS_OUT register mapping */
 	u32 pps_in_source;		/* PPS_IN source selection (0-3) */
 	u32 pps_out_source;		/* PPS_OUT source selection (0-1) */
+
+	/* SPARE2 register for PPS output enable control */
+	void __iomem *spare2;		/* SPARE2 register mapping */
 
 	/* Platform device for sysfs */
 	struct device *dev;		/* First XGMAC's device for sysfs */
@@ -94,6 +99,14 @@ struct syn_ptp_priv {
 	/* Reference to platform manager */
 	struct syn_ptp_platform_mgr *platform_mgr;
 
+	/*
+	 * Node for platform_mgr->pps_active_list.
+	 * Added to the list when PPS capture is enabled (PTP_CLK_REQ_EXTTS on=1),
+	 * removed when disabled or during cleanup.
+	 * Initialized with INIT_LIST_HEAD so list_del_init() is always safe.
+	 */
+	struct list_head pps_list_node;
+
 	/* Per-XGMAC state */
 	spinlock_t lock;		/* Spinlock to protect timestamp access */
 	bool pps_enabled;		/* PPS capture enabled flag */
@@ -116,6 +129,13 @@ struct syn_ptp_priv {
 	/* RX timestamp statistics */
 	u32 rx_ts_success;		/* Successfully captured RX timestamps */
 	u32 rx_ts_filtered;		/* Packets filtered out (not timestamped) */
+
+	/* Auxiliary (external) timestamp statistics for ts2phc PHY→XGMAC sync */
+	u32 aux_ts_hw_count;		/* PPS edges captured by hardware FIFO */
+	u32 aux_ts_sw_fallback;		/* Fallbacks to software timestamp (FIFO empty) */
+	u32 aux_ts_missed;		/* FIFO overflow: ATSSTM bit set */
+	u32 aux_ts_glitch;		/* PPS captures far from second boundary after sync */
+	bool aux_ts_was_synced;		/* True once a hw ts was seen near a second boundary */
 
 	/* Debugfs support */
 	struct dentry *ptp_dentry;	/* PTP debugfs entry */
