@@ -359,16 +359,17 @@ static int32_t edma_ddrq_dbg_cnt_occ_stats_get(uint32_t index, edma_ddrq_occupan
 	return edma_ddrq_reg_dbg_cnt_occ_stats_get(index, occ_stats->val, sizeof(edma_ddrq_occupancy_stats_u)/sizeof(uint32_t));
 }
 
+#ifdef NSS_DP_PON_SUPPORT
 /*
  * edma_ddrq_pon_dp_dev_set()
  *	API to set PON related DDRQ passthrough and SC related information in the dp_dev
  */
-void edma_ddrq_pon_dp_dev_set(struct nss_dp_dev *dp_dev)
+static void edma_ddrq_pon_dp_dev_set(struct nss_dp_dev *dp_dev)
 {
 	/*
 	 * Check whether DDRQs on the PON port are set
 	 */
-	if (edma_ddrq_en_port_bm & (1 << (PON_PORT_ID - 1))) {
+	if (edma_ddrq_en_port_bm & (1 << (dp_dev->macid - 1))) {
 		if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
 			dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_128B;
 		} else {
@@ -383,6 +384,7 @@ void edma_ddrq_pon_dp_dev_set(struct nss_dp_dev *dp_dev)
 		dp_dev->pt_info.sc = PPE_DRV_SC_GEM_LOOKUP;
 	}
 }
+#endif
 
 /*
  * edma_ddrq_dp_dev_set()
@@ -394,7 +396,7 @@ int32_t edma_ddrq_dp_dev_set(struct net_device *dev)
 	uint32_t mac_id;
 
 	if (!dev) {
-		edma_err("Invalid netdevice passed (for port: %d) for DDRQ DP dev information set\n", mac_id);
+		edma_err("Invalid netdevice passed for DDRQ DP dev information set\n");
 		return -EINVAL;
 	}
 
@@ -409,31 +411,33 @@ int32_t edma_ddrq_dp_dev_set(struct net_device *dev)
 	 * Set DDRQ related datapath informations in the NSS-DP ETH port's DP DEV
 	 */
 	if (mac_id <= NSS_DP_HAL_MAX_PORTS) {
+#ifdef NSS_DP_PON_SUPPORT
 		/*
 		 * Check for the PON device
 		 */
-		if (dp_dev->macid == PON_PORT_ID) {
+		if (dp_dev->gem_port) {
 			edma_ddrq_pon_dp_dev_set(dp_dev);
+			goto done;
+		}
+#endif
+		/*
+		 * ETH device.
+		 *
+		 * Check whether DDRQs on the particular port is set
+		 */
+		if (edma_ddrq_en_port_bm & (1 << (mac_id - 1))) {
+			if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
+				dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_0B;
+			} else {
+				dp_dev->pt_info.dst_pt_mode_val = edma_passthrough_val;
+			}
+			dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_ETH_PT_MODE;
 		} else {
 			/*
-			 * ETH device.
-			 *
-			 * Check whether DDRQs on the particular port is set
+			 * DDRQs on the particular port is not set
 			 */
-			if (edma_ddrq_en_port_bm & (1 << (mac_id - 1))) {
-				if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-					dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_0B;
-				} else {
-					dp_dev->pt_info.dst_pt_mode_val = edma_passthrough_val;
-				}
-				dp_dev->pt_info.sc = PPE_DRV_SC_DDRQ_ETH_PT_MODE;
-			} else {
-				/*
-				 * DDRQs on the particular port is not set
-				 */
-				dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
-				dp_dev->pt_info.sc = PPE_DRV_SC_BYPASS_ALL;
-			}
+			dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+			dp_dev->pt_info.sc = PPE_DRV_SC_BYPASS_ALL;
 		}
 	} else {
 		/*
@@ -449,6 +453,9 @@ int32_t edma_ddrq_dp_dev_set(struct net_device *dev)
 		dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
 	}
 
+#ifdef NSS_DP_PON_SUPPORT
+done:
+#endif
 	edma_warn("Updated PT info for port: %d, src_pt_val: %d, dst_pt_val: %d, sc: %d\n", mac_id,
 						 dp_dev->pt_info.src_pt_mode_val,
 						 dp_dev->pt_info.dst_pt_mode_val,
@@ -793,7 +800,7 @@ static int edma_ddrq_qid_to_ring_mapping(uint32_t qid, bool cfg_state)
 	data |= cur_data;
 	edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
 
-	edma_warn("DDRQ QID2RID(%d) reg: 0x%0x, data: 0x%0x, cur_data: 0x%0x\n", qid,
+	edma_info("DDRQ QID2RID(%d) reg: 0x%0x, data: 0x%0x, cur_data: 0x%0x\n", qid,
 			EDMA_QID2RID_TABLE_MEM(reg_index), data, cur_data);
 
 	return 0;
@@ -972,32 +979,22 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 	} else if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_PORT) {
 		int i;
 		uint32_t queue_cnt;
+		fal_portscheduler_resource_t cfg = {0};
 
-		edma_warn("port id: %d\n", obj->cfg_id);
-		if (obj->cfg_id == PON_PORT_ID) {
-			fal_portscheduler_resource_t cfg = {0};
+		if (fal_port_scheduler_resource_get(EDMA_SWITCH_DEV_ID, obj->cfg_id, &cfg)) {
+			edma_err("Error in getting PPE PORT (%d) queue base information\n", obj->cfg_id);
+			return DDRQ_RET_INVAL;
+		}
 
-			if (fal_port_scheduler_resource_get(EDMA_SWITCH_DEV_ID, PON_PORT_ID, &cfg)) {
-				edma_err("Error in getting PON PORT (%d) queue base information\n", PON_PORT_ID);
-				return DDRQ_RET_INVAL;
-			}
-
-			queue_id = cfg.ucastq_start;
-			if ((queue_id + cfg.ucastq_num) <= NSS_DP_DDRQ_MAX_CNT) {
-				queue_cnt = cfg.ucastq_num;
-			} else {
-				/*
-				 * Assumption :
-				 * PON queues are being allocated from the end of the DDRQs range
-				 */
-				queue_cnt = NSS_DP_DDRQ_MAX_CNT - cfg.ucastq_start;
-			}
+		queue_id = cfg.ucastq_start;
+		if ((queue_id + cfg.ucastq_num) <= NSS_DP_DDRQ_MAX_CNT) {
+			queue_cnt = cfg.ucastq_num;
 		} else {
-			if ((queue_id = ppe_drv_port_ucast_queue_get_by_port(obj->cfg_id)) < 0) {
-				edma_err("Error in getting queue_id for %d PPE port\n", obj->cfg_id);
-				return DDRQ_RET_INVAL;
-			}
-			queue_cnt = EDMA_DDRQ_ESRAMQ_CNT_PER_PORT;
+			/*
+			 * Assumption :
+			 * PPE ETH port queues are being allocated from the end of the DDRQs range
+			 */
+			queue_cnt = NSS_DP_DDRQ_MAX_CNT - cfg.ucastq_start;
 		}
 
 		if ((queue_id >= NSS_DP_DDRQ_MAX_CNT) ||
