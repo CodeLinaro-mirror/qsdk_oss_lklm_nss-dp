@@ -407,7 +407,6 @@ static int nss_dp_close(struct net_device *netdev)
 		return -EINVAL;
 
 	netif_stop_queue(netdev);
-	netif_carrier_off(netdev);
 
 	/* Notify data plane link is going down */
 	if (dp_priv->data_plane_ops->link_state(dp_priv->dpc, 0)) {
@@ -421,6 +420,7 @@ static int nss_dp_close(struct net_device *netdev)
 	} else
 #endif
 	{
+		netif_carrier_off(netdev);
 		if (dp_priv->phydev)
 			phy_stop(dp_priv->phydev);
 	}
@@ -474,7 +474,8 @@ static int nss_dp_open(struct net_device *netdev)
 	if (!dp_priv)
 		return -EINVAL;
 
-	netif_carrier_off(netdev);
+	if (!dp_priv->phylink_en)
+		netif_carrier_off(netdev);
 
 	/*
 	 * Call data plane init if it has not been done yet
