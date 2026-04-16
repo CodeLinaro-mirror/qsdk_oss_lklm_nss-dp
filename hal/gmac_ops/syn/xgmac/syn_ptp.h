@@ -108,7 +108,8 @@ struct syn_ptp_priv {
 	struct list_head pps_list_node;
 
 	/* Per-XGMAC state */
-	spinlock_t lock;		/* Spinlock to protect timestamp access */
+	spinlock_t lock;		/* Spinlock to protect fast IRQ-context paths (gettimex, IRQ handler, pps_enabled) */
+	struct mutex ts_ctl_mutex;	/* Mutex to serialize SYN_MAC_TS_CTL register operations (adjfine/adjtime/settime) */
 	bool pps_enabled;		/* PPS capture enabled flag */
 	struct hwtstamp_config tstamp_config;	/* Current hardware timestamp configuration */
 	u32 ptp_clock_rate;		/* PTP clock frequency in Hz (same as MAC clock) */

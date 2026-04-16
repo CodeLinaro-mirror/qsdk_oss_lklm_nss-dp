@@ -172,7 +172,6 @@ static int qcom_nss_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 	struct syn_ptp_priv *ptp_priv = container_of(ptp, struct syn_ptp_priv, caps);
 	struct syn_hal_dev *shd = ptp_priv->shd;
 	void __iomem *mac_base = shd->nghd.mac_base;
-	unsigned long flags;
 	u32 addend;
 	int ret;
 
@@ -182,9 +181,15 @@ static int qcom_nss_ptp_adjfine(struct ptp_clock_info *ptp, long scaled_ppm)
 		"adjfine: scaled_ppm=%ld default_addend=0x%08x new_addend=0x%08x\n",
 		scaled_ppm, ptp_priv->default_addend, addend);
 
-	spin_lock_irqsave(&ptp_priv->lock, flags);
+	/*
+	 * Use ts_ctl_mutex (not the spinlock) because syn_ptp_adjfine() calls
+	 * readl_poll_timeout_atomic() which may busy-wait up to 100 ms.
+	 * Holding a spinlock with IRQs disabled for that duration would cause
+	 * severe latency and potentially trigger the kernel watchdog.
+	 */
+	mutex_lock(&ptp_priv->ts_ctl_mutex);
 	ret = syn_ptp_adjfine(mac_base, addend);
-	spin_unlock_irqrestore(&ptp_priv->lock, flags);
+	mutex_unlock(&ptp_priv->ts_ctl_mutex);
 
 	return ret;
 }
@@ -200,7 +205,6 @@ static int qcom_nss_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 	struct syn_ptp_priv *ptp_priv = container_of(ptp, struct syn_ptp_priv, caps);
 	struct syn_hal_dev *shd = ptp_priv->shd;
 	void __iomem *mac_base = shd->nghd.mac_base;
-	unsigned long flags;
 	bool negative = false;
 	u32 sec, nsec;
 	int ret;
@@ -247,9 +251,13 @@ static int qcom_nss_ptp_adjtime(struct ptp_clock_info *ptp, s64 delta)
 		nsec |= SYN_MAC_SYS_TIME_NSECS_UPDATE_ADDSUB;
 	}
 
-	spin_lock_irqsave(&ptp_priv->lock, flags);
+	/*
+	 * Use ts_ctl_mutex (not the spinlock) because syn_ptp_time_set() calls
+	 * readl_poll_timeout_atomic() which may busy-wait up to 100 ms.
+	 */
+	mutex_lock(&ptp_priv->ts_ctl_mutex);
 	ret = syn_ptp_time_set(mac_base, SYN_MAC_TS_CTL_TSUPDT, sec, nsec);
-	spin_unlock_irqrestore(&ptp_priv->lock, flags);
+	mutex_unlock(&ptp_priv->ts_ctl_mutex);
 
 	return ret;
 }
@@ -364,7 +372,6 @@ static int qcom_nss_ptp_settime(struct ptp_clock_info *ptp,
 	struct syn_ptp_priv *ptp_priv = container_of(ptp, struct syn_ptp_priv, caps);
 	struct syn_hal_dev *shd = ptp_priv->shd;
 	void __iomem *mac_base = shd->nghd.mac_base;
-	unsigned long flags;
 	int ret;
 
 	/* Validate nanoseconds */
@@ -377,12 +384,60 @@ static int qcom_nss_ptp_settime(struct ptp_clock_info *ptp,
 	dev_dbg(ptp_priv->dev, "settime: sec=%lld nsec=%ld\n",
 		ts->tv_sec, ts->tv_nsec);
 
-	spin_lock_irqsave(&ptp_priv->lock, flags);
+	/*
+	 * Use ts_ctl_mutex (not the spinlock) because syn_ptp_time_set() calls
+	 * readl_poll_timeout_atomic() which may busy-wait up to 100 ms.
+	 */
+	mutex_lock(&ptp_priv->ts_ctl_mutex);
 	ret = syn_ptp_time_set(mac_base, SYN_MAC_TS_CTL_TSINIT,
 			       (u32)ts->tv_sec, (u32)ts->tv_nsec);
-	spin_unlock_irqrestore(&ptp_priv->lock, flags);
+	mutex_unlock(&ptp_priv->ts_ctl_mutex);
 
 	return ret;
+}
+
+/*
+ * syn_ptp_spare2_pps_out_enable()
+ *	Enable or disable PPS output via the SPARE2 register
+ *
+ * When PPS IN (EXTTS) is active the PPS signal must flow *into* the XGMAC,
+ * so the SPARE2 PPS-output bit must be cleared.  When PPS OUT (PEROUT) is
+ * active the bit must be set.
+ *
+ *   IPQ5210: controls PPS_EN  (bit 1) in SPARE2
+ *   IPQ9650: controls TSN_EN  (bit 5) in SPARE2
+ *
+ * Acquires mgr->lock internally to protect the read-modify-write against
+ * concurrent EXTTS and PEROUT calls.  Must not be called while holding a
+ * spinlock (mgr->lock is a mutex and may sleep).
+ *
+ * @mgr:    Pointer to platform manager
+ * @enable: true  -> set   the SPARE2 PPS-output bit (PPS OUT active)
+ *          false -> clear the SPARE2 PPS-output bit (PPS IN  active / PPS OUT disabled)
+ */
+static void syn_ptp_spare2_pps_out_enable(struct syn_ptp_platform_mgr *mgr,
+					  bool enable)
+{
+	u32 val, bit;
+
+	if (!mgr->spare2)
+		return;
+
+	bit = (mgr->platform == PLATFORM_IPQ52XX)
+	      ? IPQ52XX_SPARE2_PPS_EN : IPQ96XX_SPARE2_TSN_EN;
+
+	/*
+	 * mgr->lock ("Protects platform resources") serialises concurrent
+	 * SPARE2 read-modify-write sequences from the EXTTS and PEROUT paths.
+	 */
+	mutex_lock(&mgr->lock);
+	val = readl(mgr->spare2);
+	if (enable)
+		val |= bit;
+	else
+		val &= ~bit;
+	writel(val, mgr->spare2);
+	mutex_unlock(&mgr->lock);
 }
 
 static int qcom_nss_ptp_enable(struct ptp_clock_info *ptp,
@@ -401,6 +456,34 @@ static int qcom_nss_ptp_enable(struct ptp_clock_info *ptp,
 		spin_lock_irqsave(&ptp_priv->lock, flags);
 		ptp_priv->pps_enabled = (on != 0);
 		spin_unlock_irqrestore(&ptp_priv->lock, flags);
+
+		if (on) {
+			/*
+			 * Reset the addend to the nominal default so the clock
+			 * runs at its base rate when PPS IN is enabled.  ts2phc
+			 * will fine-tune it via adjfine() as it synchronizes the
+			 * XGMAC RTC to the PHY RTC.  Without this reset, a stale
+			 * addend from a prior synchronization session could cause
+			 * ts2phc to start from an already-drifted frequency
+			 * baseline.
+			 *
+			 * Use ts_ctl_mutex (not the spinlock) because
+			 * syn_ptp_adjfine() calls readl_poll_timeout_atomic()
+			 * which may busy-wait up to 100 ms.
+			 */
+			mutex_lock(&ptp_priv->ts_ctl_mutex);
+			syn_ptp_adjfine(mac_base, ptp_priv->default_addend);
+			mutex_unlock(&ptp_priv->ts_ctl_mutex);
+
+			/*
+			 * PPS IN is being enabled: clear the SPARE2 PPS-output
+			 * bit so the signal flows into the XGMAC rather than out.
+			 * syn_ptp_spare2_pps_out_enable() acquires mgr->lock (a
+			 * mutex) internally, so it must not be called while
+			 * holding a spinlock.
+			 */
+			syn_ptp_spare2_pps_out_enable(mgr, false);
+		}
 
 		spin_lock_irqsave(&mgr->pps_list_lock, list_flags);
 		if (on) {
@@ -463,15 +546,7 @@ static int qcom_nss_ptp_enable(struct ptp_clock_info *ptp,
 		 *   IPQ5210: set/clear PPS_EN (bit 1)
 		 *   IPQ9650: set/clear TSN_EN (bit 5)
 		 */
-		if (ptp_priv->platform_mgr->spare2) {
-			u32 val = readl(ptp_priv->platform_mgr->spare2);
-			u32 bit = (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX)
-				  ? IPQ52XX_SPARE2_PPS_EN : IPQ96XX_SPARE2_TSN_EN;
-			if (on)
-				writel(val | bit, ptp_priv->platform_mgr->spare2);
-			else
-				writel(val & ~bit, ptp_priv->platform_mgr->spare2);
-		}
+		syn_ptp_spare2_pps_out_enable(ptp_priv->platform_mgr, !!on);
 
 		/* Configure PPE switch PPS output source */
 		if (ptp_priv->platform_mgr->platform == PLATFORM_IPQ52XX ||
@@ -1517,7 +1592,7 @@ static int syn_ptp_hw_init(struct syn_ptp_priv *ptp_priv)
 	syn_ptp_pps_ctrl_set(mac_base, SYN_MAC_PPS_CTL_PPSCTRL0_1HZ);
 
 	dev_info(ptp_priv->dev,
-		 "Sub-second increment: %u ns, Addend: 0x%08x, Clock rate: %u Hz)\n",
+		 "Sub-second increment: %u ns, Addend: 0x%08x, Clock rate: %u Hz\n",
 		 ptp_priv->ssinc, ptp_priv->default_addend, ptp_priv->ptp_clock_rate);
 
 	return ret;
@@ -1576,8 +1651,11 @@ int syn_ptp_init(struct syn_hal_dev *shd, struct platform_device *pdev)
 	/* Store platform device pointer */
 	ptp_priv->dev = dev;
 
-	/* Initialize spinlock for timestamp access synchronization */
+	/* Initialize spinlock for fast IRQ-context paths (gettimex, IRQ handler, pps_enabled) */
 	spin_lock_init(&ptp_priv->lock);
+
+	/* Initialize mutex for SYN_MAC_TS_CTL register operations (adjfine/adjtime/settime) */
+	mutex_init(&ptp_priv->ts_ctl_mutex);
 
 	/* Initialize TX timestamp queue spinlock */
 	spin_lock_init(&ptp_priv->tx_ts_lock);
@@ -1602,7 +1680,7 @@ int syn_ptp_init(struct syn_hal_dev *shd, struct platform_device *pdev)
 	ptp_priv->caps.owner = THIS_MODULE;
 	snprintf(ptp_priv->caps.name, sizeof(ptp_priv->caps.name),
 		 "xgmac-ptp-%d", shd->nghd.mac_id);
-	ptp_priv->caps.max_adj = 500000000;	/* Maximum frequency adjustment: ±500,000,000 ppb (±500,000 ppm) */
+	ptp_priv->caps.max_adj = 500000;	/* Maximum frequency adjustment: ±500,000 ppb (±500 ppm) */
 	ptp_priv->caps.n_alarm = 0;		/* No alarm support */
 	ptp_priv->caps.n_ext_ts = 1;		/* One external timestamp channel */
 	ptp_priv->caps.n_per_out = 1;		/* One periodic output channel */
