@@ -104,11 +104,7 @@
 #define NSS_DP_EDMA_DDRQ_BLK_SIZE_DEF	0
 #endif
 
-/*
- * TODO:
- * Currently not enabling any of the DDRQs by default during the boot.
- */
-#define NSS_DP_EDMA_DDRQ_EN_PORT_BM	0
+#define NSS_DP_EDMA_DDRQ_EN_PORT_BM	0x3f
 
 #define EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE	(NR_CPUS * 2)
 #define EDMA_MAX_TXDESC_RING_PER_TYPE	(NR_CPUS * 2)
