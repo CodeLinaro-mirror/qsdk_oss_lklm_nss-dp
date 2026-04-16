@@ -18,6 +18,7 @@
 #include <fal/fal_type.h>
 #include <fal/fal_servcode.h>
 #include <fal/fal_pon.h>
+#include <ppe_drv.h>
 #include "edma.h"
 #include "edma_regs.h"
 #include "edma_debug.h"
@@ -210,7 +211,6 @@ static int32_t edma_ddrq_ac_queue_cfg_tbl_get(uint32_t index, edma_ddrq_ac_queue
  */
 static int32_t edma_ddrq_ac_queue_cfg_tbl_set(uint32_t index, edma_ddrq_ac_queue_cfg_tbl_u *ddrq_cfg)
 {
-	edma_warn("ddrq ac queue set for %d index\n", index);
 	if ((index == 0) || (index == 16) || (index == 24) || (index == 32) || (index == 40) ||
 			 (index == 48) || (index == 56)) {
 		edma_ddrq_ac_queue_cfg_dump_local(&ddrq_cfg->ddrq_cfg);
@@ -439,11 +439,13 @@ int32_t edma_ddrq_dp_dev_set(struct net_device *dev)
 		/*
 		 * VP device.
 		 *
-		 * TODO:
-		 * Currently assigning full packet passthrough mode to any
-		 * of the DP VP interfaces.
 		 */
-		dp_dev->pt_info.src_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+
+		dp_dev->pt_info.src_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_128B;
+		/*
+		 * TODO:
+		 * Currently assigning full packet passthrough mode to known DST DP VP devices
+		 */
 		dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
 	}
 
@@ -771,7 +773,7 @@ static int edma_ddrq_qid_to_ring_mapping(uint32_t qid, bool cfg_state)
 	}
 
 	cur_data = edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
-	edma_warn("queue_id: %d, ring_id: %d, cur_data: 0x%0x, cfg_state: %d\n", qid, ring_id,
+	edma_info("queue_id: %d, ring_id: %d, cur_data: 0x%0x, cfg_state: %d\n", qid, ring_id,
 				cur_data, cfg_state);
 
 	if ((qid % EDMA_QID2RID_NUM_PER_REG) == 0) {
@@ -811,7 +813,7 @@ static int edma_ddrq_vp_tbl_cfg(uint32_t id, uint32_t port)
 	data = (edma_ddrq_vp_port_map[port - 1] & EDMA_REG_DDRQ_VIRTUAL_PORT_ID_MASK);
 	edma_reg_write(EDMA_REG_DDRQ_VIRTUAL_PORT_TBL_OFFSET(id), data);
 
-	edma_warn("ddrq id : %d, vp_id: %d, port: %d, reg_off: 0x%0x\n", id, data,
+	edma_info("ddrq id : %d, vp_id: %d, port: %d, reg_off: 0x%0x\n", id, data,
 				port, EDMA_REG_DDRQ_VIRTUAL_PORT_TBL_OFFSET(id));
 
 	return 0;
@@ -833,7 +835,7 @@ static int edma_ddrq_ac_queue_cfg_state_set(uint32_t id, bool ddrq_state)
 		edma_err("DDRQ enabled failed (%d) for %d DDRQ\n", err, id);
 		return -EINVAL;
 	}
-	edma_warn("DDRQ state config success for %d ddrq, state: %d, qid_mismatch check_en: %d\n",
+	edma_info("DDRQ state config success for %d ddrq, state: %d, qid_mismatch check_en: %d\n",
 			 id, ddrq_en.ddrq_en, ddrq_en.qid_mismatch_check_en);
 	return 0;
 }
@@ -1038,17 +1040,23 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 			/*
 			 * Update the global DDRQ port bitmap
 			 */
-			edma_warn("ddrq_en_port_bm before change: 0x%0x\n", edma_ddrq_en_port_bm);
 			edma_ddrq_en_port_bm = ((edma_ddrq_en_port_bm & ~(1 << (obj->cfg_id - 1))) |
 					 (ddrq_cfg->ddrq_state << (obj->cfg_id - 1)));
-			edma_warn("ddrq_en_port_bm after change: 0x%0x\n", edma_ddrq_en_port_bm);
+
+			/*
+			 * Update the PPE global DDRQ enable bitmask with the DDRQ state change
+			 */
+			if (ppe_drv_set_ddrq_en_bitmask(queue_id, queue_cnt, (ddrq_cfg->ddrq_state ? true: false))) {
+				edma_err("Error in setting DDRQ enable bitmask for port %d\n", obj->cfg_id);
+				return DDRQ_RET_ERR;
+			}
 
 			/*
 			 * Update the port's dp dev information as per the updated DDRQ state change
 			 */
 			dev = edma_gbl_ctx.netdev_arr[obj->cfg_id - 1];
 			if (!dev) {
-				edma_err("Not able to find the netdev for %d port\n", (obj->cfg_id - 1));
+				edma_err("Not able to find the netdev for %d port\n", (obj->cfg_id));
 				return DDRQ_RET_ERR;
 			}
 			if (edma_ddrq_dp_dev_set(dev)) {
@@ -1274,7 +1282,6 @@ static int edma_ddrq_mem_region_init(void)
 
 	addr = edma_reg_read(EDMA_REG_DDRQ_RX_BASE_ADDR_H_OFFSET);
 	edma_warn("EDMA_REG_DDRQ_RX_BASE_ADDR_H_OFFSET: 0x%0x\n", addr);
-	edma_warn("DDRQ mem init done\n");
 	return 0;
 }
 
@@ -1295,12 +1302,10 @@ static int edma_ddrq_def_gbl_cfg_set(edma_ddrq_cfg_t *ddrq_cfg)
 	if (ddrq_gbl_cfg->ddrq_desc_pf_thres != EDMA_DDRQ_NO_OP_DEF_VAL) {
 		data |= EDMA_REG_DDRQ_DESC_PF_THRES_SET(ddrq_gbl_cfg->ddrq_desc_pf_thres);
 	}
-	edma_warn("EDMA_REG_DDRQ_GBL_CFG_OFFSET: mid value 1: 0x%0x\n", data);
 	if (ddrq_gbl_cfg->ddrq_desc_wb_thres != EDMA_DDRQ_NO_OP_DEF_VAL) {
 		data |= EDMA_REG_DDRQ_DESC_WB_THRES_SET(ddrq_gbl_cfg->ddrq_desc_wb_thres);
 	}
 
-	edma_warn("EDMA_REG_DDRQ_GBL_CFG_OFFSET: mid value 2: 0x%0x\n", data);
 	/*
 	 * Validate the DDRQ memory block area configuration
 	 */
@@ -1315,7 +1320,6 @@ static int edma_ddrq_def_gbl_cfg_set(edma_ddrq_cfg_t *ddrq_cfg)
 		EDMA_REG_DDRQ_DATA_OFFSET_SET(ddrq_gbl_cfg->ddrq_data_offset) |
 		EDMA_REG_DDRQ_BLK_NUM_CFG_SET(ddrq_gbl_cfg->ddrq_blk_num_cfg) |
 		EDMA_REG_DDRQ_BLK_SIZE_CFG_SET(ddrq_gbl_cfg->ddrq_blk_size_cfg);
-	edma_warn("EDMA_REG_DDRQ_GBL_CFG_OFFSET: final value: 0x%0x\n", data);
 
 	/*
 	 * Set the new DDRQ default configurations
@@ -1323,7 +1327,7 @@ static int edma_ddrq_def_gbl_cfg_set(edma_ddrq_cfg_t *ddrq_cfg)
 	edma_reg_write(EDMA_REG_DDRQ_GBL_CFG_OFFSET, data);
 
 	data = edma_reg_read(EDMA_REG_DDRQ_GBL_CFG_OFFSET);
-	edma_warn("EDMA_REG_DDRQ_GBL_CFG_OFFSET read final value: 0x%0x\n", data);
+	edma_warn("EDMA_REG_DDRQ_GBL_CFG_OFFSET value: 0x%0x\n", data);
 
 	/*
 	 * Set DDRQ memory regions details in the hardware
@@ -1374,7 +1378,6 @@ static int edma_ddrq_def_gbl_cfg_set(edma_ddrq_cfg_t *ddrq_cfg)
 		return -EINVAL;
 	}
 
-	edma_warn("DDRQ gbl config done\n");
 	return 0;
 }
 
@@ -1393,13 +1396,11 @@ static int edma_ddrq_def_idv_cfg_set(edma_ddrq_idv_cfg_t *ddrq_idv_cfg)
 	while (cur_ddrq_bm_word) {
 		bit_set = ffs((uint32_t)cur_ddrq_bm_word);
 		ddrq_obj_id.cfg_id = bit_set;
-		edma_warn("port obj id : %d\n", ddrq_obj_id.cfg_id);
 		edma_ddrq_cfg_set(&ddrq_obj_id, &ddrq_idv_cfg->ddrq_ac_cfg);
 
 		cur_ddrq_bm_word &= ~(1 << (bit_set - 1));
 	}
 
-	edma_warn("ddrq def idv cfg done\n");
 	return 0;
 }
 
@@ -1421,15 +1422,14 @@ static int edma_ddrq_def_grp_cfg_set(edma_ddrq_grp_cfg_t *ddrq_grp_cfg)
 			ddrq_grp_bm_word &= ~(1 << (bit_set - 1));
 		}
 
-	edma_warn("ddrq def grp cfg set done\n");
 	return 0;
 }
 
 /*
- * edma_ddrq_lp_cpu_code_cfg()
+ * edma_ddrq_lp_cc_cfg()
  *	API to configure loopback cpu code configurations
  */
-static int edma_ddrq_lp_cpu_code_cfg(edma_ddrq_lp_cfg_t *lp_cfg)
+static int edma_ddrq_lp_cc_cfg(edma_ddrq_lp_cfg_t *lp_cfg)
 {
 	sw_error_t err;
 	fal_passthrough_cpucode_t cc = {0};
@@ -1521,7 +1521,7 @@ static int edma_ddrq_qid_to_lp_ring_mapping(edma_ddrq_lp_cfg_t *lp_cfg)
 		data |= edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
 		edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
 
-		edma_warn("LP QID2RID(%d) reg: 0x%0x, data: 0x%0x\n", qid,
+		edma_info("LP QID2RID(%d) reg: 0x%0x, data: 0x%0x\n", qid,
 				EDMA_QID2RID_TABLE_MEM(reg_index), data);
 	}
 
@@ -1547,9 +1547,16 @@ static int edma_ddrq_def_lp_cfg_set(edma_ddrq_lp_cfg_t *lp_cfg, edma_ddrq_idv_cf
 	edma_ddrq_lp_fc_grp_id_set(lp_cfg);
 
 	/*
-	 * Configure loopback CPU code (0/1) queue base
+	 * Map loopback ring queue to CPU_CODE_0, CPU_CODE_1 & DDRQ SPECIAL service code
 	 */
-	edma_ddrq_lp_cpu_code_cfg(lp_cfg);
+	if (edma_ddrq_lp_cc_cfg(lp_cfg)) {
+		edma_err("Error in setting DDRQ LP cpu codes configurations\n");
+		return -EINVAL;
+	}
+	if (!ppe_drv_sc_ucast_qbase_profile_set(PPE_DRV_SC_DDRQ_LP_SC, lp_cfg->queue_base)) {
+		edma_err("Error in setting service code queue base for DDRQ special loopback SC:%d\n", PPE_DRV_SC_DDRQ_LP_SC);
+		return -EINVAL;
+	}
 
 	if (fal_qm_passthrough_cpucode_en_set(EDMA_SWITCH_DEV_ID, FAL_PASSTHROUGH_MODE_192_128, A_TRUE)) {
 		edma_err("Error in setting cpucode en cfg for %d PT mode\n", FAL_PASSTHROUGH_MODE_192_128);
@@ -1568,7 +1575,6 @@ static int edma_ddrq_def_lp_cfg_set(edma_ddrq_lp_cfg_t *lp_cfg, edma_ddrq_idv_cf
 	ddrq_obj_id.cfg_id = lp_cfg->lp_id;
 	edma_ddrq_cfg_set(&ddrq_obj_id, &ddrq_idv_cfg->ddrq_ac_cfg);
 
-	edma_warn("ddrq loopback cfg done\n");
 	return 0;
 }
 
@@ -1765,7 +1771,6 @@ static int edma_ddrq_set_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 		return -EINVAL;
 	}
 
-	edma_warn("done\n");
 	return 0;
 }
 

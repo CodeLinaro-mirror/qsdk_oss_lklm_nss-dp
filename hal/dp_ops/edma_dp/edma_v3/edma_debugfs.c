@@ -577,6 +577,18 @@ static int edma_debugfs_hw_gro_stats_show(struct seq_file *m, void __attribute__
 }
 #endif
 
+#ifdef NSS_DP_DDRQ_SUPPORT
+/*
+ * edma_debugfs_ddrq_info_show()
+ *	EDMA debugfs DDRQ information show API
+ */
+static int edma_debugfs_ddrq_info_show(struct seq_file *m, void __attribute__((unused))*p)
+{
+	seq_printf(m, "\t\t EDMA DDRQ port enable bitmask = 0x%ox\n", edma_ddrq_en_port_bm);
+	return 0;
+}
+#endif
+
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 /*
  * edma_debugfs_loopback_stats_show()
@@ -643,6 +655,28 @@ static int edma_debugs_hw_gro_stats_open(struct inode *inode, struct file *file)
  */
 const struct file_operations edma_debugfs_hw_gro_file_ops = {
 	.open = edma_debugs_hw_gro_stats_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release
+};
+#endif
+
+#ifdef NSS_DP_DDRQ_SUPPORT
+/*
+ * edma_debugs_ddrq_info_open()
+ *	EDMA DDRQ debugfs open callback API
+ */
+static int edma_debugs_ddrq_info_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_ddrq_info_show, inode->i_private);
+}
+
+/*
+ * edma_debugfs_ddrq_file_ops
+ *	File operations for EDMA DDRQ information
+ */
+const struct file_operations edma_debugfs_ddrq_file_ops = {
+	.open = edma_debugs_ddrq_info_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = seq_release
@@ -1219,6 +1253,13 @@ int edma_debugfs_init(void)
 	}
 #endif
 
+#if defined(NSS_DP_DDRQ_SUPPORT)
+	if (!debugfs_create_file("ddrq_info", S_IRUGO, edma_gbl_ctx.root_dentry,
+			NULL, &edma_debugfs_ddrq_file_ops)) {
+		edma_err("Unable to create EDMA DDRQ information file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+#endif
 	return 0;
 
 debugfs_dir_failed:
