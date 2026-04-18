@@ -584,7 +584,7 @@ static int edma_debugfs_hw_gro_stats_show(struct seq_file *m, void __attribute__
  */
 static int edma_debugfs_ddrq_info_show(struct seq_file *m, void __attribute__((unused))*p)
 {
-	seq_printf(m, "\t\t EDMA DDRQ port enable bitmask = 0x%ox\n", edma_ddrq_en_port_bm);
+	seq_printf(m, "\t\t EDMA DDRQ port enable bitmask = 0x%0x\n", edma_ddrq_en_port_bm);
 	return 0;
 }
 #endif
