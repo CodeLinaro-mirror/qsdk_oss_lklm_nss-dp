@@ -10,6 +10,10 @@ extern uint32_t rx_ring_sz_low_mem;
 extern uint32_t rx_ring_sz_medium_mem;
 extern uint32_t rx_ring_sz_high_mem;
 
+#if defined(NSS_DP_HW_GRO)
+extern uint32_t edma_dp_gro_rx_ring_sz;
+#endif
+
 #define EDMA_RXFILL_RING_PER_CORE_MAX	1
 #define EDMA_RXDESC_RING_PER_CORE_MAX	1
 
@@ -431,6 +435,7 @@ struct edma_rxfill_ring {
 	struct napi_struct napi;	/* Napi structure */
 	uint32_t ring_id;		/* RXFILL ring number */
 	uint32_t count;			/* number of descriptors in the ring */
+	uint32_t count_mask;		/* ring size mask (count - 1) */
 	uint32_t prod_idx;		/* Ring producer index */
 	uint32_t alloc_size;		/* Buffer size to allocate */
 	uint32_t num_rxfill_pending;	/* Number of allocation pending */
@@ -454,6 +459,7 @@ struct edma_rxdesc_ring {
 	struct napi_struct napi;	/* Napi structure */
 	uint32_t ring_id;		/* RXDESC ring number */
 	uint32_t count;			/* number of descriptors in the ring */
+	uint32_t count_mask;		/* ring size mask (count - 1) */
 	uint32_t work_leftover;		/* Leftover descriptors to be processed */
 	uint32_t cons_idx;		/* Ring consumer index */
 	int32_t pre_hdr_mode_en;	/* Flag to indicate the mode of the ring (preheader/secondary ring) */

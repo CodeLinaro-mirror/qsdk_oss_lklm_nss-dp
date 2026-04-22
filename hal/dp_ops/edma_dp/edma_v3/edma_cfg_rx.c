@@ -179,7 +179,7 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 		 */
 		rxfill_desc = EDMA_RXFILL_DESC(rxfill_ring, cons_idx);
 
-		cons_idx = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx = (cons_idx + 1) & rxfill_ring->count_mask;
 
 		/*
 		 * Get skb from opaque
@@ -321,7 +321,7 @@ void edma_cfg_rx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 		/*
 		 * Update consumer index
 		 */
-		cons_idx = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx = (cons_idx + 1) & rxdesc_ring->count_mask;
 
 		/*
 		 * Get opaque from RXDESC
@@ -1597,6 +1597,7 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 
 		rxfill_ring = rxfill_info[ring_idx].rxfill_ring;
 		rxfill_ring->count = rxfill_info[ring_idx].desc_count;
+		rxfill_ring->count_mask = rxfill_ring->count - 1;
 		rxfill_ring->alloc_size = rxfill_info[ring_idx].alloc_size;
 		rxfill_ring->buf_len = rxfill_info[ring_idx].buffer_len;
 		rxfill_ring->page_mode = rxfill_info[ring_idx].page_mode;
@@ -1624,6 +1625,7 @@ static int edma_cfg_rx_rings_setup(struct edma_gbl_ctx *egc)
 
 		rxdesc_ring = rxdesc_info[ring_idx].rxdesc_ring;
 		rxdesc_ring->count = rxdesc_info[ring_idx].desc_count;
+		rxdesc_ring->count_mask = rxdesc_ring->count - 1;
 
 		/*
 		 * Fetch the mode in which the particular ring has to be configured

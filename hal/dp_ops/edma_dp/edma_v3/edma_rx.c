@@ -357,9 +357,9 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 	 */
 	if (unlikely(egc->enable_ring_util_stats)) {
 		cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) & EDMA_RXFILL_CONS_IDX_MASK;
-		avail_desc = EDMA_DESC_AVAIL_COUNT(cons_idx, prod_idx, EDMA_RX_RING_SIZE);
+		avail_desc = EDMA_DESC_AVAIL_COUNT(cons_idx, prod_idx, rxfill_ring->count);
 
-		edma_update_ring_stats(avail_desc, EDMA_RX_RING_SIZE,
+		edma_update_ring_stats(avail_desc, rxfill_ring->count,
 				       &rxfill_ring->rx_fill_stats.ring_stats);
 	}
 
@@ -500,7 +500,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 		}
 		skb->fast_recycled = 0;
 
-		prod_idx = (prod_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		prod_idx = (prod_idx + 1) & rxfill_ring->count_mask;
 	}
 
 	if (likely(num_alloc)) {
@@ -562,7 +562,7 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 		 * code for every packet, prefetch the next secondary descriptor
 		 * to handle such cases.
 		 */
-		next_desc_index = (desc_index + 1) & EDMA_RX_RING_SIZE_MASK;
+		next_desc_index = (desc_index + 1) & rxdesc_ring->count_mask;
 		next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
 		prefetch(next_rxdesc_sec);
 	} else {
@@ -721,7 +721,7 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 			 * code for every packet, prefetch the next secondary descriptor
 			 * to handle such cases.
 			 */
-			next_desc_index = (desc_index + 1) & EDMA_RX_RING_SIZE_MASK;
+			next_desc_index = (desc_index + 1) & rxdesc_ring->count_mask;
 			next_rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, next_desc_index);
 			prefetch(next_rxdesc_sec);
 		} else {
@@ -1743,7 +1743,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 			edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) &
 			EDMA_RXDESC_PROD_IDX_MASK;
 		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx,
-				cons_idx, EDMA_RX_RING_SIZE);
+				cons_idx, rxdesc_ring->count);
 		rxdesc_ring->work_leftover = work_to_do;
 		if (likely(work_to_do > budget)) {
 			work_to_do = budget;
@@ -1752,7 +1752,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 
 	rxdesc_ring->work_leftover -= work_to_do;
 
-	end_idx = (cons_idx + work_to_do) & EDMA_RX_RING_SIZE_MASK;
+	end_idx = (cons_idx + work_to_do) & rxdesc_ring->count_mask;
 
 	rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
 
@@ -1767,7 +1767,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 		edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
 			(void *)(rxdesc_ring->pdesc + end_idx));
 		edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
-			(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
+			(void *)(rxdesc_ring->pdesc + rxdesc_ring->count));
 	}
 
 	/*
@@ -1780,11 +1780,11 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 	 */
 	prefetch(rxdesc_desc);
 	if (likely(work_to_do >= 3)) {
-		cons_idx_1 = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx_1 = (cons_idx + 1) & rxdesc_ring->count_mask;
 		pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_1);
 		prefetch(pf_desc);
 
-		cons_idx_2 = (cons_idx_1 + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx_2 = (cons_idx_1 + 1) & rxdesc_ring->count_mask;
 		pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
 		prefetch(pf_desc);
 	}
@@ -1812,7 +1812,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 				/*
 				 * Update consumer index
 				 */
-				cons_idx = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+				cons_idx = (cons_idx + 1) & rxdesc_ring->count_mask;
 
 				/*
 				 * Get the next Rx descriptor.
@@ -1830,7 +1830,7 @@ static uint32_t edma_rx_reap_capwap(struct edma_gbl_ctx *egc, int budget,
 				prefetch(pf_skb);
 				prefetch((uint8_t *)pf_skb + 64);
 				prefetch((uint8_t *)pf_skb + 128);
-				cons_idx_2 = (cons_idx_2 + 1) & EDMA_RX_RING_SIZE_MASK;
+				cons_idx_2 = (cons_idx_2 + 1) & rxdesc_ring->count_mask;
 
 				pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
 				prefetch(pf_desc);
@@ -1867,7 +1867,7 @@ next_rx_desc:
 		/*
 		 * Update consumer index
 		 */
-		cons_idx = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx = (cons_idx + 1) & rxdesc_ring->count_mask;
 
 		/*
 		 * Get the next Rx descriptor.
@@ -2036,9 +2036,9 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 
 	if (unlikely(egc->enable_ring_util_stats)) {
 		prod_idx = edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) & EDMA_RXDESC_PROD_IDX_MASK;
-		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, EDMA_RX_RING_SIZE);
+		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, rxdesc_ring->count);
 
-		edma_update_ring_stats(work_to_do, EDMA_RX_RING_SIZE,
+		edma_update_ring_stats(work_to_do, rxdesc_ring->count,
 				       &rxdesc_ring->rx_desc_stats.ring_stats);
 	}
 
@@ -2049,7 +2049,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 			edma_reg_read(EDMA_REG_RXDESC_PROD_IDX(rxdesc_ring->ring_id)) &
 			EDMA_RXDESC_PROD_IDX_MASK;
 		work_to_do = EDMA_DESC_AVAIL_COUNT(prod_idx,
-				cons_idx, EDMA_RX_RING_SIZE);
+				cons_idx, rxdesc_ring->count);
 		rxdesc_ring->work_leftover = work_to_do;
 		if (likely(work_to_do > budget)) {
 			work_to_do = budget;
@@ -2058,7 +2058,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 
 	rxdesc_ring->work_leftover -= work_to_do;
 
-	end_idx = (cons_idx + work_to_do) & EDMA_RX_RING_SIZE_MASK;
+	end_idx = (cons_idx + work_to_do) & rxdesc_ring->count_mask;
 
 	rxdesc_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx);
 
@@ -2074,7 +2074,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 			edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
 					(void *)(rxdesc_ring->pdesc + end_idx));
 			edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
-					(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
+					(void *)(rxdesc_ring->pdesc + rxdesc_ring->count));
 		}
 	} else {
 		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, cons_idx);
@@ -2087,11 +2087,11 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 			edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->pdesc,
 					(void *)(rxdesc_ring->pdesc + end_idx));
 			edma_dmac_inv_range_no_dsb((void *)rxdesc_desc,
-					(void *)(rxdesc_ring->pdesc + EDMA_RX_RING_SIZE));
+					(void *)(rxdesc_ring->pdesc + rxdesc_ring->count));
 			edma_dmac_inv_range_no_dsb((void *)rxdesc_ring->sdesc,
 					(void *)(rxdesc_ring->sdesc + end_idx));
 			edma_dmac_inv_range_no_dsb((void *)rxdesc_sec,
-					(void *)(rxdesc_ring->sdesc + EDMA_RX_RING_SIZE));
+					(void *)(rxdesc_ring->sdesc + rxdesc_ring->count));
 		}
 
 	}
@@ -2108,11 +2108,11 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 	 */
 	prefetch(rxdesc_desc);
 	if (likely(work_to_do >= 3)) {
-		cons_idx_1 = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx_1 = (cons_idx + 1) & rxdesc_ring->count_mask;
 		pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_1);
 		prefetch(pf_desc);
 
-		cons_idx_2 = (cons_idx_1 + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx_2 = (cons_idx_1 + 1) & rxdesc_ring->count_mask;
 		pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
 		prefetch(pf_desc);
 	}
@@ -2178,7 +2178,7 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 				prefetch((uint8_t *)pf_skb + 128);
 				prefetch((uint8_t *)pf_skb + 192);
 				prefetch((uint8_t *)data);
-				cons_idx_2 = (cons_idx_2 + 1) & EDMA_RX_RING_SIZE_MASK;
+				cons_idx_2 = (cons_idx_2 + 1) & rxdesc_ring->count_mask;
 
 				pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
 				prefetch(pf_desc);
@@ -2231,7 +2231,7 @@ next_rx_desc:
 		/*
 		 * Update consumer index
 		 */
-		cons_idx = (cons_idx + 1) & EDMA_RX_RING_SIZE_MASK;
+		cons_idx = (cons_idx + 1) & rxdesc_ring->count_mask;
 
 		/*
 		 * Get the next Rx descriptor.
@@ -2268,7 +2268,7 @@ next_rx_desc:
 	}
 
 	if (unlikely(rxfill_ring->num_rxfill_pending >=
-			(EDMA_RX_RING_SIZE - EDMA_RXFILL_UGT_THRESHOLD))) {
+			(rxfill_ring->count - EDMA_RXFILL_UGT_THRESHOLD))) {
 
 		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
 				egc->rxfill_intr_mask);
