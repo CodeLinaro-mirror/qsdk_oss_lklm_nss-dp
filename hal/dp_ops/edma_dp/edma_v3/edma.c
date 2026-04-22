@@ -327,6 +327,7 @@ static char edma_rxfill_irq_name[EDMA_MAX_RXFILL_RINGS][EDMA_IRQ_NAME_SIZE];
  * Input String for VLAN insertion.
  */
 static char edma_vlan_append_info[EDMA_VLAN_APPEND_INFO_STR_LEN];
+uint32_t edma_force_crash = 0;
 
 char *argv[] = {"/usr/bin/edma_recover.sh", NULL };
 
@@ -2769,6 +2770,13 @@ static struct ctl_table edma_sub[] = {
 		.mode           =       0644,
 		.proc_handler   =       edma_vlan_append_handler
 	},
+	{
+		.procname       =       "edma_force_crash",
+		.data           =       &edma_force_crash,
+		.maxlen         =       sizeof(int),
+		.mode           =       0644,
+		.proc_handler   =       edma_force_crash_handler
+	},
 
 #ifdef NSS_DP_HW_GRO
 	{
@@ -3746,5 +3754,27 @@ int edma_vlan_append_handler(struct ctl_table *table, int write,
 
 	dev_put(dev);
 	memset(edma_vlan_append_info, 0, sizeof(edma_vlan_append_info));
+	return ret;
+}
+
+/*
+ * edma_force_crash_handler()
+ *	Function to trigger crash from EDMA module
+ */
+int edma_force_crash_handler(struct ctl_table *table, int write,
+				void __user *buffer, size_t *lenp, loff_t *ppos)
+{
+	int ret;
+
+	ret = proc_dointvec(table, write, buffer, lenp, ppos);
+
+	if (!write) {
+		return ret;
+	}
+
+	if(edma_force_crash) {
+		BUG_ON(A_TRUE);
+	}
+
 	return ret;
 }
