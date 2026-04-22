@@ -1928,6 +1928,13 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 			}
 
 			/*
+			 * Update skb fields for head skb
+			 */
+			skb->dev = ndev;
+			skb_set_int_pri(skb, EDMA_RXDESC_INT_PRI_GET(rxdesc_desc));
+			skb->skb_iif = ndev->ifindex;
+
+			/*
 			 * Prefetch the third skb and the fourth descriptor
 			 */
 			if (likely(work_to_do >= 3)) {
@@ -1946,13 +1953,6 @@ static uint32_t edma_rx_reap(struct edma_gbl_ctx *egc, int budget,
 				pf_desc = EDMA_RXDESC_PRI_DESC(rxdesc_ring, cons_idx_2);
 				prefetch(pf_desc);
 			}
-
-			/*
-			 * Update skb fields for head skb
-			 */
-			skb->dev = ndev;
-			skb->skb_iif = ndev->ifindex;
-			skb_set_int_pri(skb, EDMA_RXDESC_INT_PRI_GET(rxdesc_desc));
 
 			/*
 			 * Handle linear packets
