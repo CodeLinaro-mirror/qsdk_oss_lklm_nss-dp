@@ -82,6 +82,7 @@ struct nss_dp_vp_rx_info {
 		qdisc_valid:1,		/* Qdisc valid */
 		reserved:6;		/* Reserved */
 	uint32_t hw_gro_flags;		/* HW GRO flags (NSS_DP_VP_HW_GRO_FLAGS_*) */
+	uint8_t service_code;		/* Service code */
 };
 
 /*

@@ -214,6 +214,7 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
 
 	rcu_read_lock();
 
+	vprxi_p->service_code = EDMA_RXDESC_SERVICE_CODE_GET(rxdesc_desc);
 	edma_rx_vp_cb = rcu_dereference(nss_dp_vp_rx_reg_cb);
 	if (unlikely(!edma_rx_vp_cb)) {
 		struct edma_pcpu_stats *pcpu_stats;
