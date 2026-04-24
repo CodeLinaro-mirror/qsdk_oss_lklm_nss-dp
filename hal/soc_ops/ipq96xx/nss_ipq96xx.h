@@ -38,6 +38,11 @@
 #define NSS_DP_QUEUE_NUM		NR_CPUS
 
 /*
+ * Minimum packet size which can be transmitted by EDMA.
+ */
+#define NSS_DP_EDMA_TX_MIN_PKT_SZ       49
+
+/*
  * Number of Max Tx/Rx Rings supported
  */
 #define NSS_DP_EDMA_MAX_RXDESC_RINGS		24	/* Max RxDesc rings */

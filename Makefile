@@ -131,6 +131,7 @@ ifneq ($(CONFIG_PTP_1588_CLOCK),)
 qca-nss-dp-objs += hal/gmac_ops/syn/xgmac/syn_ptp.o
 endif
 ccflags-y += -DNSS_DP_EDMA_I2C_BUS_ENABLE
+ccflags-y += -DNSS_DP_TX_SMALL_PACKET_WAR
 ifeq ($(dp-ppe-ds),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds_wifi8.o
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v3/edma_ppeds_wifi7.o
