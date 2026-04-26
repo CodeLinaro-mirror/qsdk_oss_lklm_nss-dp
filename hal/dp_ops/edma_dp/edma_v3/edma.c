@@ -257,6 +257,13 @@ MODULE_PARM_DESC(edma_dp_gro_rx_queue_map, "Queue base for each RX ring");
 int edma_dp_gro_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {16, 17, 18, 19, -1, -1, -1, -1};
 module_param_array(edma_dp_gro_rxfill_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_gro_rxfill_map, "RX ring to RX fill ring mapping");
+
+/*
+ * Ensure that GRO rx ring size is multiple of 2
+ */
+uint32_t edma_dp_gro_rx_ring_sz = 512;
+module_param(edma_dp_gro_rx_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_gro_rx_ring_sz, "GRO RX fill and RX descriptor ring size (default: 512)");
 #endif
 
 /*
@@ -1061,6 +1068,12 @@ static int edma_validate_gro_ring_info(void)
 			edma_err("Invalid GRO rxfill map at index %d: %d\n", i, edma_dp_gro_rxfill_map[i]);
 			return -EINVAL;
 		}
+	}
+
+	/* Validate GRO ring size: must be non-zero and a power of 2 */
+	if (!edma_dp_gro_rx_ring_sz || (edma_dp_gro_rx_ring_sz & (edma_dp_gro_rx_ring_sz - 1))) {
+		edma_err("Invalid GRO rx ring size: %u (must be a non-zero power of 2)\n", edma_dp_gro_rx_ring_sz);
+		return -EINVAL;
 	}
 
 	return 0;
@@ -2250,12 +2263,12 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	 */
 	edma_init_rxfill_rings(egc, edma_dp_gro_rxfill_map,
 				edma_dp_gro_num_rxfill_rings, EDMA_RING_TYPE_HOST,
-				EDMA_RING_TYPE_FLAGS_HOST_GRO, EDMA_RX_RING_SIZE,
+				EDMA_RING_TYPE_FLAGS_HOST_GRO, edma_dp_gro_rx_ring_sz,
 				alloc_size, buf_len, egc->rx_page_mode);
 
 	edma_init_rxdesc_rings(egc, gro_rx_rings->rx_map, edma_dp_gro_num_rx_rings,
 				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_GRO,
-				EDMA_RX_RING_SIZE, gro_rx_rings->num_queues_per_ring);
+				edma_dp_gro_rx_ring_sz, gro_rx_rings->num_queues_per_ring);
 
 	/*
 	 * TO-DO: Further for other host rings like VP host rings, SMD host rings,
