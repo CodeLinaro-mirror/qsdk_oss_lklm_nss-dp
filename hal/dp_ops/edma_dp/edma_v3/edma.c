@@ -162,14 +162,6 @@ int edma_ddrq_grp_color_aware = EDMA_DDRQ_AC_GRP_COLOR_AWARE_DEF;
 module_param(edma_ddrq_grp_color_aware, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_grp_color_aware, "DDRQ group color aware configuration");
 
-int edma_ddrq_grp_drop_threshold = EDMA_DDRQ_AC_GRP_DRP_THD;
-module_param(edma_ddrq_grp_drop_threshold, int, S_IRUGO);
-MODULE_PARM_DESC(edma_ddrq_grp_drop_threshold, "DDRQ group's drop threshold configuration");
-
-int edma_ddrq_grp_shared_limit = EDMA_DDRQ_AC_GRP_SHRD_LIMIT;
-module_param(edma_ddrq_grp_shared_limit, int, S_IRUGO);
-MODULE_PARM_DESC(edma_ddrq_grp_shared_limit, "DDRQ group's shared limit configuration");
-
 int edma_ddrq_grp_id_bm = EDMA_DDRQ_AC_GRP_ID_BM_DEF;
 module_param(edma_ddrq_grp_id_bm, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_grp_id_bm, "DDRQ group id bitmask");

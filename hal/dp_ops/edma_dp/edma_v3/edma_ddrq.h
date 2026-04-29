@@ -42,8 +42,6 @@
 #define EDMA_DDRQ_AC_GRP_AC_EN_DEF	1
 #define EDMA_DDRQ_AC_GRP_COLOR_AWARE_DEF	0
 #define EDMA_DDRQ_AC_GRP_ID_BM_DEF	1
-#define EDMA_DDRQ_AC_GRP_DRP_THD	4000
-#define EDMA_DDRQ_AC_GRP_SHRD_LIMIT	4000
 
 #define EDMA_DDRQ_ISQ_BASE		238
 
@@ -82,6 +80,11 @@
 #define EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_2	37
 
 #define EDMA_LP_RING_ID_BASE			32
+
+#define EDMA_DDRQ_GRP_SHARED_LIMIT_MIN		32
+#define EDMA_DDRQ_QUEUE_PRE_ALLOC_LIMIT_MIN	2
+#define EDMA_DDRQ_GET_SHARED_LIMIT(blk_num, prealloc_limit) \
+	((blk_num)-(EDMA_DDRQ_GRP_SHARED_LIMIT_MIN + (prealloc_limit * NSS_DP_DDRQ_MAX_CNT)))
 
 /*
  * edma_ddrq_ac_queue_cfg_tbl_t
