@@ -826,8 +826,6 @@ extern int edma_ddrq_ac_queue_shared_ceiling;
 extern int edma_ddrq_ac_queue_grp_id;
 extern int edma_ddrq_grp_ac_en;
 extern int edma_ddrq_grp_color_aware;
-extern int edma_ddrq_grp_drop_threshold;
-extern int edma_ddrq_grp_shared_limit;
 extern int edma_ddrq_grp_id_bm;
 extern int edma_ddrq_isq_base;
 extern int edma_ddrq_lp_queue_base;

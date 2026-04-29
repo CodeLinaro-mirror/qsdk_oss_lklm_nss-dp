@@ -1811,10 +1811,10 @@ static int32_t edma_ddrq_get_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 	 * Get DDRQ group default configurations
 	 */
 	edma_ddrq_grp_cfg_set_inval(&ddrq_grp_cfg->ddrq_grp_cfg);
-	ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_dp_thrd = edma_ddrq_grp_drop_threshold;
+	ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_dp_thrd = edma_ddrq_blk_num_map[ddrq_gbl_cfg->ddrq_blk_num_cfg];
 	ddrq_grp_cfg->ddrq_grp_cfg.ac_cfg_ac_en= edma_ddrq_grp_ac_en;
 	ddrq_grp_cfg->ddrq_grp_cfg.ac_cfg_color_aware = edma_ddrq_grp_color_aware;
-	ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_gap_shrd_limit = edma_ddrq_grp_shared_limit;
+	ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_gap_shrd_limit = EDMA_DDRQ_GET_SHARED_LIMIT(edma_ddrq_blk_num_map[ddrq_gbl_cfg->ddrq_blk_num_cfg], EDMA_DDRQ_QUEUE_PRE_ALLOC_LIMIT_MIN);
 	ddrq_grp_cfg->ddrq_grp_en_bm = edma_ddrq_grp_id_bm;
 
 	/*
