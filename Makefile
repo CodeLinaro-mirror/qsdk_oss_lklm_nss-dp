@@ -96,10 +96,6 @@ ifeq ($(dp-ppe-ds),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v2/edma_ppeds.o
 ccflags-y += -DNSS_DP_PPEDS_SUPPORT
 endif
-ifeq ($(dp-net-standby),y)
-qca-nss-dp-objs += nss_dp_netstandby.o
-ccflags-y += -DNSS_DP_NETSTANDBY
-endif
 
 ifeq ($(dp-loopback),y)
 qca-nss-dp-objs += hal/dp_ops/edma_dp/edma_v2/edma_cfg_rx_loopback.o \
@@ -187,6 +183,11 @@ ccflags-y += -DNSS_DP_EDMA_SKIP_FOUR_PPEDS_NODES
 ccflags-y += -DNSS_DP_EDMA_MHT_SW_WITH_VP_RING
 ccflags-y += -DNSS_DP_EDMA_RING_RESET
 ccflags-y += -DNSS_DP_EDMA_LOOPBACK_BUF_CONFIG
+endif
+
+ifeq ($(dp-net-standby),y)
+qca-nss-dp-objs += nss_dp_netstandby.o
+ccflags-y += -DNSS_DP_NETSTANDBY
 endif
 
 ccflags-y += $(NSS_DP_INCLUDE)
