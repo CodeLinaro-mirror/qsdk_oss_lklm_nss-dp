@@ -127,10 +127,10 @@ struct edma_ppeds {
 		struct edma_ppeds_node_wifi7 wifi7_cfg;
 		struct edma_ppeds_node_wifi8 wifi8_cfg;
 	};
-	uint8_t db_idx;				/* PPE-DS node index */
-	nss_dp_ppeds_handle_t ppeds_handle;	/* PPE-DS handle */
 	uint32_t umac_reset_inprogress;		/* Umac reset progress status */
 	unsigned long service_running;		/* PPE-DS ring usage service status */
+	uint8_t db_idx;				/* PPE-DS node index */
+	nss_dp_ppeds_handle_t ppeds_handle;	/* PPE-DS handle */
 };
 
 /*
