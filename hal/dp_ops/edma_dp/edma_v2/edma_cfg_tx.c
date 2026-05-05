@@ -809,7 +809,7 @@ void edma_cfg_tx_napi_enable(struct edma_gbl_ctx *egc)
 
 		txcmpl_ring = &egc->txcmpl_rings[i];
 
-		if (!txcmpl_ring->napi_added) {
+		if (!txcmpl_ring->napi_added || txcmpl_ring->napi_enabled) {
 			continue;
 		}
 
@@ -818,6 +818,7 @@ void edma_cfg_tx_napi_enable(struct edma_gbl_ctx *egc)
 		 * Enable NAPI separately for each port at the time of DP open
 		 */
 		napi_enable(&txcmpl_ring->napi);
+		txcmpl_ring->napi_enabled = true;
 	}
 }
 
@@ -834,11 +835,12 @@ void edma_cfg_tx_napi_disable(struct edma_gbl_ctx *egc)
 
 		txcmpl_ring = &egc->txcmpl_rings[i];
 
-		if (!txcmpl_ring->napi_added) {
+		if (!txcmpl_ring->napi_added || !txcmpl_ring->napi_enabled) {
 			continue;
 		}
 
 		napi_disable(&txcmpl_ring->napi);
+		txcmpl_ring->napi_enabled = false;
 	}
 }
 
@@ -861,6 +863,7 @@ void edma_cfg_tx_napi_delete(struct edma_gbl_ctx *egc)
 
 		netif_napi_del(&txcmpl_ring->napi);
 		txcmpl_ring->napi_added = false;
+		txcmpl_ring->napi_enabled = false;
 	}
 }
 
@@ -904,6 +907,21 @@ void edma_cfg_tx_napi_add(struct edma_gbl_ctx *egc, struct net_device *netdev, u
 		netif_napi_add_weight(netdev, &txcmpl_ring->napi,
 				edma_tx_napi_poll, nss_dp_tx_napi_budget);
 #endif
+		/*
+		 * For VP netdevice specific rings, do not need to wait for an dev open call,
+		 * simply enable the NAPI for those rings.
+		 * TO-DO: Fix this in edma_v3 for port specific ring napi add / enable.
+		 */
+		if (macid == NSS_DP_VP_MAC_ID) {
+			if (!txcmpl_ring->napi_enabled) {
+				napi_enable(&txcmpl_ring->napi);
+				txcmpl_ring->napi_enabled = true;
+
+				edma_reg_write(EDMA_REG_TX_INT_MASK(txcmpl_ring->id),
+					egc->txcmpl_intr_mask);
+			}
+		}
+
 		txcmpl_ring->napi_added = true;
 		edma_debug("Napi added for txcmpl ring: %u\n", txcmpl_ring->id);
 	}
