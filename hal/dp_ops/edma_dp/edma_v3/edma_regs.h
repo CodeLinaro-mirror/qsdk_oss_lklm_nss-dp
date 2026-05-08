@@ -301,6 +301,7 @@
  */
 #define EDMA_PORT_PAD_EN			0x2
 #define EDMA_PORT_EDMA_EN			0x4
+#define EDMA_PORT_TX_DROP_EN			0x8
 
 /*
  * EDMA_REG_TXQ_CTRL register

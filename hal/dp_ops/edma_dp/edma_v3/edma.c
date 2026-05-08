@@ -2502,6 +2502,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	 * Global EDMA enable and padding enable
 	 */
 	data = edma_reg_read(EDMA_REG_PORT_CTRL);
+	data &= ~EDMA_PORT_TX_DROP_EN;
 	data |= EDMA_PORT_PAD_EN | EDMA_PORT_EDMA_EN;
 	edma_reg_write(EDMA_REG_PORT_CTRL, data);
 
