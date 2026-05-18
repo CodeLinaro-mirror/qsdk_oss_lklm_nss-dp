@@ -242,13 +242,6 @@ struct edma_sawf_sc_stats {
  * edma_pcpu_stats
  *	EDMA per cpu stats data structure
  */
-struct edma_pcpu_stats {
-	struct edma_rx_stats __percpu *rx_stats;
-			/* Per CPU Rx statistics */
-	struct edma_tx_stats __percpu *tx_stats;
-			/* Per CPU Tx statistics */
-};
-
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 /*
  * edma_dp_loopback_buf_info
@@ -576,6 +569,10 @@ struct edma_gbl_ctx {
 			/* Tracks clock initialization stages */
 	uint32_t noc_init_bitmap;
 			/* Tracks NSS NOC initialization stages (IPQ54xx) */
+	uint32_t mem_profile;
+			/* Memory profile bitmap */
+	uint32_t rx_ring_sz;
+	uint32_t tx_ring_sz;
 };
 
 typedef void (*edma_rx_wifi_qos_handler_t) (struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,

@@ -327,12 +327,12 @@ void edma_cleanup(bool is_dp_override)
 	 * Clean the debugfs entries for the EDMA
 	 */
 	edma_debugfs_exit();
-#if !defined(NSS_DP_MEM_PROFILE_LOW)
-	/*
-	 * Unregister PTP service code callback function
-	 */
-	ppe_drv_sc_unregister_cb(PPE_DRV_SC_PTP);
-#endif
+	if (!(edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_OPTIMIZED)) {
+		/*
+		 * Unregister PTP service code callback function
+		 */
+		ppe_drv_sc_unregister_cb(PPE_DRV_SC_PTP);
+	}
 	/*
 	 * Unregister mirror core selection API callback with PPE driver
 	 */
@@ -723,10 +723,9 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	 * Get page_mode of RXFILL rings
 	 * TODO: Move this setting to DP common node
 	 */
-#if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
-	of_property_read_u32(edma_gbl_ctx->device_node, "qcom,rx-page-mode",
+	if (edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_HIGH)
+		of_property_read_u32(edma_gbl_ctx->device_node, "qcom,rx-page-mode",
 					&edma_gbl_ctx->rx_page_mode);
-#endif
 
 	/*
 	 * Get id of first RXDESC ring
@@ -1641,14 +1640,9 @@ int edma_init(void)
 {
 	int ret = 0, i;
 	struct resource res_edma;
+	uint8_t profile_mask = 0;
 	uint8_t queue_start = 0;
 	int cpu, idx;
-
-	edma_gbl_ctx = kzalloc(sizeof(struct edma_gbl_ctx), GFP_KERNEL);
-	if(!edma_gbl_ctx) {
-		edma_err("Failed to allocate edma global structure.\n");
-		return -EINVAL;
-	}
 
 	edma_gbl_ctx->hw_init_bitmap = 0;
 	edma_gbl_ctx->clk_init_bitmap = 0;
@@ -1757,12 +1751,14 @@ int edma_init(void)
 		goto edma_hw_init_fail;
 	}
 
-#if !defined(NSS_DP_MEM_PROFILE_LOW)
-	/*
-	 * Register PTP service code callback function
-	 */
-	ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_tstamp_buf, NULL);
-#endif
+	profile_mask = NSS_DP_MEM_PROFILE_HIGH | NSS_DP_MEM_PROFILE_BALANCED;
+	if (edma_gbl_ctx->mem_profile & profile_mask) {
+		/*
+		 * Register PTP service code callback function
+		 */
+		ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_tstamp_buf, NULL);
+	}
+
 	/*
 	 * Register mirror core selection API callback with PPE driver
 	 */

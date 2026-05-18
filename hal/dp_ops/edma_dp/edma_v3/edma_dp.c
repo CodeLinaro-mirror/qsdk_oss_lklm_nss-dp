@@ -35,23 +35,23 @@ static int edma_dp_open(struct nss_dp_data_plane_ctx *dpc,
 	/*
 	 * Enable NAPI
 	 */
-	if (atomic_read(&edma_gbl_ctx.active_port_count) != 0) {
-		atomic_inc(&edma_gbl_ctx.active_port_count);
+	if (atomic_read(&edma_gbl_ctx->active_port_count) != 0) {
+		atomic_inc(&edma_gbl_ctx->active_port_count);
 		return NSS_DP_SUCCESS;
 	}
-	atomic_inc(&edma_gbl_ctx.active_port_count);
+	atomic_inc(&edma_gbl_ctx->active_port_count);
 
 	/*
 	 * TODO:
 	 * Enable interrupts and NAPI only for the Tx-cmpl rings mapped to this port
 	 */
-	edma_cfg_tx_napi_enable(&edma_gbl_ctx);
-	edma_cfg_rx_napi_enable(&edma_gbl_ctx);
+	edma_cfg_tx_napi_enable(edma_gbl_ctx);
+	edma_cfg_rx_napi_enable(edma_gbl_ctx);
 
 	/*
 	 * Enable the interrupt masks.
 	 */
-	edma_enable_interrupts(&edma_gbl_ctx);
+	edma_enable_interrupts(edma_gbl_ctx);
 
 	return NSS_DP_SUCCESS;
 }
@@ -62,21 +62,21 @@ static int edma_dp_open(struct nss_dp_data_plane_ctx *dpc,
  */
 static int edma_dp_close(struct nss_dp_data_plane_ctx *dpc)
 {
-	if (!atomic_dec_and_test(&edma_gbl_ctx.active_port_count)) {
+	if (!atomic_dec_and_test(&edma_gbl_ctx->active_port_count)) {
 		return NSS_DP_SUCCESS;
 	}
 
 	/*
 	 * Disable the interrupt masks.
 	 */
-	edma_disable_interrupts(&edma_gbl_ctx);
+	edma_disable_interrupts(edma_gbl_ctx);
 
 	/*
 	 * TODO:
 	 *  Disable interrupts and NAPI only for the Tx-cmpl rings mapped to this port
 	 */
-	edma_cfg_rx_napi_disable(&edma_gbl_ctx);
-	edma_cfg_tx_napi_disable(&edma_gbl_ctx);
+	edma_cfg_rx_napi_disable(edma_gbl_ctx);
+	edma_cfg_tx_napi_disable(edma_gbl_ctx);
 
 	return NSS_DP_SUCCESS;
 }
@@ -384,10 +384,10 @@ static int edma_dp_deinit(struct nss_dp_data_plane_ctx *dpc)
 	 * Free up resources used by EDMA if all the
 	 * interfaces have been overridden
 	 * */
-	if (edma_gbl_ctx.dp_override_cnt == EDMA_MAX_PORTS - 1) {
+	if (edma_gbl_ctx->dp_override_cnt == EDMA_MAX_PORTS - 1) {
 		edma_cleanup(true);
 	} else {
-		edma_gbl_ctx.dp_override_cnt++;
+		edma_gbl_ctx->dp_override_cnt++;
 	}
 
 	/*
@@ -430,16 +430,16 @@ static int edma_dp_configure(struct net_device *netdev, uint32_t macid)
 	 * IPQ95xx. These begin from '1' and hence we subtract
 	 * one when using it as an array index.
 	 */
-	edma_gbl_ctx.netdev_arr[nss_dp_get_idx_from_macid(macid)] = netdev;
+	edma_gbl_ctx->netdev_arr[nss_dp_get_idx_from_macid(macid)] = netdev;
 
 	edma_cfg_tx_fill_per_port_tx_map(netdev, macid);
 
 	/*
 	 * TX NAPI addition
 	 */
-	edma_cfg_tx_napi_add(&edma_gbl_ctx, netdev, macid);
+	edma_cfg_tx_napi_add(edma_gbl_ctx, netdev, macid);
 
-	if (edma_gbl_ctx.napi_added) {
+	if (edma_gbl_ctx->napi_added) {
 		return 0;
 	}
 
@@ -447,18 +447,18 @@ static int edma_dp_configure(struct net_device *netdev, uint32_t macid)
 	 * RX NAPI addition
 	 * Note: We do not support Rx for VPs dummy MACs.
 	 */
-	edma_cfg_rx_napi_add(&edma_gbl_ctx, netdev);
+	edma_cfg_rx_napi_add(edma_gbl_ctx, netdev);
 
 	/*
 	 * Register the interrupt handlers
 	 */
 	if (edma_irq_init() < 0) {
-		edma_cfg_rx_napi_delete(&edma_gbl_ctx);
-		edma_cfg_tx_napi_delete(&edma_gbl_ctx);
+		edma_cfg_rx_napi_delete(edma_gbl_ctx);
+		edma_cfg_tx_napi_delete(edma_gbl_ctx);
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx.napi_added = true;
+	edma_gbl_ctx->napi_added = true;
 	return 0;
 }
 

@@ -25,7 +25,7 @@ static uint32_t edma_ppeds_tx_complete(uint32_t work_to_do, struct edma_txcmpl_r
 	bool hw_buff_mgmt = ppeds_handle->wifi8_hdl.hw_buff_mgmt_en;
 	struct edma_txcmpl_desc_8B_mode *txcmpl_ds;
 	uint32_t cons_idx, prod_idx, data;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txcmpl_desc *txcmpl;
 	uint32_t avail_in_ring;
 	uint16_t chnk_of_reap;
@@ -99,7 +99,7 @@ static int edma_ppeds_txcomp_napi_poll(struct napi_struct *napi, int budget)
 	struct edma_txcmpl_ring *txcmpl_ring = (struct edma_txcmpl_ring *)napi;
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = container_of(txcmpl_ring, struct edma_ppeds_node_wifi8, txcmpl_ring);
 	struct edma_ppeds *ppeds_node = container_of(wifi8_cfg, struct edma_ppeds, wifi8_cfg);
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t txcmpl_intr_status;
 	uint32_t reg_data;
 	int work_done = 0;
@@ -207,7 +207,7 @@ static int edma_ppeds_rxfill_napi_poll(struct napi_struct *napi, int budget)
 	struct edma_ppeds *ppeds_node = container_of(wifi8_cfg, struct edma_ppeds, wifi8_cfg);
 	uint32_t headroom = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
 	uint32_t alloc_size = rxfill_ring->alloc_size;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t cons_idx, work_to_do, work_done = 0;
 	uint32_t num_avail = 0;
 
@@ -316,7 +316,7 @@ static int edma_ppeds_rx_napi_poll(struct napi_struct *napi, int budget)
 static void edma_ppeds_set_rx_mapping(uint32_t rxfill_ring_id, uint32_t rx_ring_id, uint32_t ppe_qid,
 		uint32_t num_ppe_queues)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	/*
 	 * Setup RxFill to Rx mapping.
 	 */
@@ -423,10 +423,10 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 			edma_ppeds_txdesc_auto_index_conf(txdesc_ring->id,
 				txrx_info->wlan_reo2ppe_tp_addr[i].paddr);
 			txrx_info->edma_txdesc_prod_addr[i].paddr =
-				(uint32_t)(edma_gbl_ctx.reg_resource->start +
+				(uint32_t)(edma_gbl_ctx->reg_resource->start +
 						EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id));
 			txrx_info->edma_txdesc_prod_addr[i].vaddr =
-				edma_gbl_ctx.reg_base +
+				edma_gbl_ctx->reg_base +
 				EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id);
 		}
 
@@ -501,10 +501,10 @@ static void edma_ppeds_cfg_tx(struct edma_ppeds *ppeds_node)
 	edma_ppeds_txcmpl_hw_buff_conf(txcmpl_ring->id,
 		hw_buf_mgmt_txrx_info->wlan_ppe2wbm_hp_addr.paddr);
 	hw_buf_mgmt_txrx_info->edma_txcmpl_cons_addr.paddr =
-		(uint32_t)(edma_gbl_ctx.reg_resource->start +
+		(uint32_t)(edma_gbl_ctx->reg_resource->start +
 		EDMA_REG_TXCMPL_CONS_IDX(txcmpl_ring->id));
 	hw_buf_mgmt_txrx_info->edma_txcmpl_cons_addr.vaddr =
-		edma_gbl_ctx.reg_base +
+		edma_gbl_ctx->reg_base +
 		EDMA_REG_TXCMPL_CONS_IDX(txcmpl_ring->id);
 
 	/*
@@ -694,10 +694,10 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 	edma_ppeds_rx_fill_ring_flow_control(rxfill_ring);
 
 	hw_buf_mgmt_txrx_info->edma_rxfill_prod_addr.paddr =
-		(uint32_t)(edma_gbl_ctx.reg_resource->start +
+		(uint32_t)(edma_gbl_ctx->reg_resource->start +
 		EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id));
 	hw_buf_mgmt_txrx_info->edma_rxfill_prod_addr.vaddr =
-		edma_gbl_ctx.reg_base +
+		edma_gbl_ctx->reg_base +
 		EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id);
 
 	/*
@@ -755,10 +755,10 @@ rxdesc_cfg:
 				txrx_info->wlan_ppe2tcl_hp_addr[i].paddr);
 
 			txrx_info->edma_rxdesc_cons_addr[i].paddr =
-				(uint32_t)(edma_gbl_ctx.reg_resource->start +
+				(uint32_t)(edma_gbl_ctx->reg_resource->start +
 				EDMA_REG_RXDESC_CONS_IDX(rxdesc_ring->ring_id));
 			txrx_info->edma_rxdesc_cons_addr[i].vaddr =
-				edma_gbl_ctx.reg_base +
+				edma_gbl_ctx->reg_base +
 				EDMA_REG_RXDESC_CONS_IDX(rxdesc_ring->ring_id);
 		}
 
@@ -1057,7 +1057,7 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
 	struct edma_ds_info *ds_info = &init_info.ds_info;
 	struct edma_ppeds_node_info *node_info;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t alloc_size;
 	uint32_t ring_size;
 	int ring_num;
@@ -1147,9 +1147,9 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 	 * allocate the interrupt and descrpitor only for SW managed rings.
 	 */
 	ring_num = wifi8_cfg->rxfill_ring.ring_id;
-	wifi8_cfg->rxfill_intr = edma_gbl_ctx.rxfill_info[ring_num].intr_num;
+	wifi8_cfg->rxfill_intr = edma_gbl_ctx->rxfill_info[ring_num].intr_num;
 	ring_num = wifi8_cfg->txcmpl_ring.id;
-	wifi8_cfg->txcmpl_intr = edma_gbl_ctx.txcmpl_info[ring_num].intr_num;
+	wifi8_cfg->txcmpl_intr = edma_gbl_ctx->txcmpl_info[ring_num].intr_num;
 
 	if (egc->rx_jumbo_mru)
 		alloc_size = egc->rx_jumbo_mru;
@@ -1174,7 +1174,7 @@ static bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct nss_dp_ppeds_wifi8_handle *wifi8_hdl = &ppeds_handle->wifi8_hdl;
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	bool data_ring_auto_index_en;
 	int ret;
@@ -1289,7 +1289,7 @@ static void edma_ppeds_inst_refill(nss_dp_ppeds_handle_t *ppeds_handle, int coun
 	uint32_t headroom = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
 	struct edma_rxfill_ring *rxfill_ring = &wifi8_cfg->rxfill_ring;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	uint32_t num_avail;
 
@@ -1322,7 +1322,7 @@ static bool edma_ppeds_get_ppe_queues(nss_dp_ppeds_handle_t *ppeds_handle, uint3
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
 	struct edma_ds_info *ds_info = &init_info.ds_info;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	struct edma_ppeds_node_info *node_info;
 
@@ -1353,7 +1353,7 @@ static void edma_ppeds_set_tx_prod_idx(nss_dp_ppeds_handle_t *ppeds_handle, uint
 {
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t work_to_do = 0;
 	uint32_t cons_idx;
 
@@ -1375,7 +1375,7 @@ static void edma_ppeds_set_rx_cons_idx(nss_dp_ppeds_handle_t *ppeds_handle, uint
 {
 	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t work_to_do = 0;
 	uint32_t prod_idx;
 
@@ -1462,7 +1462,7 @@ static int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	struct nss_dp_ppeds_wifi8_handle *wifi8_hdl = &ppeds_handle->wifi8_hdl;
 	struct nss_dp_ppeds_wlan_reg_data_ring_cfg *ring_info = &wifi8_hdl->data_ring.ring_info;
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_ppeds_drv *drv = &egc->ppeds_drv;
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	uint32_t data;
@@ -1588,7 +1588,7 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	struct nss_dp_ppeds_wifi8_handle *wifi8_hdl = &ppeds_handle->wifi8_hdl;
 	struct nss_dp_ppeds_wlan_reg_data_ring_cfg *ring_info = &wifi8_hdl->data_ring.ring_info;
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
-	struct edma_gbl_ctx *gbl_ctx = &edma_gbl_ctx;
+	struct edma_gbl_ctx *gbl_ctx = edma_gbl_ctx;
 	struct edma_ppeds_drv *drv = &gbl_ctx->ppeds_drv;
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	uint32_t data, i;
@@ -1736,7 +1736,7 @@ static void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 	struct nss_dp_ppeds_wifi8_handle *wifi8_hdl = &ppeds_handle->wifi8_hdl;
 	struct nss_dp_ppeds_wlan_reg_data_ring_cfg *ring_info = &wifi8_hdl->data_ring.ring_info;
 	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 
 	write_lock_bh(&drv->lock);
@@ -1806,13 +1806,13 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 {
 	int size = priv_size + sizeof(struct edma_ppeds);
 	struct edma_ds_info *ds_info = &init_info.ds_info;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_rxdesc_ring_info *rxdesc_info;
 	struct edma_rxfill_ring_info *rxfill_info;
 	struct edma_txdesc_ring_info *txdesc_info;
 	struct edma_txcmpl_ring_info *txcmpl_info;
 	struct edma_ppeds_node_info *node_info;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t i, ring_id, j;
 	struct edma_ppeds *ppeds_node;
 
@@ -1867,11 +1867,11 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 		wifi8_cfg->tx_ring[j].id = node_info->tx_map[j].tx_ring_id;
 	}
 
-	wifi8_cfg->txcmpl_intr = edma_gbl_ctx.txcmpl_info[wifi8_cfg->txcmpl_ring.id].intr_num;
-	wifi8_cfg->rxfill_intr = edma_gbl_ctx.rxfill_info[wifi8_cfg->rxfill_ring.ring_id].intr_num;
+	wifi8_cfg->txcmpl_intr = edma_gbl_ctx->txcmpl_info[wifi8_cfg->txcmpl_ring.id].intr_num;
+	wifi8_cfg->rxfill_intr = edma_gbl_ctx->rxfill_info[wifi8_cfg->rxfill_ring.ring_id].intr_num;
 
 	for (j = 0; j < node_info->num_rx_rings; j++) {
-		wifi8_cfg->rxdesc_intr[j] = edma_gbl_ctx.rxdesc_info[wifi8_cfg->rx_ring[j].ring_id].intr_num;
+		wifi8_cfg->rxdesc_intr[j] = edma_gbl_ctx->rxdesc_info[wifi8_cfg->rx_ring[j].ring_id].intr_num;
 		if (wifi8_cfg->rxdesc_intr[j] <= 0) {
 			edma_err("Invalid interrupt numbers for PPE-DS node %d: rxdesc=%d\n",
 				ppeds_node->db_idx, wifi8_cfg->rxdesc_intr[j]);

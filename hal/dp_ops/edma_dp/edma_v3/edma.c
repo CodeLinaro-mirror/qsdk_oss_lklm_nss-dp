@@ -335,16 +335,12 @@ MODULE_PARM_DESC(edma_udp_st_ring_size, "Ring size for UDP-ST TX descriptor ring
 
 DEFINE_PER_CPU(struct nss_dp_vp_ctx, g_vp_ctx);
 uint32_t edma_hang_recover = 0;
+struct edma_gbl_ctx *edma_gbl_ctx;
 
 /*
  * EDMA configuration information
  */
 struct edma_init_info init_info;
-
-/*
- * EDMA hardware instance
- */
-struct edma_gbl_ctx edma_gbl_ctx;
 
 static char edma_txcmpl_irq_name[EDMA_MAX_TXCMPL_RINGS][EDMA_IRQ_NAME_SIZE];
 static char edma_rxdesc_irq_name[EDMA_MAX_RXDESC_RINGS][EDMA_IRQ_NAME_SIZE];
@@ -515,10 +511,10 @@ static void edma_recovery_work(struct work_struct *work)
 void nss_dp_point_offload_info_get(uint32_t *txdesc_num, uint32_t *txcmpl_num,
 		uint32_t *rxfill_num, uint32_t *rxdesc_num)
 {
-	*txdesc_num = edma_gbl_ctx.txdesc_point_offload_ring;
-	*txcmpl_num = edma_gbl_ctx.txcmpl_point_offload_ring;
-	*rxfill_num = edma_gbl_ctx.rxfill_point_offload_ring;
-	*rxdesc_num = edma_gbl_ctx.rxdesc_point_offload_ring;
+	*txdesc_num = edma_gbl_ctx->txdesc_point_offload_ring;
+	*txcmpl_num = edma_gbl_ctx->txcmpl_point_offload_ring;
+	*rxfill_num = edma_gbl_ctx->rxfill_point_offload_ring;
+	*rxdesc_num = edma_gbl_ctx->rxdesc_point_offload_ring;
 }
 EXPORT_SYMBOL(nss_dp_point_offload_info_get);
 #endif
@@ -537,7 +533,7 @@ bool edma_nsm_sawf_sc_stats_read(struct nss_dp_hal_nsm_sawf_sc_stats *nsm_stats,
 		return false;
 	}
 
-	sawf_sc_stats = &edma_gbl_ctx.sawf_sc_stats[service_class];
+	sawf_sc_stats = &edma_gbl_ctx->sawf_sc_stats[service_class];
 	do {
 		start = edma_dp_stats_fetch_begin(&sawf_sc_stats->syncp);
 		nsm_stats->rx_packets = sawf_sc_stats->rx_packets;
@@ -649,6 +645,8 @@ static void edma_disable_port(void)
  */
 void edma_cleanup(bool is_dp_override)
 {
+	uint8_t profile_mask = 0;
+
 	/*
 	 * The cleanup can happen from data plane override
 	 * or from module_exit, we want to cleanup only once
@@ -656,67 +654,67 @@ void edma_cleanup(bool is_dp_override)
 	 * On cleanup, disable EDMA only at module exit time, since
 	 * NSS firmware depends on this setting.
 	 */
-	if (!edma_gbl_ctx.edma_initialized) {
+	if (!edma_gbl_ctx->edma_initialized) {
 		if (!is_dp_override) {
 			edma_disable_port();
 		}
 		return;
 	}
 
-	if (edma_gbl_ctx.ctl_table_hdr) {
-		unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
-		edma_gbl_ctx.ctl_table_hdr = NULL;
+	if (edma_gbl_ctx->ctl_table_hdr) {
+		unregister_sysctl_table(edma_gbl_ctx->ctl_table_hdr);
+		edma_gbl_ctx->ctl_table_hdr = NULL;
 	}
 
 	/*
 	 * TODO: Check with HW team about the state of in-flight
 	 * packets when the descriptor rings are disabled.
 	 */
-	edma_cfg_tx_rings_disable(&edma_gbl_ctx);
-	edma_cfg_rx_rings_disable(&edma_gbl_ctx);
+	edma_cfg_tx_rings_disable(edma_gbl_ctx);
+	edma_cfg_rx_rings_disable(edma_gbl_ctx);
 
-	edma_disable_interrupts(&edma_gbl_ctx);
+	edma_disable_interrupts(edma_gbl_ctx);
 
 	/*
 	 * Remove interrupt handlers and NAPI
 	 */
-	if (edma_gbl_ctx.napi_added) {
+	if (edma_gbl_ctx->napi_added) {
 		uint32_t i;
 
 		/*
 		 * Free IRQ for TXCMPL rings
 		 */
-		for (i = 0; i < edma_gbl_ctx.txcmpl_ring_max; i++) {
-			if (!(edma_gbl_ctx.txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+		for (i = 0; i < edma_gbl_ctx->txcmpl_ring_max; i++) {
+			if (!(edma_gbl_ctx->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 				continue;
 
-			synchronize_irq(edma_gbl_ctx.txcmpl_info[i].intr_num);
+			synchronize_irq(edma_gbl_ctx->txcmpl_info[i].intr_num);
 
-			free_irq(edma_gbl_ctx.txcmpl_info[i].intr_num,
-					(void *)(edma_gbl_ctx.txcmpl_info[i].txcmpl_ring));
+			free_irq(edma_gbl_ctx->txcmpl_info[i].intr_num,
+					(void *)(edma_gbl_ctx->txcmpl_info[i].txcmpl_ring));
 		}
 
 		/*
 		 * Free IRQ for RXDESC rings
 		 */
-		for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
-			if (!(edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+		for (i = 0; i < edma_gbl_ctx->rxdesc_ring_max; i++) {
+			if (!(edma_gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 				continue;
 
-			synchronize_irq(edma_gbl_ctx.rxdesc_info[i].intr_num);
-			free_irq(edma_gbl_ctx.rxdesc_info[i].intr_num,
-					(void *)(edma_gbl_ctx.rxdesc_info[i].rxdesc_ring));
+			synchronize_irq(edma_gbl_ctx->rxdesc_info[i].intr_num);
+			free_irq(edma_gbl_ctx->rxdesc_info[i].intr_num,
+					(void *)(edma_gbl_ctx->rxdesc_info[i].rxdesc_ring));
 		}
 
 		/*
 		 * Free Misc IRQ
 		 */
-		synchronize_irq(edma_gbl_ctx.misc_intr);
-		free_irq(edma_gbl_ctx.misc_intr, (void *)(edma_gbl_ctx.pdev));
+		synchronize_irq(edma_gbl_ctx->misc_intr);
+		free_irq(edma_gbl_ctx->misc_intr, (void *)(edma_gbl_ctx->pdev));
 
-		edma_cfg_rx_napi_delete(&edma_gbl_ctx);
-		edma_cfg_tx_napi_delete(&edma_gbl_ctx);
-		edma_gbl_ctx.napi_added = false;
+		edma_cfg_rx_napi_delete(edma_gbl_ctx);
+		edma_cfg_tx_napi_delete(edma_gbl_ctx);
+		edma_gbl_ctx->napi_added = false;
 	}
 
 	/*
@@ -730,54 +728,56 @@ void edma_cleanup(bool is_dp_override)
 	/*
 	 * cleanup rings and free
 	 */
-	edma_cfg_tx_rings_cleanup(&edma_gbl_ctx);
-	edma_cfg_rx_rings_cleanup(&edma_gbl_ctx);
+	edma_cfg_tx_rings_cleanup(edma_gbl_ctx);
+	edma_cfg_rx_rings_cleanup(edma_gbl_ctx);
 
 #ifdef NSS_DP_UDP_ST_SUPPORT
 	if (edma_udp_st_tx_ring > EDMA_RING_FLAGS_INVALID_ID) {
-		edma_cfg_tx_udp_st_ring_disable(&edma_gbl_ctx);
-		edma_cfg_tx_udp_st_ring_cleanup(&edma_gbl_ctx);
+		edma_cfg_tx_udp_st_ring_disable(edma_gbl_ctx);
+		edma_cfg_tx_udp_st_ring_cleanup(edma_gbl_ctx);
 	}
 #endif
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (edma_gbl_ctx.loopback_en) {
-		edma_cfg_tx_loopback_rings_disable(&edma_gbl_ctx);
-		edma_cfg_rx_loopback_rings_disable(&edma_gbl_ctx);
-		edma_cfg_tx_loopback_rings_cleanup(&edma_gbl_ctx);
-		edma_cfg_rx_loopback_rings_cleanup(&edma_gbl_ctx);
+	if (edma_gbl_ctx->loopback_en) {
+		edma_cfg_tx_loopback_rings_disable(edma_gbl_ctx);
+		edma_cfg_rx_loopback_rings_disable(edma_gbl_ctx);
+		edma_cfg_tx_loopback_rings_cleanup(edma_gbl_ctx);
+		edma_cfg_rx_loopback_rings_cleanup(edma_gbl_ctx);
 
 		edma_rx_free_buffer_loopback();
-		kfree(edma_gbl_ctx.txdesc_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txcmpl_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.rxdesc_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.rxfill_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txcmpl_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->rxdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->rxfill_loopback_ring_id_arr);
 	}
 #endif
 
 #ifdef NSS_DP_PPEDS_SUPPORT
-	edma_ppeds_deinit(&edma_gbl_ctx.ppeds_drv);
+	edma_ppeds_deinit(&edma_gbl_ctx->ppeds_drv);
 #endif
 
 	/*
 	 * Release EDMA HW reset reference.
 	 */
-	reset_control_put(edma_gbl_ctx.hw_rst);
+	reset_control_put(edma_gbl_ctx->hw_rst);
 
-	iounmap(edma_gbl_ctx.reg_base);
-	release_mem_region((edma_gbl_ctx.reg_resource)->start,
-			resource_size(edma_gbl_ctx.reg_resource));
+	iounmap(edma_gbl_ctx->reg_base);
+	release_mem_region((edma_gbl_ctx->reg_resource)->start,
+			resource_size(edma_gbl_ctx->reg_resource));
 
 	/*
 	 * Clean the debugfs entries for the EDMA
 	 */
 	edma_debugfs_exit();
-#if !defined(NSS_DP_MEM_PROFILE_LOW)
-	/*
-	 * Unregister PTP service code callback function
-	 */
-	ppe_drv_sc_unregister_cb(PPE_DRV_SC_PTP);
-#endif
+
+	profile_mask = NSS_DP_MEM_PROFILE_HIGH | NSS_DP_MEM_PROFILE_BALANCED;
+	if (edma_gbl_ctx->mem_profile & profile_mask) {
+		/*
+		 * Unregister PTP service code callback function
+		 */
+		ppe_drv_sc_unregister_cb(PPE_DRV_SC_PTP);
+	}
 	/*
 	 * Unregister mirror core selection API callback with PPE driver
 	 */
@@ -792,7 +792,7 @@ void edma_cleanup(bool is_dp_override)
 	 * Mark initialize false, so that we do not
 	 * try to cleanup again
 	 */
-	edma_gbl_ctx.edma_initialized = false;
+	edma_gbl_ctx->edma_initialized = false;
 }
 
 /*
@@ -1255,7 +1255,7 @@ static int edma_parse_ini(void)
 	struct edma_tx_rings_info *tx_info = &host_info->sfe_info.tx_info;
 	fal_portscheduler_resource_t cfg = {0};
 #ifdef NSS_DP_PPEDS_SUPPORT
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	uint8_t txdesc = 0, rxdesc = 0;
 #endif
 #ifdef NSS_DP_HW_GRO
@@ -1270,7 +1270,7 @@ static int edma_parse_ini(void)
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx.rx_queue_start = cfg.ucastq_start;
+	edma_gbl_ctx->rx_queue_start = cfg.ucastq_start;
 	host_info->common_info.edma_num_rxfill_rings = edma_dp_host_num_rxfill_rings;
 	host_info->common_info.edma_num_txcmpl_rings = edma_dp_host_num_txcmpl_rings;
 
@@ -1299,8 +1299,8 @@ static int edma_parse_ini(void)
 	/*
 	 * GRO setup
 	 */
-	edma_gbl_ctx.hw_gro_ctx.rx_gro_queue_start = edma_dp_gro_ppe_queue_base;
-	edma_gbl_ctx.hw_gro_ctx.rx_gro_ring_start = edma_dp_gro_rx_rings[0];
+	edma_gbl_ctx->hw_gro_ctx.rx_gro_queue_start = edma_dp_gro_ppe_queue_base;
+	edma_gbl_ctx->hw_gro_ctx.rx_gro_ring_start = edma_dp_gro_rx_rings[0];
 
 	rx_gro_info = &host_info->gro_info.rx_info;
 
@@ -1485,9 +1485,9 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	/*
 	 * Find EDMA node in device tree
 	 */
-	edma_gbl_ctx.device_node = of_find_node_by_name(NULL,
+	edma_gbl_ctx->device_node = of_find_node_by_name(NULL,
 				EDMA_DEVICE_NODE_NAME);
-	if (!edma_gbl_ctx.device_node) {
+	if (!edma_gbl_ctx->device_node) {
 		edma_err("EDMA device tree node (%s) not found\n",
 				EDMA_DEVICE_NODE_NAME);
 		return -EINVAL;
@@ -1496,18 +1496,18 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	/*
 	 * Get EDMA device node
 	 */
-	pdev = edma_gbl_ctx.pdev = of_find_device_by_node(edma_gbl_ctx.device_node);
-	if (!edma_gbl_ctx.pdev) {
+	pdev = edma_gbl_ctx->pdev = of_find_device_by_node(edma_gbl_ctx->device_node);
+	if (!edma_gbl_ctx->pdev) {
 		edma_err("Platform device for node %px(%s) not found\n",
-				edma_gbl_ctx.device_node,
-				(edma_gbl_ctx.device_node)->name);
+				edma_gbl_ctx->device_node,
+				(edma_gbl_ctx->device_node)->name);
 		return -EINVAL;
 	}
 
 	/*
 	 * Get EDMA register resource
 	 */
-	if (of_address_to_resource(edma_gbl_ctx.device_node, 0, edma_res) != 0) {
+	if (of_address_to_resource(edma_gbl_ctx->device_node, 0, edma_res) != 0) {
 		edma_err("Unable to get register address for edma device: "
 			  EDMA_DEVICE_NODE_NAME"\n");
 		return -EINVAL;
@@ -1518,7 +1518,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	 * Starting from IPQ5424 onwards, DDR size beyond 3GB is supported and we need
 	 * to configure EDMA based on the DDR size.
 	 */
-	edma_gbl_ctx.mem_size = mem_size = edma_get_ddr_size();
+	edma_gbl_ctx->mem_size = mem_size = edma_get_ddr_size();
 	if (!mem_size) {
 		edma_err("Failed to get the Memory size\n");
 		return -ENOMEM;
@@ -1537,70 +1537,70 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	/*
 	 * Get the Maximum number of RX desc rings
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxdesc-ring-max",
-                               &edma_gbl_ctx.rxdesc_ring_max) != 0) {
+	if (of_property_read_u32(edma_gbl_ctx->device_node, "qcom,rxdesc-ring-max",
+                               &edma_gbl_ctx->rxdesc_ring_max) != 0) {
                edma_err("Unable to read the Max RX desc rings \n");
 		return -EINVAL;
         }
 
-	edma_err("RX desc ring max: %d\n", edma_gbl_ctx.rxdesc_ring_max);
+	edma_err("RX desc ring max: %d\n", edma_gbl_ctx->rxdesc_ring_max);
 
 	/*
 	 * Get the Maximum number of RX fill rings
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxfill-ring-max",
-                               &edma_gbl_ctx.rxfill_ring_max) != 0) {
+	if (of_property_read_u32(edma_gbl_ctx->device_node, "qcom,rxfill-ring-max",
+                               &edma_gbl_ctx->rxfill_ring_max) != 0) {
                edma_err("Unable to read the Max RX fill rings \n");
 		return -EINVAL;
         }
 
-	 edma_err("RX fill ring max: %d\n", edma_gbl_ctx.rxfill_ring_max);
+	 edma_err("RX fill ring max: %d\n", edma_gbl_ctx->rxfill_ring_max);
 
 	/*
 	 * Get the Maximum number of TX desc rings
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txdesc-ring-max",
-                               &edma_gbl_ctx.txdesc_ring_max) != 0) {
+	if (of_property_read_u32(edma_gbl_ctx->device_node, "qcom,txdesc-ring-max",
+                               &edma_gbl_ctx->txdesc_ring_max) != 0) {
                edma_err("Unable to read the Max TX desc rings \n");
 		return -EINVAL;
         }
 
-	edma_err("TX desc ring max: %d\n", edma_gbl_ctx.txdesc_ring_max);
+	edma_err("TX desc ring max: %d\n", edma_gbl_ctx->txdesc_ring_max);
 
 	/*
 	 * Get the Maximum number of TX cmpl rings
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txcomp-ring-max",
-                               &edma_gbl_ctx.txcmpl_ring_max) != 0) {
+	if (of_property_read_u32(edma_gbl_ctx->device_node, "qcom,txcomp-ring-max",
+                               &edma_gbl_ctx->txcmpl_ring_max) != 0) {
                edma_err("Unable to read the Max TX comp rings \n");
 		return -EINVAL;
         }
 
-	edma_err("TX completion ring max: %d\n", edma_gbl_ctx.txcmpl_ring_max);
+	edma_err("TX completion ring max: %d\n", edma_gbl_ctx->txcmpl_ring_max);
 
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	if (dp_global_ctx.is_mht_dev) {
-		if (of_property_read_u32(edma_gbl_ctx.device_node,
+		if (of_property_read_u32(edma_gbl_ctx->device_node,
 					"qcom,mht-txdesc-rings",
-					&edma_gbl_ctx.mht_tx_ports) != 0) {
+					&edma_gbl_ctx->mht_tx_ports) != 0) {
 			edma_err("Unable to read number of mht txdesc rings.\n");
 			return -EINVAL;
 		}
-		edma_gbl_ctx.num_txdesc_rings += edma_gbl_ctx.mht_tx_ports;
+		edma_gbl_ctx->num_txdesc_rings += edma_gbl_ctx->mht_tx_ports;
 	} else {
-		edma_gbl_ctx.mht_tx_ports = 0;
+		edma_gbl_ctx->mht_tx_ports = 0;
 	}
 
 	if (dp_global_ctx.is_mht_dev) {
-		if (of_property_read_u32(edma_gbl_ctx.device_node,
+		if (of_property_read_u32(edma_gbl_ctx->device_node,
 					"qcom,mht-txcmpl-rings",
-					&edma_gbl_ctx.mht_txcmpl_ports) != 0) {
+					&edma_gbl_ctx->mht_txcmpl_ports) != 0) {
 			edma_err("Unable to read number of mht txcmpl rings.\n");
 			return -EINVAL;
 		}
-		edma_gbl_ctx.num_txcmpl_rings += edma_gbl_ctx.mht_txcmpl_ports;
+		edma_gbl_ctx->num_txcmpl_rings += edma_gbl_ctx->mht_txcmpl_ports;
 	} else {
-		edma_gbl_ctx.mht_txcmpl_ports = 0;
+		edma_gbl_ctx->mht_txcmpl_ports = 0;
 	}
 #endif
 
@@ -1608,54 +1608,53 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	 * Get page_mode of RXFILL rings
 	 * TODO: Move this setting to DP common node
 	 */
-#if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
-	of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rx-page-mode",
-						&edma_gbl_ctx.rx_page_mode);
-#endif
+	if (edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_HIGH)
+		of_property_read_u32(edma_gbl_ctx->device_node, "qcom,rx-page-mode",
+						&edma_gbl_ctx->rx_page_mode);
 
 	/*
 	 * Get Tx Map priority level
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node, "qcom,tx-map-priority-level",
-					&edma_gbl_ctx.tx_priority_level) != 0) {
+	if (of_property_read_u32(edma_gbl_ctx->device_node, "qcom,tx-map-priority-level",
+					&edma_gbl_ctx->tx_priority_level) != 0) {
 		edma_err("Unable to read Tx map priority level.\n");
 		return -EINVAL;
 	}
 
-	if (edma_gbl_ctx.tx_priority_level > EDMA_TX_MAX_PRIORITY_LEVEL) {
+	if (edma_gbl_ctx->tx_priority_level > EDMA_TX_MAX_PRIORITY_LEVEL) {
 		edma_err("Invalid tx priority value (%d), maximum possible"
-				" priority value is %u\n", edma_gbl_ctx.tx_priority_level,
+				" priority value is %u\n", edma_gbl_ctx->tx_priority_level,
 				EDMA_TX_MAX_PRIORITY_LEVEL);
 		return -EINVAL;
 	}
-	edma_debug("tx map priority level: %d\n", edma_gbl_ctx.tx_priority_level);
+	edma_debug("tx map priority level: %d\n", edma_gbl_ctx->tx_priority_level);
 
 	/*
 	 * Get Rx Map priority level
 	 */
-	if (of_property_read_u32(edma_gbl_ctx.device_node,
+	if (of_property_read_u32(edma_gbl_ctx->device_node,
 					"qcom,rx-map-priority-level",
-					&edma_gbl_ctx.rx_priority_level) != 0) {
+					&edma_gbl_ctx->rx_priority_level) != 0) {
 		edma_err("Unable to read Rx map priority level.\n");
 		return -EINVAL;
 	}
 
-	if (edma_gbl_ctx.rx_priority_level > EDMA_RX_MAX_PRIORITY_LEVEL) {
+	if (edma_gbl_ctx->rx_priority_level > EDMA_RX_MAX_PRIORITY_LEVEL) {
 		edma_err("Invalid tx priority value (%d), maximum possible"
 				" priority value is %u\n",
-				edma_gbl_ctx.rx_priority_level,
+				edma_gbl_ctx->rx_priority_level,
 				EDMA_RX_MAX_PRIORITY_LEVEL);
 		return -EINVAL;
 	}
 	edma_debug("rx map priority level: %d\n",
-				edma_gbl_ctx.rx_priority_level);
+				edma_gbl_ctx->rx_priority_level);
 
 	/*
 	 * Get TXDESC flow control Group ID Map
 	 */
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node,
+	ret = of_property_read_u32_array(edma_gbl_ctx->device_node,
 			"qcom,txdesc-fc-grp-map",
-			(int32_t *)edma_gbl_ctx.tx_fc_grp_map, EDMA_MAX_FC_GRP);
+			(int32_t *)edma_gbl_ctx->tx_fc_grp_map, EDMA_MAX_FC_GRP);
 	if (ret) {
 		edma_err("Unable to read TxDesc-Fc-Grp map array. \
 				ret: %d\n", ret);
@@ -1663,25 +1662,25 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	}
 
 #if defined(NSS_DP_POINT_OFFLOAD)
-	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txdesc_point_offload_ring", &edma_gbl_ctx.txdesc_point_offload_ring);
+	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,txdesc_point_offload_ring", &edma_gbl_ctx->txdesc_point_offload_ring);
 	if (ret) {
 		edma_err("Unable to parse Tx point offload ring with err: %d\n", ret);
 		return -EINVAL;
 	}
 
-	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,txcmpl_point_offload_ring", &edma_gbl_ctx.txcmpl_point_offload_ring);
+	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,txcmpl_point_offload_ring", &edma_gbl_ctx->txcmpl_point_offload_ring);
 	if (ret) {
 		edma_err("Unable to read Tx completion point offload ring with err: %d\n", ret);
 		return -EINVAL;
 	}
 
-	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxfill_point_offload_ring", &edma_gbl_ctx.rxfill_point_offload_ring);
+	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,rxfill_point_offload_ring", &edma_gbl_ctx->rxfill_point_offload_ring);
 	if (ret) {
 		edma_err("Unable to read RX fill point offload ring with err: %d\n", ret);
 		return -EINVAL;
 	}
 
-	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,rxdesc_point_offload_ring", &edma_gbl_ctx.rxdesc_point_offload_ring);
+	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,rxdesc_point_offload_ring", &edma_gbl_ctx->rxdesc_point_offload_ring);
 	if (ret) {
 		edma_err("Unable to read RX desc point offload ring with err: %d\n", ret);
 		return -EINVAL;
@@ -1699,7 +1698,7 @@ static int edma_of_get_pdata(struct resource *edma_res)
 	 * Check in dts file whether any loopback ring feature enabled by default.
 	 */
 	if (edma_loopback_feature_type == PPE_DRV_LOOPBACK_FEATURE_TYPE_DEFAULT) {
-		ddr_ext_upstream = of_property_read_bool(edma_gbl_ctx.device_node, "qcom,loopback_ext_ddr_upstream");
+		ddr_ext_upstream = of_property_read_bool(edma_gbl_ctx->device_node, "qcom,loopback_ext_ddr_upstream");
 		if (ddr_ext_upstream) {
 			loopback_feature_type |= PPE_DRV_LOOPBACK_FEATURE_TYPE_EXT_DDR_UPSTREAM;
 		}
@@ -1729,76 +1728,76 @@ static int edma_of_get_pdata(struct resource *edma_res)
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx.loopback_en = true;
-	edma_gbl_ctx.loopback_feature_type = loopback_feature_type;
+	edma_gbl_ctx->loopback_en = true;
+	edma_gbl_ctx->loopback_feature_type = loopback_feature_type;
 
-	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,num_loopback_rings", &edma_gbl_ctx.num_loopback_rings);
+	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,num_loopback_rings", &edma_gbl_ctx->num_loopback_rings);
 	if (ret) {
 		edma_err("Unable to read edma loopback buf size with err: %d\n", ret);
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx.txdesc_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx.num_loopback_rings, GFP_KERNEL);
-	if (!edma_gbl_ctx.txdesc_loopback_ring_id_arr) {
+	edma_gbl_ctx->txdesc_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	if (!edma_gbl_ctx->txdesc_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for txdesc loopback ring_id\n");
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx.txcmpl_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx.num_loopback_rings, GFP_KERNEL);
-	if (!edma_gbl_ctx.txcmpl_loopback_ring_id_arr) {
+	edma_gbl_ctx->txcmpl_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	if (!edma_gbl_ctx->txcmpl_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for txcmpl loopback ring_id\n");
-		kfree(edma_gbl_ctx.txdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx.rxdesc_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx.num_loopback_rings, GFP_KERNEL);
-	if (!edma_gbl_ctx.rxdesc_loopback_ring_id_arr) {
+	edma_gbl_ctx->rxdesc_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	if (!edma_gbl_ctx->rxdesc_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for rxdesc loopback ring_id\n");
-		kfree(edma_gbl_ctx.txdesc_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txcmpl_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txcmpl_loopback_ring_id_arr);
 		return -EINVAL;
 	}
 
-	edma_gbl_ctx.rxfill_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx.num_loopback_rings, GFP_KERNEL);
-	if (!edma_gbl_ctx.rxfill_loopback_ring_id_arr) {
+	edma_gbl_ctx->rxfill_loopback_ring_id_arr = kmalloc(sizeof(uint8_t) * edma_gbl_ctx->num_loopback_rings, GFP_KERNEL);
+	if (!edma_gbl_ctx->rxfill_loopback_ring_id_arr) {
 		edma_err("Unable to allocate memory for rxfill loopback ring_id\n");
-		kfree(edma_gbl_ctx.rxdesc_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txcmpl_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->rxdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txcmpl_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
 		return -EINVAL;
 	}
 
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node, "qcom,txdesc_loopback_ring_id", (int32_t *)edma_gbl_ctx.txdesc_loopback_ring_id_arr, edma_gbl_ctx.num_loopback_rings);
+	ret = of_property_read_u32_array(edma_gbl_ctx->device_node, "qcom,txdesc_loopback_ring_id", (int32_t *)edma_gbl_ctx->txdesc_loopback_ring_id_arr, edma_gbl_ctx->num_loopback_rings);
 	if (ret) {
 		edma_err("Unable to read txdesc loopback_ring_id map array. ret: %d\n", ret);
 		goto fail;
 	}
 
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node, "qcom,txcmpl_loopback_ring_id", (int32_t *)edma_gbl_ctx.txcmpl_loopback_ring_id_arr, edma_gbl_ctx.num_loopback_rings);
+	ret = of_property_read_u32_array(edma_gbl_ctx->device_node, "qcom,txcmpl_loopback_ring_id", (int32_t *)edma_gbl_ctx->txcmpl_loopback_ring_id_arr, edma_gbl_ctx->num_loopback_rings);
 	if (ret) {
 		edma_err("Unable to read txcmpl loopback_ring_id map array. ret: %d\n", ret);
 		goto fail;
 	}
 
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node, "qcom,rxdesc_loopback_ring_id", (int32_t *)edma_gbl_ctx.rxdesc_loopback_ring_id_arr, edma_gbl_ctx.num_loopback_rings);
+	ret = of_property_read_u32_array(edma_gbl_ctx->device_node, "qcom,rxdesc_loopback_ring_id", (int32_t *)edma_gbl_ctx->rxdesc_loopback_ring_id_arr, edma_gbl_ctx->num_loopback_rings);
 	if (ret) {
 		edma_err("Unable to read rxdesc loopback_ring_id map array. ret: %d\n", ret);
 		goto fail;
 	}
 
-	ret = of_property_read_u32_array(edma_gbl_ctx.device_node, "qcom,rxfill_loopback_ring_id", (int32_t *)edma_gbl_ctx.rxfill_loopback_ring_id_arr, edma_gbl_ctx.num_loopback_rings);
+	ret = of_property_read_u32_array(edma_gbl_ctx->device_node, "qcom,rxfill_loopback_ring_id", (int32_t *)edma_gbl_ctx->rxfill_loopback_ring_id_arr, edma_gbl_ctx->num_loopback_rings);
 	if (ret) {
 		edma_err("Unable to read rxfill loopback_ring_id map array. ret: %d\n", ret);
 		goto fail;
 	}
 
-	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,loopback_queue_base", &edma_gbl_ctx.loopback_queue_base);
+	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,loopback_queue_base", &edma_gbl_ctx->loopback_queue_base);
 	if (ret) {
 		edma_err("Unable to read loopback_queue_base ret: %d\n", ret);
 		goto fail;
 	}
 
-	ret = of_property_read_u32(edma_gbl_ctx.device_node, "qcom,loopback_num_queues", &edma_gbl_ctx.loopback_num_queues);
+	ret = of_property_read_u32(edma_gbl_ctx->device_node, "qcom,loopback_num_queues", &edma_gbl_ctx->loopback_num_queues);
 	if (ret) {
 		edma_err("Unable to read loopback_queue_num_queues ret: %d\n", ret);
 		goto fail;
@@ -1808,24 +1807,24 @@ skip_loopback:
 #endif
 
 #ifdef NSS_DP_PPEDS_SUPPORT
-	edma_gbl_ctx.ppeds_drv.num_nodes = EDMA_PPEDS_MAX_NODES;
-	edma_debug("PPE-DS num nodes: %d\n", edma_gbl_ctx.ppeds_drv.num_nodes);
+	edma_gbl_ctx->ppeds_drv.num_nodes = EDMA_PPEDS_MAX_NODES;
+	edma_debug("PPE-DS num nodes: %d\n", edma_gbl_ctx->ppeds_drv.num_nodes);
 #endif
 
 #if defined(NSS_DP_POINT_OFFLOAD)
-	if (edma_gbl_ctx.ppeds_drv.num_nodes == EDMA_PPEDS_MAX_NODES) {
+	if (edma_gbl_ctx->ppeds_drv.num_nodes == EDMA_PPEDS_MAX_NODES) {
 		/*
 		 * Only enable EDMA_PPEDS_MAX_NODES - 1 PPE-DS nodes when the
 		 * point offload feature is enabled (because one pair of EDMA
 		 * Rx/Tx rings will be shared between the point offload feature
 		 * and the PPE-DS feature).
 		 */
-		edma_gbl_ctx.ppeds_drv.num_nodes = EDMA_PPEDS_MAX_NODES - 1;
+		edma_gbl_ctx->ppeds_drv.num_nodes = EDMA_PPEDS_MAX_NODES - 1;
 		edma_warn("Error: PPE node count is %d when point offload is enabled.",
 				 EDMA_PPEDS_MAX_NODES);
 	}
 #elif defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (edma_gbl_ctx.loopback_en && (edma_gbl_ctx.ppeds_drv.num_nodes == EDMA_PPEDS_MAX_NODES)) {
+	if (edma_gbl_ctx->loopback_en && (edma_gbl_ctx->ppeds_drv.num_nodes == EDMA_PPEDS_MAX_NODES)) {
 		edma_err("Error: PPE node count is %d when loopback is enabled.",
 				 EDMA_PPEDS_MAX_NODES);
 		goto fail;
@@ -1836,11 +1835,11 @@ skip_loopback:
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 fail:
-	if (edma_gbl_ctx.loopback_en) {
-		kfree(edma_gbl_ctx.rxfill_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.rxdesc_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txcmpl_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txdesc_loopback_ring_id_arr);
+	if (edma_gbl_ctx->loopback_en) {
+		kfree(edma_gbl_ctx->rxfill_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->rxdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txcmpl_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
 	}
 #endif
 
@@ -2058,7 +2057,7 @@ void edma_configure_rps_hash_map(struct edma_gbl_ctx *egc)
  */
 void edma_configure_mirror_pkt_capture_core(uint8_t core_id, void *app_data)
 {
-	edma_cfg_rx_mcast_qid_to_core_mapping(&edma_gbl_ctx, core_id);
+	edma_cfg_rx_mcast_qid_to_core_mapping(edma_gbl_ctx, core_id);
 }
 
 /*
@@ -2602,7 +2601,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 #endif
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (edma_gbl_ctx.loopback_en) {
+	if (edma_gbl_ctx->loopback_en) {
 		egc->loopback_ring_size = dp_global_ctx.edma_loopback_ring_size;
 		egc->loopback_buf_size = dp_global_ctx.edma_loopback_buffer_size;
 
@@ -2672,7 +2671,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
  */
 static int32_t edma_configure_clocks(void)
 {
-	struct platform_device *pdev = edma_gbl_ctx.pdev;
+	struct platform_device *pdev = edma_gbl_ctx->pdev;
 	int32_t err;
 
 	/*
@@ -2724,12 +2723,12 @@ int edma_rx_gro_max_timeout_cfg(struct ctl_table *table, int write,
 		return ret;
 	}
 
-	if (edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs > EDMA_RX_GRO_TIMEOUT_MAX) {
-    		edma_err("GRO timeout %d exceeds max %d\n", edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs, EDMA_RX_GRO_TIMEOUT_MAX);
+	if (edma_gbl_ctx->hw_gro_ctx.gro_timeout_usecs > EDMA_RX_GRO_TIMEOUT_MAX) {
+    		edma_err("GRO timeout %d exceeds max %d\n", edma_gbl_ctx->hw_gro_ctx.gro_timeout_usecs, EDMA_RX_GRO_TIMEOUT_MAX);
 		return -EINVAL;
 	}
 
-	ret = edma_rx_gro_timeout_configure(&edma_gbl_ctx.hw_gro_ctx);
+	ret = edma_rx_gro_timeout_configure(&edma_gbl_ctx->hw_gro_ctx);
 	if (ret) {
 		edma_err("Failed to configure GRO timeout: %d\n", ret);
 		return ret;
@@ -2753,12 +2752,12 @@ int edma_rx_gro_max_buffer_len_cfg(struct ctl_table *table, int write,
 		return ret;
 	}
 
-	if (edma_gbl_ctx.hw_gro_ctx.gro_buffer_len >  EDMA_RX_GRO_BUFFER_LEN_MAX) {
-		edma_debug("%p: gro buffer len more than max buffer length supported\n", &edma_gbl_ctx, edma_gbl_ctx.hw_gro_ctx.gro_buffer_len);
+	if (edma_gbl_ctx->hw_gro_ctx.gro_buffer_len >  EDMA_RX_GRO_BUFFER_LEN_MAX) {
+		edma_debug("%p: gro buffer len more than max buffer length supported\n", edma_gbl_ctx, edma_gbl_ctx->hw_gro_ctx.gro_buffer_len);
 		return -1;
 	}
 
-	ret = edma_rx_gro_buffer_len_configure(&edma_gbl_ctx.hw_gro_ctx);
+	ret = edma_rx_gro_buffer_len_configure(&edma_gbl_ctx->hw_gro_ctx);
 	if (ret) {
 		edma_err("Failed to configure GRO buffer len: %d\n", ret);
 		return ret;
@@ -2783,12 +2782,12 @@ int edma_rx_gro_max_desc_count_cfg(struct ctl_table *table, int write,
 		return ret;
 	}
 
-	if (edma_gbl_ctx.hw_gro_ctx.gro_desc_count > EDMA_RX_GRO_DESC_COUNT_MAX) {
-		edma_debug("%p: gro desc count more than max desc count supported\n", &edma_gbl_ctx, edma_gbl_ctx.hw_gro_ctx.gro_desc_count);
+	if (edma_gbl_ctx->hw_gro_ctx.gro_desc_count > EDMA_RX_GRO_DESC_COUNT_MAX) {
+		edma_debug("%p: gro desc count more than max desc count supported\n", edma_gbl_ctx, edma_gbl_ctx->hw_gro_ctx.gro_desc_count);
 		return -1;
 	}
 
-	ret = edma_rx_gro_desc_count_configure(&edma_gbl_ctx.hw_gro_ctx);
+	ret = edma_rx_gro_desc_count_configure(&edma_gbl_ctx->hw_gro_ctx);
 	if (ret) {
 		edma_err("Failed to configure GRO desc count: %d\n", ret);
 		return ret;
@@ -2856,21 +2855,21 @@ static struct ctl_table edma_sub[] = {
 #ifdef NSS_DP_HW_GRO
 	{
 		.procname	=	"gro_timeout",
-		.data		=	&edma_gbl_ctx.hw_gro_ctx.gro_timeout_usecs,
+		.data		=	NULL,
 		.maxlen		=	sizeof(int),
 		.mode		=	0644,
 		.proc_handler	=	edma_rx_gro_max_timeout_cfg
 	},
 	{
 		.procname       =       "gro_buffer_len",
-		.data           =       &edma_gbl_ctx.hw_gro_ctx.gro_buffer_len,
+		.data           =       NULL,
 		.maxlen         =       sizeof(int),
 		.mode           =       0644,
 		.proc_handler   =       edma_rx_gro_max_buffer_len_cfg
 	},
 	{
 		.procname       =       "gro_desc_count",
-		.data           =       &edma_gbl_ctx.hw_gro_ctx.gro_desc_count,
+		.data           =       NULL,
 		.maxlen         =       sizeof(int),
 		.mode           =       0644,
 		.proc_handler   =       edma_rx_gro_max_desc_count_cfg
@@ -2902,14 +2901,14 @@ int edma_init(void)
 	struct edma_rx_rings_info *rx_info;
 	int min;
 
-	edma_gbl_ctx.hw_init_bitmap = 0;
-	edma_gbl_ctx.clk_init_bitmap = 0;
+	edma_gbl_ctx->hw_init_bitmap = 0;
+	edma_gbl_ctx->clk_init_bitmap = 0;
 	edma_set_init_stage(EDMA_INIT_STAGE_CTX_ALLOC);
 
 	/*
 	 * Check the EDMA state
 	 */
-	if (likely(edma_gbl_ctx.edma_initialized)) {
+	if (likely(edma_gbl_ctx->edma_initialized)) {
 		edma_debug("EDMA is already initialized");
 		return 0;
 	}
@@ -2923,8 +2922,23 @@ int edma_init(void)
 	}
 	edma_set_init_stage(EDMA_INIT_STAGE_DTS_PARSED);
 
-	edma_gbl_ctx.ctl_table_hdr = register_sysctl("net/edma", edma_sub);
-	if (!edma_gbl_ctx.ctl_table_hdr) {
+#ifdef NSS_DP_HW_GRO
+	{
+		struct ctl_table *entry;
+
+		for (entry = edma_sub; entry->procname; entry++) {
+			if (!strcmp(entry->procname, "gro_timeout"))
+				entry->data = &edma_gbl_ctx->hw_gro_ctx.gro_timeout_usecs;
+			else if (!strcmp(entry->procname, "gro_buffer_len"))
+				entry->data = &edma_gbl_ctx->hw_gro_ctx.gro_buffer_len;
+			else if (!strcmp(entry->procname, "gro_desc_count"))
+				entry->data = &edma_gbl_ctx->hw_gro_ctx.gro_desc_count;
+		}
+	}
+#endif
+
+	edma_gbl_ctx->ctl_table_hdr = register_sysctl("net/edma", edma_sub);
+	if (!edma_gbl_ctx->ctl_table_hdr) {
 		edma_err("sysctl table configuration failed");
 		return -EINVAL;
 	}
@@ -2933,13 +2947,13 @@ int edma_init(void)
 	/*
 	 * Request memory region for EDMA registers
 	 */
-	edma_gbl_ctx.reg_resource = request_mem_region(res_edma.start,
+	edma_gbl_ctx->reg_resource = request_mem_region(res_edma.start,
 				resource_size(&res_edma),
 				EDMA_DEVICE_NODE_NAME);
-	if (!edma_gbl_ctx.reg_resource) {
+	if (!edma_gbl_ctx->reg_resource) {
 		edma_err("Unable to request EDMA register memory.\n");
-		unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
-		edma_gbl_ctx.ctl_table_hdr = NULL;
+		unregister_sysctl_table(edma_gbl_ctx->ctl_table_hdr);
+		edma_gbl_ctx->ctl_table_hdr = NULL;
 		return -EFAULT;
 	}
 	edma_set_init_stage(EDMA_INIT_STAGE_MEM_REGION_REQ);
@@ -2956,9 +2970,9 @@ int edma_init(void)
 	/*
 	 * Remap register resource
 	 */
-	edma_gbl_ctx.reg_base = ioremap((edma_gbl_ctx.reg_resource)->start,
-			resource_size(edma_gbl_ctx.reg_resource));
-	if (!edma_gbl_ctx.reg_base) {
+	edma_gbl_ctx->reg_base = ioremap((edma_gbl_ctx->reg_resource)->start,
+			resource_size(edma_gbl_ctx->reg_resource));
+	if (!edma_gbl_ctx->reg_base) {
 		edma_err("Unable to remap EDMA register memory.\n");
 		ret = -EFAULT;
 		goto edma_init_remap_fail;
@@ -2977,7 +2991,7 @@ int edma_init(void)
 	edma_set_init_stage(EDMA_INIT_STAGE_DEBUGFS_INIT);
 
 #ifdef NSS_DP_PPEDS_SUPPORT
-	if (edma_ppeds_init(&edma_gbl_ctx.ppeds_drv) != 0) {
+	if (edma_ppeds_init(&edma_gbl_ctx->ppeds_drv) != 0) {
 		edma_err("Error in edma ppeds initialization\n");
 		ret = -EFAULT;
 		goto edma_init_ppeds_init_fail;
@@ -3001,17 +3015,19 @@ int edma_init(void)
 
 	edma_info("EDMA common clocks are configured\n");
 
-	if (edma_hw_init(&edma_gbl_ctx) != 0) {
+	if (edma_hw_init(edma_gbl_ctx) != 0) {
 		edma_err("Error in edma initialization\n");
 		ret = -EFAULT;
 		goto edma_hw_init_fail;
 	}
-#if !defined(NSS_DP_MEM_PROFILE_LOW)
-	/*
-	 * Register PTP service code callback function
-	 */
-	ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_tstamp_buf, NULL);
-#endif
+
+	if (!(edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_OPTIMIZED)) {
+		/*
+		 * Register PTP service code callback function
+		 */
+		ppe_drv_sc_register_cb(PPE_DRV_SC_PTP, edma_rx_tstamp_buf, NULL);
+	}
+
 	/*
 	 * Register mirror core selection API callback with PPE driver
 	 */
@@ -3020,14 +3036,14 @@ int edma_init(void)
 	/*
 	 * We add NAPIs and register IRQs at the time of the first netdev open
 	 */
-	edma_gbl_ctx.napi_added = false;
+	edma_gbl_ctx->napi_added = false;
 
 #ifdef NSS_DP_HW_GRO
 	/*
 	 * GRO ring to queue mapping
 	 */
 	for (i = 0; i < edma_dp_gro_num_rx_rings; i++) {
-		queue_start = edma_gbl_ctx.hw_gro_ctx.rx_gro_queue_start;
+		queue_start = edma_gbl_ctx->hw_gro_ctx.rx_gro_queue_start;
 		ppe_drv_gro_core2queue_mapping(i, queue_start + i);
 	}
 #endif
@@ -3047,7 +3063,7 @@ int edma_init(void)
 	}
 
 	for (i = 0; i < min; i++) {
-		queue_start = edma_gbl_ctx.rx_queue_start + rx_info->rx_map[i].ppe_queue_base;
+		queue_start = edma_gbl_ctx->rx_queue_start + rx_info->rx_map[i].ppe_queue_base;
 		ppe_drv_core2queue_mapping(i, queue_start);
 	}
 
@@ -3055,8 +3071,8 @@ int edma_init(void)
 	 * Configure loopback
 	 */
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (edma_gbl_ctx.loopback_en) {
-		ppe_drv_loopback_base_queue(edma_gbl_ctx.loopback_queue_base, edma_gbl_ctx.loopback_feature_type);
+	if (edma_gbl_ctx->loopback_en) {
+		ppe_drv_loopback_base_queue(edma_gbl_ctx->loopback_queue_base, edma_gbl_ctx->loopback_feature_type);
 	}
 #endif
 
@@ -3076,7 +3092,7 @@ int edma_init(void)
          * which will trigger the edma_hang_recovery_and_reg_dump user script using call_usermodehelper function.
          */
         if(nss_dp_recovery_en){
-                INIT_WORK(&edma_gbl_ctx.work, edma_recovery_work);
+                INIT_WORK(&edma_gbl_ctx->work, edma_recovery_work);
         }
 
 	for_each_online_cpu(cpu) {
@@ -3094,19 +3110,19 @@ int edma_init(void)
 
 edma_hw_init_fail:
 #ifdef NSS_DP_PPEDS_SUPPORT
-	edma_ppeds_deinit(&edma_gbl_ctx.ppeds_drv);
+	edma_ppeds_deinit(&edma_gbl_ctx->ppeds_drv);
 edma_init_ppeds_init_fail:
 #endif
 	edma_debugfs_exit();
 
 edma_debugfs_init_fail:
-	iounmap(edma_gbl_ctx.reg_base);
+	iounmap(edma_gbl_ctx->reg_base);
 
 edma_init_remap_fail:
-	release_mem_region((edma_gbl_ctx.reg_resource)->start,
-			resource_size(edma_gbl_ctx.reg_resource));
-	unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
-	edma_gbl_ctx.ctl_table_hdr = NULL;
+	release_mem_region((edma_gbl_ctx->reg_resource)->start,
+			resource_size(edma_gbl_ctx->reg_resource));
+	unregister_sysctl_table(edma_gbl_ctx->ctl_table_hdr);
+	edma_gbl_ctx->ctl_table_hdr = NULL;
 
 edma_parse_ini_fail:
 	return ret;
@@ -3121,77 +3137,77 @@ int edma_irq_init(void)
 	int err;
 	uint32_t entry_num, i;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
-	uint32_t num_txcmpl_rings = edma_gbl_ctx.num_txcmpl_rings -
-					edma_gbl_ctx.mht_txcmpl_ports;
+	uint32_t num_txcmpl_rings = edma_gbl_ctx->num_txcmpl_rings -
+					edma_gbl_ctx->mht_txcmpl_ports;
 	uint32_t ppeds_nodes = 0;
 #endif
-	struct device *dev = &edma_gbl_ctx.pdev->dev;
+	struct device *dev = &edma_gbl_ctx->pdev->dev;
 
 	/*
 	 * Get TXCMPL rings IRQ numbers
 	 */
 	entry_num = of_property_match_string(dev->of_node, "interrupt-names", "txcmpl_0");
-	for (i = 0; i < edma_gbl_ctx.txcmpl_ring_max; i++, entry_num++) {
-		edma_gbl_ctx.txcmpl_info[i].intr_num =
-			platform_get_irq(edma_gbl_ctx.pdev, entry_num);
-		if (edma_gbl_ctx.txcmpl_info[i].intr_num < 0) {
+	for (i = 0; i < edma_gbl_ctx->txcmpl_ring_max; i++, entry_num++) {
+		edma_gbl_ctx->txcmpl_info[i].intr_num =
+			platform_get_irq(edma_gbl_ctx->pdev, entry_num);
+		if (edma_gbl_ctx->txcmpl_info[i].intr_num < 0) {
 			edma_err("%s: txcmpl_intr[%u] irq get failed\n",
-					(edma_gbl_ctx.device_node)->name, i);
+					(edma_gbl_ctx->device_node)->name, i);
 			return -1;
 		}
 
 		edma_debug("%s: txcmpl_intr[%u] = %u\n",
-				 (edma_gbl_ctx.device_node)->name,
-				 i, edma_gbl_ctx.txcmpl_info[i].intr_num);
+				 (edma_gbl_ctx->device_node)->name,
+				 i, edma_gbl_ctx->txcmpl_info[i].intr_num);
 	}
 
 	/*
 	 * Get RXDESC rings IRQ numbers
 	 */
 	entry_num = of_property_match_string(dev->of_node, "interrupt-names", "rxdesc_0");
-	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++, entry_num++) {
-		edma_gbl_ctx.rxdesc_info[i].intr_num =
-			platform_get_irq(edma_gbl_ctx.pdev, entry_num);
-		if (edma_gbl_ctx.rxdesc_info[i].intr_num < 0) {
+	for (i = 0; i < edma_gbl_ctx->rxdesc_ring_max; i++, entry_num++) {
+		edma_gbl_ctx->rxdesc_info[i].intr_num =
+			platform_get_irq(edma_gbl_ctx->pdev, entry_num);
+		if (edma_gbl_ctx->rxdesc_info[i].intr_num < 0) {
 			edma_err("%s: rxdesc_intr[%u] irq get failed\n",
-					(edma_gbl_ctx.device_node)->name, i);
+					(edma_gbl_ctx->device_node)->name, i);
 			return -1;
 		}
 
 		edma_debug("%s: rxdesc_intr[%u] = %u\n",
-				 (edma_gbl_ctx.device_node)->name,
-				 i, edma_gbl_ctx.rxdesc_info[i].intr_num);
+				 (edma_gbl_ctx->device_node)->name,
+				 i, edma_gbl_ctx->rxdesc_info[i].intr_num);
 	}
 
 	/*
 	 * Get misc IRQ number
 	 */
 	entry_num = of_property_match_string(dev->of_node, "interrupt-names", "misc_err");
-	edma_gbl_ctx.misc_intr = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
-	if (edma_gbl_ctx.misc_intr < 0) {
-		edma_err("%s: misc_intr irq get failed\n", (edma_gbl_ctx.device_node)->name);
+	edma_gbl_ctx->misc_intr = platform_get_irq(edma_gbl_ctx->pdev, entry_num);
+	if (edma_gbl_ctx->misc_intr < 0) {
+		edma_err("%s: misc_intr irq get failed\n", (edma_gbl_ctx->device_node)->name);
 		return -1;
 	}
 
-	edma_debug("%s: misc IRQ:%u\n", (edma_gbl_ctx.device_node)->name,
-						edma_gbl_ctx.misc_intr);
+	edma_debug("%s: misc IRQ:%u\n", (edma_gbl_ctx->device_node)->name,
+						edma_gbl_ctx->misc_intr);
 
 	/*
 	 * Get RXFILL rings IRQ numbers
 	 */
 
 	entry_num = of_property_match_string(dev->of_node, "interrupt-names", "rxfill_0");
-	for (i = 0; i < edma_gbl_ctx.rxfill_ring_max; i++) {
-		edma_gbl_ctx.rxfill_info[i].intr_num = platform_get_irq(edma_gbl_ctx.pdev, entry_num);
+	for (i = 0; i < edma_gbl_ctx->rxfill_ring_max; i++) {
+		edma_gbl_ctx->rxfill_info[i].intr_num = platform_get_irq(edma_gbl_ctx->pdev, entry_num);
 		entry_num++;
-		if (edma_gbl_ctx.rxfill_info[i].intr_num < 0) {
+		if (edma_gbl_ctx->rxfill_info[i].intr_num < 0) {
 			edma_err("%s: rxfill_intr[%u] irq get failed\n",
-					(edma_gbl_ctx.device_node)->name, i);
+					(edma_gbl_ctx->device_node)->name, i);
 			return -1;
 		}
 
-		edma_debug("%s: rxfill_intr[%u] = %u\n", (edma_gbl_ctx.device_node)->name,
-				 i, edma_gbl_ctx.rxfill_info[i].intr_num);
+		edma_debug("%s: rxfill_intr[%u] = %u\n", (edma_gbl_ctx->device_node)->name,
+				 i, edma_gbl_ctx->rxfill_info[i].intr_num);
 	}
 
 	/*
@@ -3208,19 +3224,19 @@ int edma_irq_init(void)
 	if (!ppeds_nodes)
 		entry_num += EDMA_PPEDS_IRQS;
 
-	for (i = num_txcmpl_rings; i < edma_gbl_ctx.num_txcmpl_rings; i++) {
+	for (i = num_txcmpl_rings; i < edma_gbl_ctx->num_txcmpl_rings; i++) {
 		entry_num++;
-		edma_gbl_ctx.txcmpl_info[i].intr_num =
-			platform_get_irq(edma_gbl_ctx.pdev, entry_num);
-		if (edma_gbl_ctx.txcmpl_info[i].intr_num < 0) {
+		edma_gbl_ctx->txcmpl_info[i].intr_num =
+			platform_get_irq(edma_gbl_ctx->pdev, entry_num);
+		if (edma_gbl_ctx->txcmpl_info[i].intr_num < 0) {
 			edma_err("%s: txcmpl_intr[%u] irq get failed\n",
-					(edma_gbl_ctx.device_node)->name, i);
+					(edma_gbl_ctx->device_node)->name, i);
 			return -1;
 		}
 
 		edma_debug("%s: txcmpl_intr[%u] = %u\n",
-				(edma_gbl_ctx.device_node)->name,
-				i, edma_gbl_ctx.txcmpl_info[i].intr_num);
+				(edma_gbl_ctx->device_node)->name,
+				i, edma_gbl_ctx->txcmpl_info[i].intr_num);
 	}
 
 done:
@@ -3228,94 +3244,94 @@ done:
 	/*
 	 * Request IRQ for Tx complete rings
 	 */
-	for (i = 0; i < edma_gbl_ctx.txcmpl_ring_max; i++) {
-		if (!(edma_gbl_ctx.txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+	for (i = 0; i < edma_gbl_ctx->txcmpl_ring_max; i++) {
+		if (!(edma_gbl_ctx->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 			continue;
 
 		snprintf(edma_txcmpl_irq_name[i], 32, "edma_txcmpl_%d", i);
 
-		irq_set_status_flags(edma_gbl_ctx.txcmpl_info[i].intr_num, IRQ_DISABLE_UNLAZY);
+		irq_set_status_flags(edma_gbl_ctx->txcmpl_info[i].intr_num, IRQ_DISABLE_UNLAZY);
 
-		err = request_irq(edma_gbl_ctx.txcmpl_info[i].intr_num,
+		err = request_irq(edma_gbl_ctx->txcmpl_info[i].intr_num,
 				edma_tx_handle_irq, IRQF_SHARED,
 				edma_txcmpl_irq_name[i],
-				(void *)(edma_gbl_ctx.txcmpl_info[i].txcmpl_ring));
+				(void *)(edma_gbl_ctx->txcmpl_info[i].txcmpl_ring));
 		if (err) {
 			edma_err("TXCMPL ring IRQ:%d request %d failed\n",
-					edma_gbl_ctx.txcmpl_info[i].intr_num, i);
+					edma_gbl_ctx->txcmpl_info[i].intr_num, i);
 			return -1;
 
 		}
 
 		edma_debug("TXCMPL ring(%d) IRQ:%d request success(%s)\n",
 					i,
-					edma_gbl_ctx.txcmpl_info[i].intr_num,
+					edma_gbl_ctx->txcmpl_info[i].intr_num,
 					edma_txcmpl_irq_name[i]);
 	}
 
 	/*
 	 * Request IRQ for RXDESC rings
 	 */
-	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
-		if (!(edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+	for (i = 0; i < edma_gbl_ctx->rxdesc_ring_max; i++) {
+		if (!(edma_gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 			continue;
 
 		snprintf(edma_rxdesc_irq_name[i], 20, "edma_rxdesc_%d", i);
 
-		irq_set_status_flags(edma_gbl_ctx.rxdesc_info[i].intr_num, IRQ_DISABLE_UNLAZY);
+		irq_set_status_flags(edma_gbl_ctx->rxdesc_info[i].intr_num, IRQ_DISABLE_UNLAZY);
 
-		err = request_irq(edma_gbl_ctx.rxdesc_info[i].intr_num,
+		err = request_irq(edma_gbl_ctx->rxdesc_info[i].intr_num,
 				edma_rx_handle_irq, IRQF_SHARED,
 				edma_rxdesc_irq_name[i],
-				(void *)(edma_gbl_ctx.rxdesc_info[i].rxdesc_ring));
+				(void *)(edma_gbl_ctx->rxdesc_info[i].rxdesc_ring));
 		if (err) {
 			edma_err("RXDESC ring IRQ:%d request failed\n",
-					edma_gbl_ctx.rxdesc_info[i].intr_num);
+					edma_gbl_ctx->rxdesc_info[i].intr_num);
 			goto rx_desc_ring_intr_req_fail;
 		}
 
 		edma_debug("RXDESC ring(%d) IRQ:%d request success(%s)\n",
 					i,
-					edma_gbl_ctx.rxdesc_info[i].intr_num,
+					edma_gbl_ctx->rxdesc_info[i].intr_num,
 					edma_rxdesc_irq_name[i]);
 	}
 
 	/*
 	 * Request Misc IRQ
 	 */
-	err = request_irq(edma_gbl_ctx.misc_intr, edma_misc_handle_irq,
+	err = request_irq(edma_gbl_ctx->misc_intr, edma_misc_handle_irq,
 						IRQF_SHARED, "edma_misc",
-						(void *)edma_gbl_ctx.pdev);
+						(void *)edma_gbl_ctx->pdev);
 	if (err) {
 		edma_err("MISC IRQ:%d request failed\n",
-				edma_gbl_ctx.misc_intr);
+				edma_gbl_ctx->misc_intr);
 		goto misc_intr_req_fail;
 	}
 
 	/*
 	 * Request IRQ for RXFILL rings
 	 */
-	for (i = 0; i < edma_gbl_ctx.rxfill_ring_max; i++) {
-		if (!(edma_gbl_ctx.rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+	for (i = 0; i < edma_gbl_ctx->rxfill_ring_max; i++) {
+		if (!(edma_gbl_ctx->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 			continue;
 
 		snprintf(edma_rxfill_irq_name[i], 20, "edma_rxfill_%d", i);
 
-		irq_set_status_flags(edma_gbl_ctx.rxfill_info[i].intr_num, IRQ_DISABLE_UNLAZY);
+		irq_set_status_flags(edma_gbl_ctx->rxfill_info[i].intr_num, IRQ_DISABLE_UNLAZY);
 
-		err = request_irq(edma_gbl_ctx.rxfill_info[i].intr_num,
+		err = request_irq(edma_gbl_ctx->rxfill_info[i].intr_num,
 				edma_rxfill_handle_irq, IRQF_SHARED,
 				edma_rxfill_irq_name[i],
-				(void *)(edma_gbl_ctx.rxfill_info[i].rxfill_ring));
+				(void *)(edma_gbl_ctx->rxfill_info[i].rxfill_ring));
 		if (err) {
 			edma_err("RXFILL ring IRQ:%d request failed\n",
-					edma_gbl_ctx.rxfill_info[i].intr_num);
+					edma_gbl_ctx->rxfill_info[i].intr_num);
 			goto rx_fill_ring_intr_req_fail;
 		}
 
 		edma_debug("RXFILL ring(%d) IRQ:%d request success(%s)\n",
 					i,
-					edma_gbl_ctx.rxfill_info[i].intr_num,
+					edma_gbl_ctx->rxfill_info[i].intr_num,
 					edma_rxfill_irq_name[i]);
 	}
 
@@ -3325,34 +3341,34 @@ rx_fill_ring_intr_req_fail:
 	/*
 	 * Free IRQ for MISC interrupt.
 	 */
-	synchronize_irq(edma_gbl_ctx.misc_intr);
-	free_irq(edma_gbl_ctx.misc_intr, (void *)edma_gbl_ctx.pdev);
+	synchronize_irq(edma_gbl_ctx->misc_intr);
+	free_irq(edma_gbl_ctx->misc_intr, (void *)edma_gbl_ctx->pdev);
 
 misc_intr_req_fail:
 	/*
 	 * Free IRQ for RXDESC rings
 	 */
-	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
-		if (!(edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+	for (i = 0; i < edma_gbl_ctx->rxdesc_ring_max; i++) {
+		if (!(edma_gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 			continue;
 
-		synchronize_irq(edma_gbl_ctx.rxdesc_info[i].intr_num);
+		synchronize_irq(edma_gbl_ctx->rxdesc_info[i].intr_num);
 
-		free_irq(edma_gbl_ctx.rxdesc_info[i].intr_num,
-				(void *)(edma_gbl_ctx.rxdesc_info[i].rxdesc_ring));
+		free_irq(edma_gbl_ctx->rxdesc_info[i].intr_num,
+				(void *)(edma_gbl_ctx->rxdesc_info[i].rxdesc_ring));
 	}
 
 rx_desc_ring_intr_req_fail:
 	/*
 	 * Free IRQ for TXCMPL rings
 	 */
-	for (i = 0; i < edma_gbl_ctx.txcmpl_ring_max; i++) {
-		if (!(edma_gbl_ctx.txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+	for (i = 0; i < edma_gbl_ctx->txcmpl_ring_max; i++) {
+		if (!(edma_gbl_ctx->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 			continue;
 
-		synchronize_irq(edma_gbl_ctx.txcmpl_info[i].intr_num);
-		free_irq(edma_gbl_ctx.txcmpl_info[i].intr_num,
-				(void *)(edma_gbl_ctx.txcmpl_info[i].txcmpl_ring));
+		synchronize_irq(edma_gbl_ctx->txcmpl_info[i].intr_num);
+		free_irq(edma_gbl_ctx->txcmpl_info[i].intr_num,
+				(void *)(edma_gbl_ctx->txcmpl_info[i].txcmpl_ring));
 	}
 
 	return -1;
@@ -3368,48 +3384,48 @@ static void edma_recovery_cleanup(bool is_dp_override)
 	 * TODO: Check with HW team about the state of in-flight
 	 * packets when the descriptor rings are disabled.
 	 */
-	edma_cfg_tx_rings_disable(&edma_gbl_ctx);
-	edma_cfg_rx_rings_disable(&edma_gbl_ctx);
+	edma_cfg_tx_rings_disable(edma_gbl_ctx);
+	edma_cfg_rx_rings_disable(edma_gbl_ctx);
 
 	/*
 	 * Remove interrupt handlers and NAPI
 	 */
-	if (edma_gbl_ctx.napi_added) {
+	if (edma_gbl_ctx->napi_added) {
 		uint32_t i;
 
 		/*
 		 * Free IRQ for TXCMPL rings
 		 */
-		for (i = 0; i < edma_gbl_ctx.txcmpl_ring_max; i++) {
-			if (edma_gbl_ctx.txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
-				synchronize_irq(edma_gbl_ctx.txcmpl_info[i].intr_num);
+		for (i = 0; i < edma_gbl_ctx->txcmpl_ring_max; i++) {
+			if (edma_gbl_ctx->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+				synchronize_irq(edma_gbl_ctx->txcmpl_info[i].intr_num);
 
-				free_irq(edma_gbl_ctx.txcmpl_info[i].intr_num,
-						(void *)(edma_gbl_ctx.txcmpl_info[i].txcmpl_ring));
+				free_irq(edma_gbl_ctx->txcmpl_info[i].intr_num,
+						(void *)(edma_gbl_ctx->txcmpl_info[i].txcmpl_ring));
 			}
 		}
 
 		/*
 		 * Free IRQ for RXDESC rings
 		 */
-		for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
-			if (edma_gbl_ctx.rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
-				synchronize_irq(edma_gbl_ctx.rxdesc_info[i].intr_num);
+		for (i = 0; i < edma_gbl_ctx->rxdesc_ring_max; i++) {
+			if (edma_gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+				synchronize_irq(edma_gbl_ctx->rxdesc_info[i].intr_num);
 
-				free_irq(edma_gbl_ctx.rxdesc_info[i].intr_num,
-						(void *)(edma_gbl_ctx.rxdesc_info[i].rxdesc_ring));
+				free_irq(edma_gbl_ctx->rxdesc_info[i].intr_num,
+						(void *)(edma_gbl_ctx->rxdesc_info[i].rxdesc_ring));
 			}
 		}
 
 		/*
 		 * Free Misc IRQ
 		 */
-		synchronize_irq(edma_gbl_ctx.misc_intr);
-		free_irq(edma_gbl_ctx.misc_intr, (void *)(edma_gbl_ctx.pdev));
+		synchronize_irq(edma_gbl_ctx->misc_intr);
+		free_irq(edma_gbl_ctx->misc_intr, (void *)(edma_gbl_ctx->pdev));
 
-		edma_cfg_rx_napi_delete(&edma_gbl_ctx);
-		edma_cfg_tx_napi_delete(&edma_gbl_ctx);
-		edma_gbl_ctx.napi_added = false;
+		edma_cfg_rx_napi_delete(edma_gbl_ctx);
+		edma_cfg_tx_napi_delete(edma_gbl_ctx);
+		edma_gbl_ctx->napi_added = false;
 	}
 
 	/*
@@ -3422,40 +3438,40 @@ static void edma_recovery_cleanup(bool is_dp_override)
 	/*
 	 * cleanup rings and free
 	 */
-	edma_cfg_tx_rings_cleanup(&edma_gbl_ctx);
-	edma_cfg_rx_rings_cleanup(&edma_gbl_ctx);
+	edma_cfg_tx_rings_cleanup(edma_gbl_ctx);
+	edma_cfg_rx_rings_cleanup(edma_gbl_ctx);
 
 #ifdef NSS_DP_UDP_ST_SUPPORT
 	if (edma_udp_st_tx_ring > EDMA_RING_FLAGS_INVALID_ID) {
-		edma_cfg_tx_udp_st_ring_disable(&edma_gbl_ctx);
-		edma_cfg_tx_udp_st_ring_cleanup(&edma_gbl_ctx);
+		edma_cfg_tx_udp_st_ring_disable(edma_gbl_ctx);
+		edma_cfg_tx_udp_st_ring_cleanup(edma_gbl_ctx);
 	}
 #endif
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (edma_gbl_ctx.loopback_en) {
-		edma_cfg_tx_loopback_rings_disable(&edma_gbl_ctx);
-		edma_cfg_rx_loopback_rings_disable(&edma_gbl_ctx);
-		edma_cfg_tx_loopback_rings_cleanup(&edma_gbl_ctx);
-		edma_cfg_rx_loopback_rings_cleanup(&edma_gbl_ctx);
+	if (edma_gbl_ctx->loopback_en) {
+		edma_cfg_tx_loopback_rings_disable(edma_gbl_ctx);
+		edma_cfg_rx_loopback_rings_disable(edma_gbl_ctx);
+		edma_cfg_tx_loopback_rings_cleanup(edma_gbl_ctx);
+		edma_cfg_rx_loopback_rings_cleanup(edma_gbl_ctx);
 
 		edma_rx_free_buffer_loopback();
-		kfree(edma_gbl_ctx.rxfill_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.rxdesc_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txcmpl_loopback_ring_id_arr);
-		kfree(edma_gbl_ctx.txdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->rxfill_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->rxdesc_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txcmpl_loopback_ring_id_arr);
+		kfree(edma_gbl_ctx->txdesc_loopback_ring_id_arr);
 	}
 #endif
 
-	iounmap(edma_gbl_ctx.reg_base);
-	release_mem_region((edma_gbl_ctx.reg_resource)->start,
-			resource_size(edma_gbl_ctx.reg_resource));
+	iounmap(edma_gbl_ctx->reg_base);
+	release_mem_region((edma_gbl_ctx->reg_resource)->start,
+			resource_size(edma_gbl_ctx->reg_resource));
 
 	/*
 	 * Mark initialize false, so that we do not
 	 * try to cleanup again
 	 */
-	edma_gbl_ctx.edma_initialized = false;
+	edma_gbl_ctx->edma_initialized = false;
 }
 
 /*
@@ -3478,22 +3494,22 @@ static int edma_recovery_setup(void)
 	/*
 	 * Request memory region for EDMA registers
 	 */
-	edma_gbl_ctx.reg_resource = request_mem_region(res_edma.start,
+	edma_gbl_ctx->reg_resource = request_mem_region(res_edma.start,
 			resource_size(&res_edma),
 			EDMA_DEVICE_NODE_NAME);
-	if (!edma_gbl_ctx.reg_resource) {
+	if (!edma_gbl_ctx->reg_resource) {
 		edma_err("Unable to request EDMA register memory.\n");
-		unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
-		edma_gbl_ctx.ctl_table_hdr = NULL;
+		unregister_sysctl_table(edma_gbl_ctx->ctl_table_hdr);
+		edma_gbl_ctx->ctl_table_hdr = NULL;
 		return -EFAULT;
 	}
 
 	/*
 	 * Remap register resource
 	 */
-	edma_gbl_ctx.reg_base = ioremap((edma_gbl_ctx.reg_resource)->start,
-			resource_size(edma_gbl_ctx.reg_resource));
-	if (!edma_gbl_ctx.reg_base) {
+	edma_gbl_ctx->reg_base = ioremap((edma_gbl_ctx->reg_resource)->start,
+			resource_size(edma_gbl_ctx->reg_resource));
+	if (!edma_gbl_ctx->reg_base) {
 		edma_err("Unable to remap EDMA register memory.\n");
 		ret = -EFAULT;
 		goto edma_init_remap_fail;
@@ -3511,7 +3527,7 @@ static int edma_recovery_setup(void)
 
 	edma_info("EDMA common clocks are configured\n");
 
-	if (edma_hw_init(&edma_gbl_ctx) != 0) {
+	if (edma_hw_init(edma_gbl_ctx) != 0) {
 		edma_err("Error in edma initialization\n");
 		ret = -EFAULT;
 		goto edma_hw_init_fail;
@@ -3522,13 +3538,13 @@ static int edma_recovery_setup(void)
 	return 0;
 
 edma_hw_init_fail:
-	iounmap(edma_gbl_ctx.reg_base);
+	iounmap(edma_gbl_ctx->reg_base);
 
 edma_init_remap_fail:
-	release_mem_region((edma_gbl_ctx.reg_resource)->start,
-			resource_size(edma_gbl_ctx.reg_resource));
-	unregister_sysctl_table(edma_gbl_ctx.ctl_table_hdr);
-	edma_gbl_ctx.ctl_table_hdr = NULL;
+	release_mem_region((edma_gbl_ctx->reg_resource)->start,
+			resource_size(edma_gbl_ctx->reg_resource));
+	unregister_sysctl_table(edma_gbl_ctx->ctl_table_hdr);
+	edma_gbl_ctx->ctl_table_hdr = NULL;
 
 	return ret;
 
@@ -3540,13 +3556,13 @@ edma_init_remap_fail:
  */
 static int edma_recovery_deinit(void)
 {
-	reset_control_put(edma_gbl_ctx.hw_rst);
+	reset_control_put(edma_gbl_ctx->hw_rst);
 
 #if defined(NSS_DP_CONFIG_RST)
-	reset_control_put(edma_gbl_ctx.cfg_rst);
+	reset_control_put(edma_gbl_ctx->cfg_rst);
 #endif
 
-	atomic_set(&edma_gbl_ctx.active_port_count, 0);
+	atomic_set(&edma_gbl_ctx->active_port_count, 0);
 
 	if (dp_global_ctx.common_init_done) {
 		edma_recovery_cleanup(false);
@@ -3580,14 +3596,14 @@ static int edma_recovery_init(void)
 	for (i = 0; i < NSS_DP_HAL_MAX_PORTS; i++) {
 		struct edma_tx_rings_info *tx_info;
 		dp_priv = dp_global_ctx.nss_dp[i];
-		edma_cfg_tx_napi_add(&edma_gbl_ctx, dp_priv->netdev, dp_priv->macid);
+		edma_cfg_tx_napi_add(edma_gbl_ctx, dp_priv->netdev, dp_priv->macid);
 
-		if (!edma_gbl_ctx.napi_added) {
-			edma_cfg_rx_napi_add(&edma_gbl_ctx, dp_priv->netdev);
+		if (!edma_gbl_ctx->napi_added) {
+			edma_cfg_rx_napi_add(edma_gbl_ctx, dp_priv->netdev);
 			edma_irq_init();
 		}
 
-		edma_gbl_ctx.napi_added = true;
+		edma_gbl_ctx->napi_added = true;
 
 		if (dp_priv->macid == NSS_DP_VP_MAC_ID) {
 			tx_info = &init_info.host_info.vp_info.tx_info;
@@ -3605,7 +3621,7 @@ static int edma_recovery_init(void)
 					continue;
 
 				txdesc_ring_id = tx_info->tx_ring_per_core_map[j][k];
-				txdesc_ring = edma_gbl_ctx.txdesc_info[txdesc_ring_id].txdesc_ring;
+				txdesc_ring = edma_gbl_ctx->txdesc_info[txdesc_ring_id].txdesc_ring;
 				dp_dev->dp_info.txr_map[j][k] = txdesc_ring;
 			}
 		}
