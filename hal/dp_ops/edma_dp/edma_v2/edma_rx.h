@@ -314,8 +314,8 @@ struct edma_rx_stats {
 	uint64_t rx_fraglist_pkts;
 	uint64_t rx_nr_frag_headroom_err;
 	uint64_t rx_vp_uninitialized;
-	uint64_t rx_get_qdisc_dev_fail;
-	uint64_t rx_fail_qdisc_xmit;
+	uint64_t rx_get_host_qdisc_dev_fail;
+	uint64_t rx_host_qdisc_xmit_fail;
 	struct u64_stats_sync syncp;
 };
 
