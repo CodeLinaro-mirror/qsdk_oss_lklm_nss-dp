@@ -35,4 +35,7 @@ void edma_cfg_tx_set_max_ports(struct edma_gbl_ctx *egc);
 #if defined(NSS_DP_POINT_OFFLOAD)
 void edma_cfg_tx_point_offload_mapping(struct edma_gbl_ctx *egc);
 #endif
+int edma_cfg_tx_cmpl_ring_setup(struct edma_txcmpl_ring *txcmpl_ring);
+int edma_cfg_tx_desc_ring_setup(struct edma_txdesc_ring *txdesc_ring);
+
 #endif	/* __EDMA_CFG_TX_H__ */
