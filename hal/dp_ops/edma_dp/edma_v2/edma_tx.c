@@ -6,7 +6,6 @@
  */
 
 #include <linux/version.h>
-#include <linux/debug_mem_usage.h>
 #include <linux/interrupt.h>
 #include <linux/phy.h>
 #include <linux/netdevice.h>
@@ -19,6 +18,7 @@
 #include "edma.h"
 #include <ppe_drv_sc.h>
 #include "syn_dev.h"
+#include <linux/debug_mem_usage.h>
 
 #if IS_ENABLED(CONFIG_PTP_1588_CLOCK)
 extern int syn_ptp_get_tx_hwtstamp_by_id(struct syn_hal_dev *shd,

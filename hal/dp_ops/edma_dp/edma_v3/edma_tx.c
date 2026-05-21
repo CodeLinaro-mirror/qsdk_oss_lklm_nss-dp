@@ -4,7 +4,6 @@
  */
 
 #include <linux/version.h>
-#include <linux/debug_mem_usage.h>
 #include <linux/interrupt.h>
 #include <linux/phy.h>
 #include <linux/netdevice.h>
@@ -19,6 +18,7 @@
 #include "edma.h"
 #include <ppe_drv_sc.h>
 #include "syn_dev.h"
+#include <linux/debug_mem_usage.h>
 
 #ifdef CONFIG_IPQ_PON
 #include "nss_dp_gem.h"
