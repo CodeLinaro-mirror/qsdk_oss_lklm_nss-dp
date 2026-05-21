@@ -208,7 +208,7 @@ static int edma_ppeds_rxfill_napi_poll(struct napi_struct *napi, int budget)
 	uint32_t headroom = EDMA_RX_SKB_HEADROOM + NET_IP_ALIGN;
 	uint32_t alloc_size = rxfill_ring->alloc_size;
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
-	uint32_t cons_idx, work_to_do;
+	uint32_t cons_idx, work_to_do, work_done = 0;
 	uint32_t num_avail = 0;
 
 	cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) &
@@ -234,13 +234,27 @@ static int edma_ppeds_rxfill_napi_poll(struct napi_struct *napi, int budget)
 		edma_ppeds_rx_alloc_buffer(rxfill_ring, num_avail,
 				ppeds_node->ppeds_handle.wifi8_hdl.rx_fill_arr, headroom);
 
+	/*
+	 * Clear interrupt status
+	 */
 	edma_reg_read(EDMA_REG_RXFILL_INT_STAT(rxfill_ring->ring_id));
 
-	if (work_to_do < budget) {
+	work_done = num_avail;
+
+	/*
+	 * If no buffers were available, complete NAPI to avoid busy-looping
+	 */
+	if (!num_avail)
+		goto napi_complete;
+
+	/*
+	 * Only complete NAPI if we processed less than budget
+	 */
+	if (work_done < budget) {
 		goto napi_complete;
 	}
 
-	return budget;
+	return work_done;
 
 napi_complete:
 	napi_complete(napi);
@@ -248,7 +262,8 @@ napi_complete:
 		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
 				EDMA_RXFILL_INT_MASK);
 	}
-	return 0;
+
+	return work_done;
 }
 
 /*
