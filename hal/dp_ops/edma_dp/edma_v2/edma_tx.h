@@ -345,6 +345,7 @@ struct edma_txcmpl_ring {
 	dma_addr_t dma;			/* Descriptor ring physical address */
 	uint32_t count;			/* Number of descriptors in the ring */
 	bool napi_added;		/* Flag to indicate NAPI add status */
+	bool napi_enabled;		/* Flag to indicate NAPI enable status */
 };
 
 enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_info *dptxi,
