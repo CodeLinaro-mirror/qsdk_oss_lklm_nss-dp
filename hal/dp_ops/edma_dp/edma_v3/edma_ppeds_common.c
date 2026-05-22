@@ -207,6 +207,69 @@ void edma_ppeds_deinit(struct edma_ppeds_drv *drv)
 }
 
 /*
+ * edma_ppeds_reset_gbl_ds_ctx()
+ *	Reset DS ring status and flags for all DS rings in the EDMA context
+ *	This function iterates through all RX descriptor, RX fill, TX descriptor,
+ *	and TX completion rings, and for those marked as DS rings with IN_USE status,
+ *	it resets the IN_USE status flag and the DS type flag.
+ */
+void edma_ppeds_reset_gbl_ds_ctx()
+{
+	uint32_t i;
+
+	struct edma_gbl_ctx *gbl_ctx = &edma_gbl_ctx;
+
+	/*
+	 * Iterate through all RX descriptor rings
+	 */
+	for (i = 0; i < gbl_ctx->rxdesc_ring_max; i++) {
+		if ((gbl_ctx->rxdesc_info[i].type_flags & EDMA_RING_TYPE_FLAGS_DS) &&
+				(gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)) {
+			gbl_ctx->rxdesc_info[i].status_flags = 0;
+			gbl_ctx->rxdesc_info[i].type_flags = 0;
+			edma_debug("Reset DS ring for RX descriptor ring %u\n", i);
+		}
+	}
+
+	/*
+	 * Iterate through all RX fill rings
+	 */
+	for (i = 0; i < gbl_ctx->rxfill_ring_max; i++) {
+		if ((gbl_ctx->rxfill_info[i].type_flags & EDMA_RING_TYPE_FLAGS_DS) &&
+				(gbl_ctx->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)) {
+			gbl_ctx->rxfill_info[i].status_flags = 0;
+			gbl_ctx->rxfill_info[i].type_flags = 0;
+			gbl_ctx->rxfill_info[i].flags = 0;
+			edma_debug("Reset DS ring for RX fill ring %u\n", i);
+		}
+	}
+
+	/*
+	 * Iterate through all TX descriptor rings
+	 */
+	for (i = 0; i < gbl_ctx->txdesc_ring_max; i++) {
+		if ((gbl_ctx->txdesc_info[i].type_flags & EDMA_RING_TYPE_FLAGS_DS) &&
+				(gbl_ctx->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)) {
+			gbl_ctx->txdesc_info[i].status_flags = 0;
+			gbl_ctx->txdesc_info[i].type_flags = 0;
+			edma_debug("Reset DS ring for TX descriptor ring %u\n", i);
+		}
+	}
+
+	/*
+	 * Iterate through all TX completion rings
+	 */
+	for (i = 0; i < gbl_ctx->txcmpl_ring_max; i++) {
+		if ((gbl_ctx->txcmpl_info[i].type_flags & EDMA_RING_TYPE_FLAGS_DS) &&
+				(gbl_ctx->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)) {
+			gbl_ctx->txcmpl_info[i].status_flags = 0;
+			gbl_ctx->txcmpl_info[i].type_flags = 0;
+			edma_debug("Reset DS ring for TX completion ring %u\n", i);
+		}
+	}
+}
+
+/*
  * edma_ppeds_init()
  *	PPEDS init
  */

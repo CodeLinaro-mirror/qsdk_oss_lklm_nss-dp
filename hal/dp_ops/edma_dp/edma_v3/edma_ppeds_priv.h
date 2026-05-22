@@ -166,6 +166,7 @@ int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring, bool hw_
 void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring);
 int edma_ppeds_tx_secondary_alloc(struct edma_txdesc_ring *txdesc_ring);
 void edma_ppeds_service_status_update(nss_dp_ppeds_handle_t *ppeds_handle, bool enable);
+void edma_ppeds_reset_gbl_ds_ctx(void);
 
 extern void *edma_ppeds_tx_ring_sec_mem;
 extern int edma_ppeds_tx_ring_entries;

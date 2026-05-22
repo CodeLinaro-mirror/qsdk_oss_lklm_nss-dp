@@ -1265,6 +1265,11 @@ static void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 	kfree(ppeds_node);
 
 	/*
+	 * Clear the rings in global ring info context.
+	 */
+	edma_ppeds_reset_gbl_ds_ctx();
+
+	/*
 	 * Remove from DB
 	 */
 	write_lock_bh(&drv->lock);

@@ -1076,6 +1076,7 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 	if (wifi8_hdl->hw_buff_mgmt_en) {
 		struct edma_rxfill_ring_info *rxfill_info;
 		struct edma_txcmpl_ring_info *txcmpl_info;
+
 		/*
 		 * Primary RXfill ring (HW managed)
 		 */
@@ -1089,6 +1090,9 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 		 */
 		ring_num = node_info->rx_map[0].rx_fill_ring_id + 1;
 		wifi8_cfg->rxfill_ring.ring_id = ring_num;
+		rxfill_info = &egc->rxfill_info[ring_num];
+		rxfill_info->status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
+		rxfill_info->type_flags |= EDMA_RING_TYPE_FLAGS_DS;
 
 		/*
 		 * Primary txcmpl ring (HW managed)
@@ -1102,6 +1106,9 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 		 */
 		ring_num = node_info->tx_map[0].tx_cmpl_ring_id + 1;
 		wifi8_cfg->txcmpl_ring.id = ring_num;
+		txcmpl_info = &egc->txcmpl_info[ring_num];
+		txcmpl_info->status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
+		txcmpl_info->type_flags |= EDMA_RING_TYPE_FLAGS_DS;
 	} else {
 		ring_num = node_info->rx_map[0].rx_fill_ring_id;
 		wifi8_cfg->rxfill_ring.ring_id = ring_num;
@@ -1752,10 +1759,20 @@ static void edma_ppeds_inst_free(nss_dp_ppeds_handle_t *ppeds_handle)
 			(void *)&wifi8_cfg->rxfill_ring);
 	netif_napi_del(&wifi8_cfg->rxfill_ring.napi);
 
+	if (wifi8_hdl->hw_buff_mgmt_en) {
+               edma_ppeds_rx_fill_ring_free(&wifi8_cfg->hw_buf_mgmt.rxfill_ring);
+               edma_ppeds_tx_cmpl_ring_free(&wifi8_cfg->hw_buf_mgmt.txcmpl_ring);
+       }
+
 	edma_ppeds_rx_fill_ring_free(&wifi8_cfg->rxfill_ring);
 	edma_ppeds_tx_cmpl_ring_free(&wifi8_cfg->txcmpl_ring);
 
 	kfree(ppeds_node);
+
+	/*
+	 * Clear the rings in global ring info context.
+	 */
+	edma_ppeds_reset_gbl_ds_ctx();
 
 	/*
 	 * Remove from DB
