@@ -1555,6 +1555,18 @@ static int edma_ddrq_def_lp_cfg_set(edma_ddrq_lp_cfg_t *lp_cfg, edma_ddrq_idv_cf
 		return -EINVAL;
 	}
 
+	if (!ppe_drv_sc_ucast_qbase_profile_set(PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP, lp_cfg->queue_base)) {
+		edma_err("Error in setting service code queue base for DDRQ special loopback SC(IPEC_ENCAP):%d\n",
+				PPE_DRV_SC_DDRQ_LP_SC_IPSEC_ENCAP);
+		return -EINVAL;
+	}
+
+	if (!ppe_drv_sc_ucast_qbase_profile_set(PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP, lp_cfg->queue_base)) {
+		edma_err("Error in setting service code queue base for DDRQ special loopback SC(IPSEC_DECAP):%d\n",
+				PPE_DRV_SC_DDRQ_LP_SC_IPSEC_DECAP);
+		return -EINVAL;
+	}
+
 	if (fal_qm_passthrough_cpucode_en_set(EDMA_SWITCH_DEV_ID, FAL_PASSTHROUGH_MODE_192_128, A_TRUE)) {
 		edma_err("Error in setting cpucode en cfg for %d PT mode\n", FAL_PASSTHROUGH_MODE_192_128);
 		return -EINVAL;
