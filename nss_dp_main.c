@@ -373,6 +373,22 @@ static void nss_dp_get_stats64(struct net_device *netdev,
 
 	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
 
+#ifdef NSS_DP_PON_SUPPORT
+	if (dp_priv->gem_port) {
+		struct ppe_drv_port_hw_stats pon_stats;
+
+		/*
+		 * WAR: Read PPE port statistics instead of MIB for PON port.
+		 * Note: This will cover only packet and byte counters.
+		 */
+		ppe_drv_dp_get_pon_stats(&pon_stats);
+		stats->rx_packets = pon_stats.rx_pkt_cnt;
+		stats->rx_bytes   = pon_stats.rx_byte_cnt;
+		stats->tx_packets = pon_stats.tx_pkt_cnt;
+		stats->tx_bytes   = pon_stats.tx_byte_cnt;
+		return;
+	}
+#endif
 	/*
 	 * Get the GMAC MIB statistics
 	 */
