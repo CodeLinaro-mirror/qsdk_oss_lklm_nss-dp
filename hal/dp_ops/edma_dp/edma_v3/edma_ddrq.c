@@ -1816,6 +1816,7 @@ static int32_t edma_ddrq_get_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_wred_en = edma_ddrq_ac_queue_wred_en;
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_ceiling = edma_ddrq_ac_queue_shared_ceiling;
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_grp_id = edma_ddrq_ac_queue_grp_id;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_pre_alloc_limit = edma_ddrq_ac_queue_pre_alloc;
 	ddrq_idv_cfg->ddrq_ac_cfg.ddrq_state = EDMA_DDRQ_AC_QUEUE_STATE_ENABLED;
 	ddrq_idv_cfg->ddrq_en_port_bm = edma_ddrq_en_port_bm;
 

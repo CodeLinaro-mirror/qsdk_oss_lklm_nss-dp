@@ -157,6 +157,10 @@ int edma_ddrq_ac_queue_grp_id = EDMA_DDRQ_AC_Q_GRP_ID_DEF;
 module_param(edma_ddrq_ac_queue_grp_id, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_ac_queue_grp_id, "DDRQ per queue group id configuration");
 
+int edma_ddrq_ac_queue_pre_alloc = EDMA_DDRQ_AC_Q_PRE_ALLOC_DEF;
+module_param(edma_ddrq_ac_queue_pre_alloc, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_pre_alloc, "DDRQ per queue pre alloc configuration");
+
 int edma_ddrq_grp_ac_en = EDMA_DDRQ_AC_GRP_AC_EN_DEF;
 module_param(edma_ddrq_grp_ac_en, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_grp_ac_en, "DDRQ group AC configuration");
