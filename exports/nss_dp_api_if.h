@@ -1,21 +1,8 @@
 /*
- **************************************************************************
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
  *
- * Copyright (c) 2022-2024 Qualcomm Innovation Center, Inc. All rights reserved.
- *
- * Permission to use, copy, modify, and/or distribute this software for
- * any purpose with or without fee is hereby granted, provided that the
- * above copyright notice and this permission notice appear in all copies.
- *
- * THE SOFTWARE IS PROVIDED "AS IS" AND THE AUTHOR DISCLAIMS ALL WARRANTIES
- * WITH REGARD TO THIS SOFTWARE INCLUDING ALL IMPLIED WARRANTIES OF
- * MERCHANTABILITY AND FITNESS. IN NO EVENT SHALL THE AUTHOR BE LIABLE FOR
- * ANY SPECIAL, DIRECT, INDIRECT, OR CONSEQUENTIAL DAMAGES OR ANY DAMAGES
- * WHATSOEVER RESULTING FROM LOSS OF USE, DATA OR PROFITS, WHETHER IN AN
- * ACTION OF CONTRACT, NEGLIGENCE OR OTHER TORTIOUS ACTION, ARISING OUT
- * OF OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
- **************************************************************************
+ * Copyright (c) Qualcomm Technologies, Inc. and/or its subsidiaries.
+ * SPDX-License-Identifier: ISC
  */
 
 /**
@@ -320,18 +307,28 @@ extern bool nss_dp_nsm_sawf_sc_stats_read(struct nss_dp_hal_nsm_sawf_sc_stats *n
 bool nss_dp_get_eth_info(struct nss_dp_eth_netdev_info ethlist[], uint8_t array_size);
 
 /**
+ * nss_dp_udp_st_xmit_info
+ *	Arguments for nss_dp_udp_st_xmit(), grouped into a struct for scalability.
+ */
+struct nss_dp_udp_st_xmit_info {
+	struct sk_buff *skb;		/**< Pointer to the packet. */
+	int skb_idx;			/**< Index of this skb in the EDMA ring. */
+	int skb_count;			/**< Total number of skbs loaded into the ring. */
+	uint16_t vp_num;		/**< PPE VP port number used as ingress for flow lookup. */
+	bool is_veip;			/**< True for PON/VEIP path; false for standard path. */
+	bool is_gem_port;		/**< Is the port gem port. */
+};
+
+/**
  * nss_dp_udp_st_xmit
  *	Transmit the UDP-ST packet to EDMA tx ring
  *
- * @param[in] skb Pointer to the packet.
- * @param[in] skb_idx Index of this skb in the ring.
- * @param[in] skb_count Total number of skbs in the ring.
- * @param[in] vp_num VP port number.
+ * @param[in] xmit_info Pointer to xmit argument struct.
  *
  * @return
  * Returns 0 on success, negative errno on failure.
  */
-int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t vp_num);
+int nss_dp_udp_st_xmit(struct nss_dp_udp_st_xmit_info *xmit_info);
 
 /**
  * nss_dp_udp_st_reset_indices
