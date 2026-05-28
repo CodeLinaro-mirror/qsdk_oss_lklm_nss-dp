@@ -2515,9 +2515,6 @@ static inline uint32_t edma_rx_reap_scatter_pages(struct edma_gbl_ctx *egc,
 		/*
 		 * Attach page to xdp shinfo
 		 */
-		if (unlikely(sinfo->nr_frags >= MAX_SKB_FRAGS))
-			return 0;
-
 		page_paddr = page_to_phys(page);
 		offset = buf_paddr - page_paddr;
 
@@ -2722,13 +2719,11 @@ uint32_t edma_rx_reap_pages(struct edma_gbl_ctx *egc, int budget,
 		 */
 		sg_reap = edma_rx_reap_scatter_pages(egc, rxdesc_ring, &xdp, work_to_do - 1, (cons_idx + 1) & rxdesc_ring->count_mask, &vprxi);
 		if (!sg_reap) {
+
 			/*
-			 * Budget exhausted midway through scatter-gather packet.
-			 * Return the head page and any fragment pages already
-			 * attached to the xdp buffer back to the page pool,
-			 * then signal NAPI to reschedule.
+			 * Budget exhausted, We just break without updating hardware consumer index
+			 * so hardware can re-reap packet in next napi turn.
 			 */
-			xdp_return_buff(&xdp);
 			work_done = budget;
 			break;
 		}
