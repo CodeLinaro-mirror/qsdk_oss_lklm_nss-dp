@@ -844,6 +844,7 @@ extern int edma_ddrq_ac_queue_color_aware;
 extern int edma_ddrq_ac_queue_wred_en;
 extern int edma_ddrq_ac_queue_shared_ceiling;
 extern int edma_ddrq_ac_queue_grp_id;
+extern int edma_ddrq_ac_queue_pre_alloc;
 extern int edma_ddrq_grp_ac_en;
 extern int edma_ddrq_grp_color_aware;
 extern int edma_ddrq_grp_id_bm;
