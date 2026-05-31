@@ -1123,7 +1123,10 @@ void edma_cfg_rx_fill_ring_configure(struct edma_rxfill_ring *rxfill_ring)
 	/*
 	 * Alloc Rx buffers
 	 */
-	edma_rx_alloc_buffer(rxfill_ring, rxfill_ring->count - 1);
+	if (!edma_dp_boot_rx_fill_cnt || (edma_dp_boot_rx_fill_cnt > rxfill_ring->count))
+		edma_dp_boot_rx_fill_cnt = rxfill_ring->count;
+
+	edma_rx_alloc_buffer(rxfill_ring, edma_dp_boot_rx_fill_cnt - 1);
 	timer_setup(&rxfill_ring->delayed_intr, edma_rxfill_intr_timer, TIMER_PINNED);
 }
 

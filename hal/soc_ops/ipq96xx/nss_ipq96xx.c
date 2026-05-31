@@ -20,6 +20,7 @@ int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1
 int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,11,2,3,4,5,6};
 int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,11,2,3,4,5,6};
 int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10,11,11};
+int edma_dp_boot_rx_fill_cnt = 1024;
 
 int edma_dp_ppe_ds_rx_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
 int edma_dp_ppe_ds_rx_queue_map[EDMA_PPEDS_MAX_NODES] = {210, 218};
