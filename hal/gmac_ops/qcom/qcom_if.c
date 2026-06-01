@@ -319,7 +319,7 @@ static int32_t qcom_get_eth_stats(struct nss_gmac_hal_dev *nghd, uint64_t *data,
 		p = (uint8_t *)mib_stats
 			+ qcom_gstrings_mib_stats[i_mib].stat_offset;
 		i = QCOM_STATS_LEN + i_mib;
-		data[i] = *(uint32_t *)p;
+		data[i] = *(uint64_t *)p;
 	}
 
 	return 0;

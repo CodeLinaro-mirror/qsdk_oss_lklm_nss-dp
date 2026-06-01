@@ -264,7 +264,7 @@ static int32_t syn_get_eth_stats(struct nss_gmac_hal_dev *nghd,
 		p = ((uint8_t *)(&mib_stats) +
 			syn_gstrings_xmib_stats[i_mib].stat_offset);
 		i = SYN_STATS_LEN + i_mib;
-		data[i] = *(uint32_t *)p;
+		data[i] = *(uint64_t *)p;
 	}
 
 	return 0;
