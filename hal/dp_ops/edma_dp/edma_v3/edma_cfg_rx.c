@@ -1558,6 +1558,31 @@ void edma_cfg_rx_ring_reset(struct edma_rxdesc_ring *ring)
 }
 
 /*
+ * edma_cfg_rxfill_ring_reset()
+ *	API to reset the individual Rxfill ring index.
+ */
+void edma_cfg_rxfill_ring_reset(struct edma_rxfill_ring *ring)
+{
+	uint32_t data = 0;
+
+	/*
+	 * Reset the ring - wait untill the reset operation is done.
+	 */
+	data = edma_reg_read(EDMA_REG_RXFILL_IDX_RESET(ring->ring_id));
+	data |= EDMA_RXFILL_IDX_RESET;
+	edma_reg_write(EDMA_REG_RXFILL_IDX_RESET(ring->ring_id), data);
+
+	do {
+		data = edma_reg_read(EDMA_REG_RXFILL_IDX_RESET(ring->ring_id));
+	} while (data);
+
+	/*
+	 * Reset the software consumer index.
+	 */
+	ring->prod_idx = 0;
+}
+
+/*
  * edma_cfg_rx_desc_ring_disable()
  *	API to disable one RXDESC ring.
  */

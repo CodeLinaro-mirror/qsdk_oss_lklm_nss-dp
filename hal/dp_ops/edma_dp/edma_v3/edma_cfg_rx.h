@@ -85,4 +85,5 @@ int edma_cfg_rx_rps(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
 int edma_cfg_rx_rps_bitmap(struct ctl_table *table, int write,
 		void __user *buffer, size_t *lenp, loff_t *ppos);
+void edma_cfg_rxfill_ring_reset(struct edma_rxfill_ring *ring);
 #endif	/* __EDMA_CFG_RX_H__ */
