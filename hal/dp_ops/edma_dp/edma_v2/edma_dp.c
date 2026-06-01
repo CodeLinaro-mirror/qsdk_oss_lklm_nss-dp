@@ -5,7 +5,6 @@
  * SPDX-License-Identifier: ISC
  */
 
-#include <linux/debug_mem_usage.h>
 #include <fal/fal_vsi.h>
 #include <ppe_drv_public.h>
 #include <fal/fal_servcode.h>
@@ -15,6 +14,7 @@
 #include "edma_debug.h"
 #include "nss_dp_api_if.h"
 #include "nss_dp_dev.h"
+#include <linux/debug_mem_usage.h>
 
 #if defined(NSS_DP_VP_SUPPORT)
 #include "edma_dp_vp.h"

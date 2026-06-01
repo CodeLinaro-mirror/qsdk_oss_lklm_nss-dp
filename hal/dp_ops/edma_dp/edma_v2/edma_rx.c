@@ -6,7 +6,6 @@
  */
 
 #include <asm/cacheflush.h>
-#include <linux/debug_mem_usage.h>
 #include <linux/version.h>
 #include <linux/netdevice.h>
 #include <ppe_drv_public.h>
@@ -21,6 +20,7 @@
 #include "edma_cfg_rx.h"
 #include "nss_dp_dev.h"
 #include "syn_dev.h"
+#include <linux/debug_mem_usage.h>
 
 extern nss_dp_vp_rx_cb_t nss_dp_vp_rx_reg_cb;
 extern struct nss_dp_vp_ctx g_vp_ctx;
@@ -30,6 +30,10 @@ extern struct nss_dp_vp_ctx g_vp_ctx;
 #define EDMA_MAX_BULK_PAGE_ALLOC_SZ  (PAGE_SIZE *  (1 << EDMA_MAX_ORDER))
 #endif
 
+#ifdef CONFIG_DEBUG_MEM_USAGE
+extern unsigned long __wrap___get_free_pages(gfp_t gfp_mask, unsigned int order);
+extern void __wrap_free_pages(unsigned long addr, unsigned int order);
+#endif
 /*
  * edma_rx_process_capwap_vp()
  *	Forward capwap packet to VP module for processing.

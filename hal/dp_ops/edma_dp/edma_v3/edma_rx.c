@@ -4,7 +4,6 @@
  */
 
 #include <asm/cacheflush.h>
-#include <linux/debug_mem_usage.h>
 #include <linux/indirect_call_wrapper.h>
 #include <linux/version.h>
 #include <linux/netdevice.h>
@@ -24,6 +23,7 @@
 #include "syn_dev.h"
 #include <net/page_pool/helpers.h>
 #include <net/xdp.h>
+#include <linux/debug_mem_usage.h>
 
 #ifdef CONFIG_IPQ_PON
 #include "nss_dp_gem.h"
@@ -41,6 +41,11 @@ extern void *nss_dp_gem_rx_app_data_g;
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
 #define EDMA_MAX_ORDER 10
 #define EDMA_MAX_BULK_PAGE_ALLOC_SZ  (PAGE_SIZE *  (1 << EDMA_MAX_ORDER))
+#endif
+
+#ifdef CONFIG_DEBUG_MEM_USAGE
+extern unsigned long __wrap___get_free_pages(gfp_t gfp_mask, unsigned int order);
+extern void __wrap_free_pages(unsigned long addr, unsigned int order);
 #endif
 
 #if defined(NSS_DP_HW_GRO)
