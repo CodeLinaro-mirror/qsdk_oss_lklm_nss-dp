@@ -645,6 +645,7 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 
 	ring_sz = rxfill_ring->count & EDMA_RXFILL_RING_SIZE_MASK;
 	edma_reg_write(EDMA_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
+	rxfill_ring->hw_ring_size = ring_sz;
 
 	edma_reg_write(EDMA_REG_RXFILL_FORMAT(rxfill_ring->ring_id),
 		EDMA_RXFILL_FORMAT_SET(EDMA_RXFILL_FORMAT_16B));
@@ -674,6 +675,7 @@ static void edma_ppeds_cfg_rx(struct edma_ppeds *ppeds_node)
 
 	ring_sz = (rxfill_ring->count * 2) & EDMA_RXFILL_RING_SIZE_MASK;
 	edma_reg_write(EDMA_RXFILL_RING_SIZE(rxfill_ring->ring_id), ring_sz);
+	rxfill_ring->hw_ring_size = ring_sz;
 
 	edma_reg_write(EDMA_REG_RXFILL_FORMAT(rxfill_ring->ring_id),
 			EDMA_RXFILL_FORMAT_SET(EDMA_RXFILL_FORMAT_8B));
@@ -1073,6 +1075,7 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 	for (i = 0; i < ring_info->num_ppe2tcl; i++) {
 		ring_size = ring_info->ppe2tcl_num_desc[i];
 		wifi8_cfg->rx_ring[i].count = ring_size;
+		wifi8_cfg->rx_ring[i].count_mask = ring_size - 1;
 		wifi8_cfg->rx_ring[i].pdma = (dma_addr_t)ring_info->ppe2tcl_ba[i];
 	}
 
@@ -1157,6 +1160,7 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 		alloc_size = NSS_DP_RX_BUFFER_SIZE;
 
 	wifi8_cfg->rxfill_ring.count = wifi8_hdl->ppe2tcl_rxfill_num_desc;
+	wifi8_cfg->rxfill_ring.count_mask = wifi8_cfg->rxfill_ring.count - 1;
 	wifi8_cfg->rxfill_ring.alloc_size  = alloc_size;
 
 	wifi8_cfg->txcmpl_ring.count = wifi8_hdl->reo2ppe_txcmpl_num_desc;
@@ -1449,6 +1453,55 @@ static void edma_ppeds_set_rxfill_prod_idx(nss_dp_ppeds_handle_t *ppeds_handle,
 	struct edma_rxfill_ring *rxfill_ring = &wifi8_cfg->rxfill_ring;
 
 	edma_reg_write(EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id), prod_idx);
+}
+
+
+/*
+ * edma_ppeds_get_rxfill_ring_info()
+ *	Get WiFi8 SW and HW RxFill ring filled-count information
+ */
+static void edma_ppeds_get_rxfill_ring_info(nss_dp_ppeds_handle_t *ppeds_handle,
+					struct nss_dp_ppeds_rxfill_ring_info *info)
+{
+	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct nss_dp_ppeds_wifi8_handle *wifi8_hdl = &ppeds_handle->wifi8_hdl;
+	struct edma_ppeds_node_wifi8 *wifi8_cfg = &ppeds_node->wifi8_cfg;
+	struct edma_rxfill_ring *sw_ring = &wifi8_cfg->rxfill_ring;
+	struct edma_rxfill_ring *hw_ring = &wifi8_cfg->hw_buf_mgmt.rxfill_ring;
+	struct nss_dp_ppeds_wifi8_rxfill_ring_info *wifi8 = &info->wifi8;
+
+	if (info->arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8) {
+		return;
+	}
+
+	wifi8->hw_buff_mgmt_en = !!wifi8_hdl->hw_buff_mgmt_en;
+
+	if (!wifi8->hw_buff_mgmt_en) {
+		wifi8->prim_prod_idx = sw_ring->prod_idx;
+		wifi8->prim_cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(sw_ring->ring_id)) &
+			EDMA_RXFILL_CONS_IDX_MASK;
+		wifi8->prim_active_cnt = (wifi8->prim_prod_idx - wifi8->prim_cons_idx + sw_ring->count) &
+			sw_ring->count_mask;
+
+		wifi8->secd_prod_idx = 0;
+		wifi8->secd_cons_idx = 0;
+		wifi8->secd_active_cnt = 0;
+		return;
+	}
+
+	/* HW RxFill ring */
+	wifi8->prim_prod_idx = edma_reg_read(EDMA_REG_RXFILL_PROD_IDX(hw_ring->ring_id)) &
+				EDMA_RXFILL_PROD_IDX_MASK;
+	wifi8->prim_cons_idx = hw_ring->prod_idx;
+	wifi8->prim_active_cnt = (wifi8->prim_prod_idx - wifi8->prim_cons_idx + hw_ring->count) &
+				hw_ring->count_mask;
+
+	/* SW RxFill ring */
+	wifi8->secd_prod_idx = sw_ring->prod_idx;
+	wifi8->secd_cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(sw_ring->ring_id)) &
+				EDMA_RXFILL_CONS_IDX_MASK;
+	wifi8->secd_active_cnt = (wifi8->secd_prod_idx - wifi8->secd_cons_idx + sw_ring->count) &
+				sw_ring->count_mask;
 }
 
 /*
@@ -1971,4 +2024,5 @@ struct nss_dp_ppeds_ops edma_ppeds_ops_wifi8 = {
 	.set_rxfill_prod_idx	=	edma_ppeds_set_rxfill_prod_idx,
 	.enable_rx_reap_intr	=	edma_ppeds_enable_rx_reap_intr,
 	.service_status_update	=	edma_ppeds_service_status_update,
+	.get_rxfill_ring_info	=	edma_ppeds_get_rxfill_ring_info,
 };

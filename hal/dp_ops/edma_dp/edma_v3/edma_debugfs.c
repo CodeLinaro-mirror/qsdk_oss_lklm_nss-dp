@@ -324,6 +324,8 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 #ifdef NSS_DP_PPEDS_SUPPORT
 	uint32_t ppeds_idx, valid_count;
 	char ring_header[EDMA_DEBUGFS_RING_COL_WIDTH + 1];
+	struct edma_ppeds_node_wifi8 *ppeds_node_wifi8_cfg;
+	uint16_t rxfill_prod_idx, rxfill_cons_idx, rxfill_filled;
 	struct edma_ppeds_node_wifi7 *ppeds_node_cfg;
 	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
 	struct edma_ppeds *ppeds_node;
@@ -352,6 +354,9 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 
 		rxfill_ring = egc->rxfill_info[i].rxfill_ring;
+		if (!rxfill_ring)
+			continue;
+
 		fill_stats = &rxfill_ring->rx_fill_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&fill_stats->syncp);
@@ -370,6 +375,9 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 
 		rxdesc_ring = egc->rxdesc_info[i].rxdesc_ring;
+		if (!rxdesc_ring)
+			continue;
+
 		desc_stats = &rxdesc_ring->rx_desc_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&desc_stats->syncp);
@@ -490,6 +498,66 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 		seq_printf(m, "\n");
 	}
 ppeds_rx_done:
+
+	/* PPE-DS wifi8: dump rxfill filled size per node */
+	seq_printf(m, "\nPPE-DS WIFI8 RXFILL_FILLED_SIZE:\n");
+	seq_printf(m, "%-*s %*s %*s %*s\n",
+		   EDMA_DEBUGFS_FIELD_WIDTH, "Ring",
+		   EDMA_DEBUGFS_RING_COL_WIDTH, "prod_idx",
+		   EDMA_DEBUGFS_RING_COL_WIDTH, "cons_idx",
+		   EDMA_DEBUGFS_RING_COL_WIDTH, "filled_size");
+
+	for (ppeds_idx = 0; ppeds_idx < drv->num_nodes; ppeds_idx++) {
+		ppeds_node = drv->ppeds_node_cfg[ppeds_idx].ppeds_db;
+		if (!ppeds_node ||
+		    ppeds_node->wifi_arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI8)
+			continue;
+		ppeds_node_wifi8_cfg = &ppeds_node->wifi8_cfg;
+
+		if (ppeds_node->ppeds_handle.wifi8_hdl.hw_buff_mgmt_en) {
+			rxfill_ring = &ppeds_node_wifi8_cfg->hw_buf_mgmt.rxfill_ring;
+			if (rxfill_ring->count && rxfill_ring->hw_ring_size) {
+				uint32_t fmt = edma_reg_read(EDMA_REG_RXFILL_FORMAT(rxfill_ring->ring_id))
+						& EDMA_RXFILL_FORMAT_MASK;
+				uint32_t step = (fmt == EDMA_RXFILL_FORMAT_8B) ? 2 : 1;
+				rxfill_prod_idx = edma_reg_read(
+						EDMA_REG_RXFILL_PROD_IDX(rxfill_ring->ring_id))
+						& EDMA_RXFILL_PROD_IDX_MASK;
+				rxfill_cons_idx = edma_reg_read(
+						EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id))
+						& EDMA_RXFILL_CONS_IDX_MASK;
+				rxfill_filled = ((rxfill_prod_idx - rxfill_cons_idx + rxfill_ring->hw_ring_size)
+						& (rxfill_ring->hw_ring_size - 1)) / step;
+				snprintf(ring_header, sizeof(ring_header), "HW_Ring_%d", rxfill_ring->ring_id);
+				seq_printf(m, "%-*s %*u %*u %*u\n",
+					   EDMA_DEBUGFS_FIELD_WIDTH, ring_header,
+					   EDMA_DEBUGFS_RING_COL_WIDTH, rxfill_prod_idx,
+					   EDMA_DEBUGFS_RING_COL_WIDTH, rxfill_cons_idx,
+					   EDMA_DEBUGFS_RING_COL_WIDTH, rxfill_filled);
+			}
+		}
+
+		rxfill_ring = &ppeds_node_wifi8_cfg->rxfill_ring;
+		if (rxfill_ring->count && rxfill_ring->hw_ring_size) {
+			rxfill_prod_idx = rxfill_ring->prod_idx;
+			rxfill_cons_idx = edma_reg_read(
+					EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id))
+					& EDMA_RXFILL_CONS_IDX_MASK;
+			{
+				uint32_t fmt = edma_reg_read(EDMA_REG_RXFILL_FORMAT(rxfill_ring->ring_id))
+						& EDMA_RXFILL_FORMAT_MASK;
+				uint32_t step = (fmt == EDMA_RXFILL_FORMAT_8B) ? 2 : 1;
+				rxfill_filled = ((rxfill_prod_idx - rxfill_cons_idx + rxfill_ring->hw_ring_size)
+						& (rxfill_ring->hw_ring_size - 1)) / step;
+			}
+			snprintf(ring_header, sizeof(ring_header), "SW_Ring_%d", rxfill_ring->ring_id);
+			seq_printf(m, "%-*s %*u %*u %*u\n",
+				   EDMA_DEBUGFS_FIELD_WIDTH, ring_header,
+				   EDMA_DEBUGFS_RING_COL_WIDTH, rxfill_prod_idx,
+				   EDMA_DEBUGFS_RING_COL_WIDTH, rxfill_cons_idx,
+				   EDMA_DEBUGFS_RING_COL_WIDTH, rxfill_filled);
+		}
+	}
 #endif
 	kfree(rx_fill_stats);
 	kfree(rx_desc_stats);
@@ -542,6 +610,9 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 
 		txdesc_ring = egc->txdesc_info[i].txdesc_ring;
+		if (!txdesc_ring)
+			continue;
+
 		tx_desc_stats_ptr = &txdesc_ring->tx_desc_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&tx_desc_stats_ptr->syncp);
@@ -560,6 +631,9 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 			continue;
 
 		txcmpl_ring = egc->txcmpl_info[i].txcmpl_ring;
+		if (!txcmpl_ring)
+			continue;
+
 		tx_cmpl_stats_ptr = &txcmpl_ring->tx_cmpl_stats;
 		do {
 			start = edma_dp_stats_fetch_begin(&tx_cmpl_stats_ptr->syncp);

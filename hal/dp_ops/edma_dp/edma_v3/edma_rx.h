@@ -462,6 +462,7 @@ struct edma_rxfill_ring {
 	uint32_t ring_id;		/* RXFILL ring number */
 	uint32_t count;			/* number of descriptors in the ring */
 	uint32_t count_mask;		/* ring size mask (count - 1) */
+	uint32_t hw_ring_size;		/* actual HW ring size programmed into ring size register */
 	uint32_t prod_idx;		/* Ring producer index */
 	uint32_t alloc_size;		/* Buffer size to allocate */
 	uint32_t num_rxfill_pending;	/* Number of allocation pending */
