@@ -489,7 +489,7 @@ EXPORT_SYMBOL(nss_dp_udp_st_reset_indices);
  *	Copies all the rules skb into txdesc and assigns service code and other
  *	parameters in txdesc
  */
-int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t vp_num)
+int nss_dp_udp_st_xmit(struct nss_dp_udp_st_xmit_info *xmit_info)
 {
 	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
 	struct edma_txdesc_ring *tx_ring;
@@ -498,6 +498,12 @@ int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t
 	dma_addr_t buff_addr;
 	uint32_t buf_len;
 	unsigned long flags;
+	struct sk_buff *skb = xmit_info->skb;
+	int skb_idx = xmit_info->skb_idx;
+	int skb_count = xmit_info->skb_count;
+	uint16_t vp_num = xmit_info->vp_num;
+	bool is_veip = xmit_info->is_veip;
+	bool is_gem_port = xmit_info->is_gem_port;
 	int i;
 
 	if (unlikely(!egc->udp_st_ctx.initialized)) {
@@ -505,7 +511,7 @@ int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t
 		return -EINVAL;
 	}
 
-	if (unlikely(!skb || skb_idx < 0 || skb_count <= 0 || skb_idx >= skb_count)) {
+	if (unlikely(!xmit_info || !skb || skb_idx < 0 || skb_count <= 0 || skb_idx >= skb_count)) {
 		edma_err("UDP-ST: xmit: invalid args (skb=%px skb_idx=%d skb_count=%d)\n",
 			 skb, skb_idx, skb_count);
 		return -EINVAL;
@@ -520,7 +526,11 @@ int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t
 	}
 
 	buf_len   = skb_headlen(skb);
-	buff_addr = (dma_addr_t)virt_to_phys(skb->data - EDMA_DDRQ_PREHEADER_SIZE);
+	if (is_veip) {
+		buff_addr = (dma_addr_t)virt_to_phys(skb->data);
+	} else {
+		buff_addr = (dma_addr_t)virt_to_phys(skb->data - EDMA_DDRQ_PREHEADER_SIZE);
+	}
 
 	spin_lock_irqsave(&egc->udp_st_ctx.lock, flags);
 
@@ -535,8 +545,12 @@ int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t
 #if defined(NSS_DP_HIGHMEM_SUPP)
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-		EDMA_TXDESC_DATA_OFFSET_SET(txd, EDMA_DDRQ_PREHEADER_SIZE);
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
+		if (is_veip) {
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+		} else {
+			EDMA_TXDESC_DATA_OFFSET_SET(txd, EDMA_DDRQ_PREHEADER_SIZE);
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
+		}
 		EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
 
 		if (unlikely(skb->ip_summed == CHECKSUM_PARTIAL)) {
@@ -545,12 +559,21 @@ int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t
 			EDMA_TXDESC_L4_CSUM_SET(txd);
 		}
 
-		/*
-		 * Bypasses the Source Port Filter check so PPE accepts the
-		 * packet injected from the host CPU TX ring. Flow lookup
-		 * still runs.
-		 */
-		EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_UDP_ST);
+		if (is_gem_port) {
+			if (is_veip) {
+				/*
+				 * HGU case
+				 */
+				EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_UDP_ST_PON);
+			} else {
+				/*
+				 * SFU case
+				 */
+				EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_UDP_ST_SFU);
+			}
+		} else {
+			EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_UDP_ST);
+		}
 
 		EDMA_TXDESC_FAKE_MAC_HDR_SET(txd, 0);
 

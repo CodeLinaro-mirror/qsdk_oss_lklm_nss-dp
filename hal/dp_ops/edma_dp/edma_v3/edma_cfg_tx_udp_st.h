@@ -33,6 +33,6 @@ void edma_cfg_tx_udp_st_ring_disable(struct edma_gbl_ctx *egc);
 int nss_dp_udp_st_init(void);
 void nss_dp_udp_st_deinit(void);
 void nss_dp_udp_st_reset_indices(void);
-int nss_dp_udp_st_xmit(struct sk_buff *skb, int skb_idx, int skb_count, uint16_t vp_num);
+int nss_dp_udp_st_xmit(struct nss_dp_udp_st_xmit_info *xmit_info);
 
 #endif	/* __EDMA_CFG_TX_UDP_ST_H__ */
