@@ -578,6 +578,10 @@ struct edma_gbl_ctx {
 			/* Tracks NSS NOC initialization stages (IPQ54xx) */
 };
 
+typedef void (*edma_rx_wifi_qos_handler_t) (struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+					    struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+					    struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+
 extern struct edma_gbl_ctx *edma_gbl_ctx;
 extern uint32_t edma_hang_recover;
 extern int edma_dp_extension_en;

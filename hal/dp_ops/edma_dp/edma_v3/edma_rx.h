@@ -299,6 +299,26 @@ extern uint32_t edma_dp_gro_rx_ring_sz;
 #define EDMA_RX_MLO_METADATA_CONSTRUCT(mark, msduq)		(EDMA_RX_SAWF_TAG | \
 								(mark << EDMA_RXDESC_MLO_MSDUQ_SHIFT) | \
 								(msduq))
+/*
+ * UDP-ST related macros
+ */
+#define EDMA_RXDESC_UDP_ST_MARK_MASK			0x000FFFFF
+#define EDMA_RXDESC_UDP_ST_MARK_GET(desc)		(EDMA_RXDESC_TREE_ID_GET(desc) & EDMA_RXDESC_UDP_ST_MARK_MASK)
+
+/*
+ * UDP-ST rule id tag to be added for UDP-ST metadata
+ */
+#define EDMA_RX_UDP_ST_TAG	0xDD
+#define EDMA_RX_UDP_ST_SHIFT	24
+
+/*
+ * Construct the UDP-ST metadata
+ *	-----------------------------------------------------
+ *	|TAG (8 bits) | Tree-ID (Least significant 24 bits) |
+ *	-----------------------------------------------------
+ */
+#define EDMA_RX_UDP_ST_METADATA_CONSTRUCT(mark)			((EDMA_RX_UDP_ST_TAG << EDMA_RX_UDP_ST_SHIFT)| mark)
+
 
 /*
  * Opaque values are set in word2 and word3, they are not accessed by the EDMA HW,
