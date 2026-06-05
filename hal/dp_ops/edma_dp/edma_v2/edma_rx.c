@@ -1701,7 +1701,7 @@ static inline struct net_device *edma_rx_get_src_dev(
 		src_port_num = src_info & EDMA_RXDESC_PORTNUM_BITS;
 	} else {
 		if (net_ratelimit()) {
-			edma_warn("Src_info_type:0x%x. Drop skb:%px\n",
+			edma_debug("Src_info_type:0x%x. Drop skb:%px\n",
 					(src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK), skb);
 		}
 
