@@ -55,11 +55,11 @@ bool nss_dp_hal_nsm_sawf_sc_stats_read(struct nss_dp_hal_nsm_sawf_sc_stats *nsm_
 
 /*
  * nss_dp_hal_deinit_soc_priv_flags()
- *	API to de-initialize DP DEV flags field
+ *	API to de initialize DP DEV flags field
  */
 void nss_dp_hal_deinit_soc_priv_flags(struct nss_dp_dev *dp_priv)
 {
-	return;
+	clear_bit(__NSS_DP_NO_LIST, &dp_priv->flags);
 }
 
 /*
@@ -68,7 +68,7 @@ void nss_dp_hal_deinit_soc_priv_flags(struct nss_dp_dev *dp_priv)
  */
 void nss_dp_hal_init_soc_priv_flags(struct nss_dp_dev *dp_priv)
 {
-	return;
+	set_bit(__NSS_DP_NO_LIST, &dp_priv->flags);
 }
 
 /*
