@@ -1713,6 +1713,15 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		 */
 		edma_reg_write(EDMA_REG_RXFILL_INT_MASK(wifi8_cfg->hw_buf_mgmt.rxfill_ring.ring_id),
 				EDMA_MASK_INT_CLEAR);
+
+		/*
+		 * Reset the Primary Rxfill and Tx completion ring indexes
+		 * if Hardware support is present.
+		 */
+		if (edma_dp_per_ring_reset_support()) {
+			edma_cfg_txcmpl_ring_reset(&wifi8_cfg->hw_buf_mgmt.txcmpl_ring);
+			edma_cfg_rxfill_ring_reset(&wifi8_cfg->hw_buf_mgmt.rxfill_ring);
+		}
 	}
 
 	/*

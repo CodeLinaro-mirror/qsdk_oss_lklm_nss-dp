@@ -246,6 +246,9 @@
 #define EDMA_REG_TXCMPL_CTRL(n)		(0x79014 + (0x1000 * (n)))
 #define EDMA_REG_TXCMPL_BPC(n)		(0x79018 + (0x1000 * (n)))
 
+#define EDMA_TXCMPL_IDX_RESET_SHIFT		2
+#define EDMA_TXCMPL_IDX_RESET		(0x1 << EDMA_TXCMPL_IDX_RESET_SHIFT)
+
 #if defined(NSS_DP_HIGHMEM_SUPP)
 #define EDMA_REG_TXCMPL_BA_HIGH(n)	(0x7901C + (0x1000 * (n)))
 #endif
@@ -687,6 +690,12 @@
 #define EDMA_RXDESC_RX_DISABLE			0x1
 #define EDMA_RXDESC_RX_RESET			0x1
 #define EDMA_RXDESC_CTRL_PH_EN			(~(0x40))
+
+/*
+ * EDMA_RXFILL_RESET register
+ */
+#define EDMA_RXFILL_IDX_RESET			0x1
+#define EDMA_REG_RXFILL_IDX_RESET(n)	(0x2902C + (0x100 * (n)))
 
 /*
  * EDMA RX ring mode (preheader/secondary ring) configurations

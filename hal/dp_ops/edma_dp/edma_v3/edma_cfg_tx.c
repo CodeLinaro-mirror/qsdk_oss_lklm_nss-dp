@@ -453,6 +453,31 @@ void edma_cfg_tx_ring_reset(struct edma_txdesc_ring *ring)
 }
 
 /*
+ * edma_cfg_txcmpl_ring_reset()
+ *	API to reset Txcmpl ring indexes.
+ */
+void edma_cfg_txcmpl_ring_reset(struct edma_txcmpl_ring *ring)
+{
+	uint32_t data = 0;
+
+	/*
+	 * Reset the ring - wait untill the reset operation is done.
+	 */
+	data = edma_reg_read(EDMA_REG_TXCMPL_CTRL(ring->id));
+	data |= EDMA_TXCMPL_IDX_RESET;
+	edma_reg_write(EDMA_REG_TXCMPL_CTRL(ring->id), data);
+	do {
+		data = edma_reg_read(EDMA_REG_TXCMPL_CTRL(ring->id));
+		data &= EDMA_TXCMPL_IDX_RESET;
+	} while (data);
+
+	/*
+	 * Reset the software producer index.
+	 */
+	ring->cons_idx = 0;
+}
+
+/*
  * edma_cfg_tx_desc_ring_disable()
  *	API to disable one TXDESC ring.
  */
