@@ -76,6 +76,9 @@ int edma_dp_host_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 module_param(edma_dp_host_num_tx_rings_per_core, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_tx_rings_per_core, "Number of Host TX rings");
 
+module_param(edma_dp_boot_rx_fill_cnt, int, 0644);
+MODULE_PARM_DESC(edma_dp_boot_rx_fill_cnt, "Initial number of buffers to reap for Rx fill rings");
+
 int edma_dp_host_num_txcmpl_rings = NR_CPUS + EDMA_MAX_TXDESC_RING_PPEVP;
 module_param(edma_dp_host_num_txcmpl_rings, int, 0640);
 MODULE_PARM_DESC(edma_dp_host_num_txcmpl_rings, "Number of Host TX cmpl rings");
