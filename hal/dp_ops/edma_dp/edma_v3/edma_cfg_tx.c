@@ -273,7 +273,7 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
  */
 static void edma_cfg_tx_cmpl_ring_configure(struct edma_txcmpl_ring *txcmpl_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t data;
 	uint32_t paddr;
 
@@ -369,7 +369,7 @@ void edma_cfg_tx_fill_per_port_tx_map(struct net_device *netdev, uint32_t macid)
 				continue;
 
 			txdesc_ring_id = tx_info->tx_ring_per_core_map[i][j];
-			txdesc_ring = edma_gbl_ctx.txdesc_info[txdesc_ring_id].txdesc_ring;
+			txdesc_ring = edma_gbl_ctx->txdesc_info[txdesc_ring_id].txdesc_ring;
 			dp_dev->dp_info.txr_map[i][j] = txdesc_ring;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 			if (dp_dev->nss_dp_mht_dev)
@@ -383,10 +383,10 @@ void edma_cfg_tx_fill_per_port_tx_map(struct net_device *netdev, uint32_t macid)
 		return;
 
 	sw_port = 1;
-	for (i = NSS_DP_HAL_MAX_PORTS; i < edma_gbl_ctx.max_tx_ports; i++) {
+	for (i = NSS_DP_HAL_MAX_PORTS; i < edma_gbl_ctx->max_tx_ports; i++) {
 		for_each_possible_cpu(j) {
-			txdesc_ring_id = edma_gbl_ctx.tx_map[i][j];
-			txdesc_ring = &edma_gbl_ctx.txdesc_rings[txdesc_ring_id - txdesc_start];
+			txdesc_ring_id = edma_gbl_ctx->tx_map[i][j];
+			txdesc_ring = &edma_gbl_ctx->txdesc_rings[txdesc_ring_id - txdesc_start];
 			dp_dev->dp_info.txr_sw_port_map[sw_port][j] = txdesc_ring;
 		}
 		sw_port++;

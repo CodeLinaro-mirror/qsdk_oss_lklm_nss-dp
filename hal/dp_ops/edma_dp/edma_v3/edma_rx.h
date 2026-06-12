@@ -10,10 +10,6 @@
 
 struct edma_gbl_ctx;
 
-extern uint32_t rx_ring_sz_low_mem;
-extern uint32_t rx_ring_sz_medium_mem;
-extern uint32_t rx_ring_sz_high_mem;
-
 #if defined(NSS_DP_HW_GRO)
 extern uint32_t edma_dp_gro_rx_ring_sz;
 #define EDMA_RX_GRO_BUFFER_SIZE (SKB_WITH_OVERHEAD(2048))
@@ -56,13 +52,8 @@ extern uint32_t edma_dp_gro_rx_ring_sz;
 /*
  * TODO - Make this a tunable parameter using module-param.
  */
-#if defined(NSS_DP_MEM_PROFILE_LOW)
-#define EDMA_RX_RING_SIZE		rx_ring_sz_low_mem
-#elif defined(NSS_DP_MEM_PROFILE_MEDIUM)
-#define EDMA_RX_RING_SIZE		rx_ring_sz_medium_mem
-#else
-#define EDMA_RX_RING_SIZE		rx_ring_sz_high_mem
-#endif
+
+#define EDMA_RX_RING_SIZE		edma_gbl_ctx->rx_ring_sz
 
 #define EDMA_RX_RING_SIZE_MASK		(EDMA_RX_RING_SIZE - 1)
 #define EDMA_RX_RING_ID_MASK		0x1F

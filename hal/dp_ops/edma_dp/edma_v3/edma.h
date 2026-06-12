@@ -807,13 +807,16 @@ struct edma_gbl_ctx {
 	struct edma_udp_st_ctx udp_st_ctx;
 			/* UDP-ST TX ring context */
 #endif
+	uint32_t mem_profile;
+	uint32_t rx_ring_sz;
+	uint32_t tx_ring_sz;
 };
 
 typedef void (*edma_rx_wifi_qos_handler_t) (struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
 					    struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
 					    struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
 
-extern struct edma_gbl_ctx edma_gbl_ctx;
+extern struct edma_gbl_ctx *edma_gbl_ctx;
 extern struct edma_init_info init_info;
 extern uint32_t edma_hang_recover;
 extern int edma_dp_extension_en;
@@ -883,7 +886,7 @@ static const struct kernel_param_ops param_ops_bp_stats_en_txcmpl_ring_id;
  */
 static inline uint32_t edma_reg_read(uint32_t reg_off)
 {
-	return hal_read_reg(edma_gbl_ctx.reg_base, reg_off);
+	return hal_read_reg(edma_gbl_ctx->reg_base, reg_off);
 }
 
 /*
@@ -892,7 +895,7 @@ static inline uint32_t edma_reg_read(uint32_t reg_off)
  */
 static inline void edma_reg_write(uint32_t reg_off, uint32_t val)
 {
-	hal_write_reg(edma_gbl_ctx.reg_base, reg_off, val);
+	hal_write_reg(edma_gbl_ctx->reg_base, reg_off, val);
 }
 
 /*
@@ -971,8 +974,8 @@ static inline bool edma_dp_per_ring_reset_support(void)
  */
 static inline void edma_set_init_stage(enum edma_init_stage stage)
 {
-	if (stage < EDMA_INIT_STAGE_MAX) {
-		edma_gbl_ctx.hw_init_bitmap |= BIT(stage);
+	if (edma_gbl_ctx && (stage < EDMA_INIT_STAGE_MAX)) {
+		edma_gbl_ctx->hw_init_bitmap |= BIT(stage);
 	}
 }
 
@@ -982,8 +985,8 @@ static inline void edma_set_init_stage(enum edma_init_stage stage)
  */
 static inline void edma_set_clk_stage(enum edma_clock_init_stage stage)
 {
-	if (stage < EDMA_CLK_STAGE_MAX) {
-		edma_gbl_ctx.clk_init_bitmap |= BIT(stage);
+	if (edma_gbl_ctx && (stage < EDMA_CLK_STAGE_MAX)) {
+		edma_gbl_ctx->clk_init_bitmap |= BIT(stage);
 	}
 }
 #endif	/* __EDMA_H__ */

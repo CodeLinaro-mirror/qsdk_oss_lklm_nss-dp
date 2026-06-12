@@ -6,9 +6,6 @@
 #ifndef __EDMA_TX_H__
 #define __EDMA_TX_H__
 
-extern uint32_t tx_ring_sz_low_medium_mem;
-extern uint32_t tx_ring_sz_high_mem;
-
 /*
  * edma_tx_cb
  *	EDMA TX control buffer structure stored in SKB->cb
@@ -45,11 +42,8 @@ struct edma_tx_cb {
 #endif
 
 #define EDMA_TX_MAX_PRIORITY_LEVEL	1
-#if defined(NSS_DP_MEM_PROFILE_LOW) || defined(NSS_DP_MEM_PROFILE_MEDIUM)
-#define EDMA_TX_RING_SIZE		tx_ring_sz_low_medium_mem
-#else
-#define EDMA_TX_RING_SIZE		tx_ring_sz_high_mem
-#endif
+
+#define EDMA_TX_RING_SIZE		edma_gbl_ctx->tx_ring_sz
 
 #define EDMA_TX_RING_SIZE_MASK		(EDMA_TX_RING_SIZE - 1)
 

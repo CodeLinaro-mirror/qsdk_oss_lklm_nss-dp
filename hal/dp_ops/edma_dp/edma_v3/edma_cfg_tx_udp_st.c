@@ -346,7 +346,7 @@ void edma_cfg_tx_udp_st_ring(struct edma_gbl_ctx *egc)
  */
 int nss_dp_udp_st_init(void)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 
 	if (edma_udp_st_tx_ring == EDMA_RING_FLAGS_INVALID_ID
 		|| edma_udp_st_tx_cmpl_ring == EDMA_RING_FLAGS_INVALID_ID) {
@@ -400,7 +400,7 @@ EXPORT_SYMBOL(nss_dp_udp_st_init);
  */
 void nss_dp_udp_st_deinit(void)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txdesc_ring *tx_ring;
 	unsigned long flags;
 	int i;
@@ -447,7 +447,7 @@ EXPORT_SYMBOL(nss_dp_udp_st_deinit);
  */
 void nss_dp_udp_st_reset_indices(void)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txdesc_ring *tx_ring;
 	unsigned long flags;
 
@@ -491,7 +491,7 @@ EXPORT_SYMBOL(nss_dp_udp_st_reset_indices);
  */
 int nss_dp_udp_st_xmit(struct nss_dp_udp_st_xmit_info *xmit_info)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txdesc_ring *tx_ring;
 	struct edma_txcmpl_ring *tx_cmpl_ring;
 	struct edma_pri_txdesc *txd;

@@ -313,7 +313,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 {
 	struct edma_rx_fill_stats *rx_fill_stats;
 	struct edma_rx_desc_stats *rx_desc_stats;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_rxfill_ring *rxfill_ring;
 	struct edma_rxdesc_ring *rxdesc_ring;
 	struct edma_rx_fill_stats *fill_stats;
@@ -325,7 +325,7 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	uint32_t ppeds_idx, valid_count;
 	char ring_header[EDMA_DEBUGFS_RING_COL_WIDTH + 1];
 	struct edma_ppeds_node_wifi7 *ppeds_node_cfg;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node;
 #endif
 
@@ -504,7 +504,7 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 {
 	struct edma_tx_cmpl_stats *tx_cmpl_stats;
 	struct edma_tx_desc_stats *tx_desc_stats;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txdesc_ring *txdesc_ring;
 	struct edma_txcmpl_ring *txcmpl_ring;
 	struct edma_tx_desc_stats *tx_desc_stats_ptr;
@@ -517,7 +517,7 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	char ring_header[EDMA_DEBUGFS_RING_COL_WIDTH + 1];
 	struct edma_ppeds_node_wifi7 *ppeds_node_cfg;
 	struct edma_txdesc_ring *tx_ring;
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node;
 #endif
 
@@ -702,7 +702,7 @@ static int edma_debugfs_misc_stats_show(struct seq_file *m, void __attribute__((
 	 * Get percpu EDMA miscellaneous stats
 	 */
 	for_each_possible_cpu(cpu) {
-		pcpu_misc_stats = per_cpu_ptr(edma_gbl_ctx.misc_stats, cpu);
+		pcpu_misc_stats = per_cpu_ptr(edma_gbl_ctx->misc_stats, cpu);
 		do {
 			start = edma_dp_stats_fetch_begin(&pcpu_misc_stats->syncp);
 			misc_stats->edma_misc_axi_read_err +=
@@ -766,10 +766,10 @@ static int edma_debugfs_misc_stats_show(struct seq_file *m, void __attribute__((
  */
 static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__((unused))*p)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t i;
 #ifdef NSS_DP_PPEDS_SUPPORT
-	struct edma_ppeds_drv *drv = &edma_gbl_ctx.ppeds_drv;
+	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
 	struct edma_ppeds *ppeds_node;
 #endif
 
@@ -778,7 +778,7 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
 			memset(&egc->rxfill_info[i].rxfill_ring->rx_fill_stats, 0, sizeof(struct edma_rx_fill_stats));
 	}
 
-	for (i = 0; i < edma_gbl_ctx.rxdesc_ring_max; i++) {
+	for (i = 0; i < edma_gbl_ctx->rxdesc_ring_max; i++) {
 		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IS_CONFIGURED)
 			memset(&egc->rxdesc_info[i].rxdesc_ring->rx_desc_stats, 0, sizeof(struct edma_rx_desc_stats));
 	}
@@ -819,7 +819,7 @@ static int edma_debugfs_clear_ring_stats(struct seq_file *m, void __attribute__(
  */
 static int edma_debugfs_hw_gro_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	seq_printf(m, "\t\t EDMA HW_GRO timeout = %d\n", egc->hw_gro_ctx.gro_timeout_usecs);
 	seq_printf(m, "\t\t EDMA HW_GRO buffer len = %d\n", egc->hw_gro_ctx.gro_buffer_len);
 	seq_printf(m, "\t\t EDMA HW_GRO descriptor count = %d\n", egc->hw_gro_ctx.gro_desc_count);
@@ -846,7 +846,7 @@ static int edma_debugfs_ddrq_info_show(struct seq_file *m, void __attribute__((u
  */
 static int edma_debugfs_loopback_stats_show(struct seq_file *m, void __attribute__((unused))*p)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	int i = 0;
 
 	seq_printf(m, "\n#EDMA loopback configuration stats:\n\n");
@@ -940,7 +940,7 @@ const struct file_operations edma_debugfs_ddrq_file_ops = {
  */
 static int edma_debugfs_mht_tx_fcgrp_show(struct seq_file *m, void __attribute__((unused))*p)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct net_device *netdev = NULL;
 	struct nss_dp_dev *dp_dev = NULL;
 	struct edma_txdesc_ring *tx_ring = NULL;
@@ -1392,73 +1392,73 @@ static const struct file_operations edma_debugfs_bp_cnt_total_file_ops = {
  */
 int edma_debugfs_init(void)
 {
-	edma_gbl_ctx.root_dentry = debugfs_create_dir("qca-nss-dp", NULL);
-	if (!edma_gbl_ctx.root_dentry) {
+	edma_gbl_ctx->root_dentry = debugfs_create_dir("qca-nss-dp", NULL);
+	if (!edma_gbl_ctx->root_dentry) {
 		edma_err("Unable to create debugfs qca-nss-dp directory in debugfs\n");
 		return -1;
 	}
 
-	edma_gbl_ctx.stats_dentry = debugfs_create_dir("stats", edma_gbl_ctx.root_dentry);
-	if (!edma_gbl_ctx.stats_dentry) {
+	edma_gbl_ctx->stats_dentry = debugfs_create_dir("stats", edma_gbl_ctx->root_dentry);
+	if (!edma_gbl_ctx->stats_dentry) {
 		edma_err("Unable to create debugfs stats directory in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	edma_gbl_ctx.bp_stats_dentry = debugfs_create_dir("bp_stats", edma_gbl_ctx.stats_dentry);
-	if (!edma_gbl_ctx.bp_stats_dentry) {
+	edma_gbl_ctx->bp_stats_dentry = debugfs_create_dir("bp_stats", edma_gbl_ctx->stats_dentry);
+	if (!edma_gbl_ctx->bp_stats_dentry) {
 		edma_err("Unable to create debugfs bp stats directory in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("bp_counter_clk_cycle", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+	if (!debugfs_create_file("bp_counter_clk_cycle", S_IRUGO | S_IWUGO, edma_gbl_ctx->bp_stats_dentry,
 				  NULL, &edma_debugfs_bp_counter_clk_cycle_file_ops)) {
 		edma_err("Unable to create bp counter clk cycle file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("bp_counter_clean_bitmap", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+	if (!debugfs_create_file("bp_counter_clean_bitmap", S_IRUGO | S_IWUGO, edma_gbl_ctx->bp_stats_dentry,
 				  NULL, &edma_debugfs_bp_counter_clean_bitmap_file_ops)) {
 		edma_err("Unable to create bp counter clean bitmap file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("bp_counters_enable", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+	if (!debugfs_create_file("bp_counters_enable", S_IRUGO | S_IWUGO, edma_gbl_ctx->bp_stats_dentry,
 				  NULL, &edma_debugfs_bp_counters_enable_file_ops)) {
 		edma_err("Unable to create bp counters enable file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("bp_counters", S_IRUGO, edma_gbl_ctx.bp_stats_dentry,
+	if (!debugfs_create_file("bp_counters", S_IRUGO, edma_gbl_ctx->bp_stats_dentry,
 				  NULL, &edma_debugfs_bp_counters_file_ops)) {
 		edma_err("Unable to create bp counters file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("bp_all_counters_clean", S_IRUGO | S_IWUGO, edma_gbl_ctx.bp_stats_dentry,
+	if (!debugfs_create_file("bp_all_counters_clean", S_IRUGO | S_IWUGO, edma_gbl_ctx->bp_stats_dentry,
 				  NULL, &edma_debugfs_bp_all_counters_clean_file_ops)) {
 		edma_err("Unable to create bp all counters clean file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("bp_cnt_total", S_IRUGO, edma_gbl_ctx.bp_stats_dentry,
+	if (!debugfs_create_file("bp_cnt_total", S_IRUGO, edma_gbl_ctx->bp_stats_dentry,
 				  NULL, &edma_debugfs_bp_cnt_total_file_ops)) {
 		edma_err("Unable to create bp cnt total file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("rx_ring_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
+	if (!debugfs_create_file("rx_ring_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
 			NULL, &edma_debugfs_rx_rings_file_ops)) {
 		edma_err("Unable to create Rx rings statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("tx_ring_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
+	if (!debugfs_create_file("tx_ring_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
 			NULL, &edma_debugfs_tx_rings_file_ops)) {
 		edma_err("Unable to create Tx rings statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("clear_ring_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
+	if (!debugfs_create_file("clear_ring_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
 			NULL, &edma_debugfs_clear_ring_stats_ops)) {
 		edma_err("Unable to create clear rings statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -1472,14 +1472,14 @@ int edma_debugfs_init(void)
 		goto debugfs_dir_failed;
 	}
 
-	if (!debugfs_create_file("misc_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
+	if (!debugfs_create_file("misc_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
 			NULL, &edma_debugfs_misc_file_ops)) {
 		edma_err("Unable to create EDMA miscellaneous statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 
 #if defined(NSS_DP_EDMA_LOOPBACK_SUPPORT)
-	if (!debugfs_create_file("loopback_stats", S_IRUGO, edma_gbl_ctx.stats_dentry,
+	if (!debugfs_create_file("loopback_stats", S_IRUGO, edma_gbl_ctx->stats_dentry,
 			NULL, &edma_debugfs_loopback_file_ops)) {
 		edma_err("Unable to create EDMA loopback statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -1488,7 +1488,7 @@ int edma_debugfs_init(void)
 #endif
 
 #ifdef NSS_DP_MHT_SW_PORT_MAP
-	if (!debugfs_create_file("mht_tx_fcgrp", S_IRUGO, edma_gbl_ctx.root_dentry,
+	if (!debugfs_create_file("mht_tx_fcgrp", S_IRUGO, edma_gbl_ctx->root_dentry,
 			NULL, &edma_debugfs_mht_tx_fcgrp_file_ops)) {
 		edma_err("Unable to create EDMA tx fcgrp on MHT ports file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -1496,7 +1496,7 @@ int edma_debugfs_init(void)
 #endif
 
 #if defined(NSS_DP_HW_GRO)
-	if (!debugfs_create_file("hw_gro_config", S_IRUGO, edma_gbl_ctx.stats_dentry,
+	if (!debugfs_create_file("hw_gro_config", S_IRUGO, edma_gbl_ctx->stats_dentry,
 			NULL, &edma_debugfs_hw_gro_file_ops)) {
 		edma_err("Unable to create EDMA loopback statistics file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -1504,7 +1504,7 @@ int edma_debugfs_init(void)
 #endif
 
 #if defined(NSS_DP_DDRQ_SUPPORT)
-	if (!debugfs_create_file("ddrq_info", S_IRUGO, edma_gbl_ctx.root_dentry,
+	if (!debugfs_create_file("ddrq_info", S_IRUGO, edma_gbl_ctx->root_dentry,
 			NULL, &edma_debugfs_ddrq_file_ops)) {
 		edma_err("Unable to create EDMA DDRQ information file entry in debugfs\n");
 		goto debugfs_dir_failed;
@@ -1513,10 +1513,10 @@ int edma_debugfs_init(void)
 	return 0;
 
 debugfs_dir_failed:
-	debugfs_remove_recursive(edma_gbl_ctx.root_dentry);
-	edma_gbl_ctx.root_dentry = NULL;
-	edma_gbl_ctx.stats_dentry = NULL;
-	edma_gbl_ctx.bp_stats_dentry = NULL;
+	debugfs_remove_recursive(edma_gbl_ctx->root_dentry);
+	edma_gbl_ctx->root_dentry = NULL;
+	edma_gbl_ctx->stats_dentry = NULL;
+	edma_gbl_ctx->bp_stats_dentry = NULL;
 	return -1;
 }
 
@@ -1531,10 +1531,10 @@ void edma_debugfs_exit(void)
 	 */
 	edma_misc_stats_free();
 
-	if (edma_gbl_ctx.root_dentry) {
-		debugfs_remove_recursive(edma_gbl_ctx.root_dentry);
-		edma_gbl_ctx.root_dentry = NULL;
-		edma_gbl_ctx.stats_dentry = NULL;
-		edma_gbl_ctx.bp_stats_dentry = NULL;
+	if (edma_gbl_ctx->root_dentry) {
+		debugfs_remove_recursive(edma_gbl_ctx->root_dentry);
+		edma_gbl_ctx->root_dentry = NULL;
+		edma_gbl_ctx->stats_dentry = NULL;
+		edma_gbl_ctx->bp_stats_dentry = NULL;
 	}
 }

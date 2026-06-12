@@ -8,9 +8,6 @@
 #ifndef __EDMA_TX_H__
 #define __EDMA_TX_H__
 
-extern uint32_t tx_ring_sz_low_medium_mem;
-extern uint32_t tx_ring_sz_high_mem;
-
 /*
  * edma_tx_cb
  *	EDMA TX control buffer structure stored in SKB->cb
@@ -33,21 +30,18 @@ struct edma_tx_cb {
 #define EDMA_MAX_TXDESC_RINGS		NSS_DP_EDMA_MAX_TXDESC_RINGS
 #define EDMA_MAX_TXCMPL_RINGS		NSS_DP_EDMA_MAX_TXCMPL_RINGS
 
+#define EDMA_TX_MAX_PRIORITY_LEVEL	1
+
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 #define EDMA_TXCMPL_RING_PER_CORE_MAX	EDMA_MAX_TX_PORTS
-						/* Includes the one additional for VP */
+							/* Includes the one additional for VP */
 #define EDMA_TX_RING_PER_CORE_MAX	(EDMA_TX_MAX_PRIORITY_LEVEL * EDMA_MAX_TX_PORTS)
 #else
 #define EDMA_TXCMPL_RING_PER_CORE_MAX	EDMA_MAX_PORTS
 #define EDMA_TX_RING_PER_CORE_MAX	(EDMA_TX_MAX_PRIORITY_LEVEL * EDMA_MAX_PORTS)
 #endif
 
-#define EDMA_TX_MAX_PRIORITY_LEVEL	1
-#if defined(NSS_DP_MEM_PROFILE_LOW) || defined(NSS_DP_MEM_PROFILE_MEDIUM)
-#define EDMA_TX_RING_SIZE		tx_ring_sz_low_medium_mem
-#else
-#define EDMA_TX_RING_SIZE		tx_ring_sz_high_mem
-#endif
+#define EDMA_TX_RING_SIZE		edma_gbl_ctx->tx_ring_sz
 
 #define EDMA_TX_RING_SIZE_MASK		(EDMA_TX_RING_SIZE - 1)
 
@@ -244,6 +238,17 @@ struct edma_tx_stats {
 	uint64_t tx_gso_drop_pkts;
 	uint64_t tx_queue_stopped[NR_CPUS];
 	struct u64_stats_sync syncp;
+};
+
+/*
+ * edma_pcpu_stats
+ *	EDMA per cpu stats data structure
+ */
+struct edma_pcpu_stats {
+	struct edma_rx_stats __percpu *rx_stats;
+			/* Per CPU Rx statistics */
+	struct edma_tx_stats __percpu *tx_stats;
+			/* Per CPU Tx statistics */
 };
 
 /*

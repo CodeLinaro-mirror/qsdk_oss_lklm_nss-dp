@@ -266,7 +266,7 @@ static inline void edma_rx_process_vp(struct edma_rxdesc_desc *rxdesc_desc, stru
  */
 void edma_rx_free_buffer_loopback(void)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	int i = 0;
 
 	for (i = 0; i < EDMA_MAX_LOOPBACK_BUF; i++) {
@@ -282,7 +282,7 @@ void edma_rx_free_buffer_loopback(void)
 bool edma_rx_alloc_buffer_loopback(struct edma_rxfill_ring *rxfill_ring, int alloc_count)
 {
 	uint32_t i, j = 0, loop_count, tot_memory, rem_tot_memory;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	uint32_t buf_len = rxfill_ring->buf_len;
 	struct edma_rxfill_desc *rxfill_desc;
 	uint32_t order, count;
@@ -425,7 +425,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 {
 	struct edma_rxfill_desc *rxfill_desc;
 	struct edma_rx_fill_stats *rxfill_stats = &rxfill_ring->rx_fill_stats;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct list_head rx_skb_alloc;
 	uint16_t prod_idx, start_idx, cons_idx;
 	uint16_t num_alloc = 0, alloc_count;
@@ -526,7 +526,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 				u64_stats_update_end(&rxfill_stats->syncp);
 				mem_debug_update_skb(skb);
 				dev_kfree_skb_any(skb);
-				edma_debug("edma_gbl_ctx:%px Unable to allocate page", &edma_gbl_ctx);
+				edma_debug("edma_gbl_ctx:%px Unable to allocate page", edma_gbl_ctx);
 				break;
 			}
 
@@ -618,7 +618,7 @@ static inline int edma_rx_alloc_buffer_list(struct edma_rxfill_ring *rxfill_ring
 int edma_rx_alloc_pages(struct edma_rxfill_ring *rxfill_ring, int reap_count)
 {
 	struct edma_rx_fill_stats *rxfill_stats = &rxfill_ring->rx_fill_stats;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_rxfill_desc *rxfill_desc;
 
 	uint32_t phdr_sz = rxfill_ring->pre_hdr_mode_en ? EDMA_RX_PH_SIZE : 0;
@@ -2923,7 +2923,7 @@ next_desc:
 int edma_rx_napi_poll(struct napi_struct *napi, int budget)
 {
 	struct edma_rxdesc_ring *rxdesc_ring = (struct edma_rxdesc_ring *)napi;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	int32_t work_done = 0;
 	uint32_t status;
 
@@ -2993,7 +2993,7 @@ irqreturn_t edma_rx_handle_irq(int irq, void *ctx)
 void edma_rxfill_intr_timer(struct timer_list *tm)
 {
 	struct edma_rxfill_ring *rxfill_ring = from_timer(rxfill_ring, tm, delayed_intr);
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 
 	/*
 	 * Being called from a delayed timer, reset the rxfill interrupt attempts
@@ -3010,7 +3010,7 @@ void edma_rxfill_intr_timer(struct timer_list *tm)
 int edma_rxfill_napi_poll(struct napi_struct *napi, int budget)
 {
 	struct edma_rxfill_ring *rxfill_ring = (struct edma_rxfill_ring *)napi;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	int32_t work_done = 0;
 	uint32_t refill_attempt = 0;
 
