@@ -305,66 +305,76 @@ static int32_t nss_dp_set_eee(struct net_device *netdev, struct ethtool_eee *eee
 	port_eee_cfg.enable = eee->eee_enabled;
 
 	/*
-	 * Translate the ethtool speed types to FAL speed types.
+	 * If no advertisement is specified, default to advertising all
+	 * supported modes. This matches the behaviour of other drivers
+	 * when ethtool is called with just "eee on" and no advertise mask.
 	 */
-	while (eee->advertised) {
-		pos = ffs(eee->advertised);
-		switch (1 << (pos - 1)) {
-		case ADVERTISED_10baseT_Full:
-			if (port_eee_cur_cfg.capability & FAL_PHY_EEE_10BASE_T) {
-				port_eee_cfg.advertisement |= FAL_PHY_EEE_10BASE_T;
-				break;
+	if (!eee->advertised && eee->eee_enabled) {
+		port_eee_cfg.advertisement = port_eee_cur_cfg.capability;
+	} else {
+		/*
+		 * Translate the ethtool speed types to FAL speed types.
+		 */
+		while (eee->advertised) {
+			pos = ffs(eee->advertised);
+			switch (1 << (pos - 1)) {
+			case ADVERTISED_10baseT_Full:
+				if (port_eee_cur_cfg.capability & FAL_PHY_EEE_10BASE_T) {
+					port_eee_cfg.advertisement |= FAL_PHY_EEE_10BASE_T;
+					break;
+				}
+
+				netdev_dbg(netdev, "Advertised value 10baseT_Full is not supported\n");
+				return -EIO;
+
+			case ADVERTISED_100baseT_Full:
+				if (port_eee_cur_cfg.capability & FAL_PHY_EEE_100BASE_T) {
+					port_eee_cfg.advertisement |= FAL_PHY_EEE_100BASE_T;
+					break;
+				}
+
+				netdev_dbg(netdev, "Advertised value 100baseT_Full is not supported\n");
+				return -EIO;
+
+			case ADVERTISED_1000baseT_Full:
+				if (port_eee_cur_cfg.capability & FAL_PHY_EEE_1000BASE_T) {
+					port_eee_cfg.advertisement |= FAL_PHY_EEE_1000BASE_T;
+					break;
+				}
+
+				netdev_dbg(netdev, "Advertised value 1000baseT_Full is not supported\n");
+				return -EIO;
+
+			case ADVERTISED_2500baseX_Full:
+				if (port_eee_cur_cfg.capability & FAL_PHY_EEE_2500BASE_T) {
+					port_eee_cfg.advertisement |= FAL_PHY_EEE_2500BASE_T;
+					break;
+				}
+
+				netdev_dbg(netdev, "Advertised value 2500baseX_Full is not supported\n");
+				return -EIO;
+
+			case ADVERTISED_10000baseT_Full:
+				if (port_eee_cur_cfg.capability & FAL_PHY_EEE_10000BASE_T) {
+					port_eee_cfg.advertisement |= FAL_PHY_EEE_10000BASE_T;
+					break;
+				}
+
+				netdev_dbg(netdev, "Advertised value 10000baseT_Full is not supported\n");
+				return -EIO;
+
+			default:
+				netdev_dbg(netdev, "Advertised value is not supported\n");
+				return -EIO;
 			}
 
-			netdev_dbg(netdev, "Advertised value 10baseT_Full is not supported\n");
-			return -EIO;
-
-		case ADVERTISED_100baseT_Full:
-			if (port_eee_cur_cfg.capability & FAL_PHY_EEE_100BASE_T) {
-				port_eee_cfg.advertisement |= FAL_PHY_EEE_100BASE_T;
-				break;
-			}
-
-			netdev_dbg(netdev, "Advertised value 100baseT_Full is not supported\n");
-			return -EIO;
-
-		case ADVERTISED_1000baseT_Full:
-			if (port_eee_cur_cfg.capability & FAL_PHY_EEE_1000BASE_T) {
-				port_eee_cfg.advertisement |= FAL_PHY_EEE_1000BASE_T;
-				break;
-			}
-
-			netdev_dbg(netdev, "Advertised value 1000baseT_Full is not supported\n");
-			return -EIO;
-
-		case ADVERTISED_2500baseX_Full:
-			if (port_eee_cur_cfg.capability & FAL_PHY_EEE_2500BASE_T) {
-				port_eee_cfg.advertisement |= FAL_PHY_EEE_2500BASE_T;
-				break;
-			}
-
-			netdev_dbg(netdev, "Advertised value 2500baseX_Full is not supported\n");
-			return -EIO;
-
-		case ADVERTISED_10000baseT_Full:
-			if (port_eee_cur_cfg.capability & FAL_PHY_EEE_10000BASE_T) {
-				port_eee_cfg.advertisement |= FAL_PHY_EEE_10000BASE_T;
-				break;
-			}
-
-			netdev_dbg(netdev, "Advertised value 10000baseT_Full is not supported\n");
-			return -EIO;
-
-		default:
-			netdev_dbg(netdev, "Advertised value is not supported\n");
-			return -EIO;
+			eee->advertised &= (~(1 << (pos - 1)));
 		}
-
-		eee->advertised &= (~(1 << (pos - 1)));
 	}
 
 	port_eee_cfg.lpi_tx_enable = eee->tx_lpi_enabled;
-	port_eee_cfg.lpi_sleep_timer = eee->tx_lpi_timer;
+	port_eee_cfg.lpi_sleep_timer = eee->tx_lpi_timer ? eee->tx_lpi_timer :
+					port_eee_cur_cfg.lpi_sleep_timer;
 	ret = fal_port_interface_eee_cfg_set(NSS_DP_ACL_DEV_ID, port_id, &port_eee_cfg);
 	if (ret != SW_OK) {
 		netdev_dbg(netdev, "Could not configure EEE err = %d\n", ret);
