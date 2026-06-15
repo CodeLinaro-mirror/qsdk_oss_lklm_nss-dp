@@ -1436,7 +1436,7 @@ process_next_scatter:
 	 * Only handle GEM port packets.
 	 */
 	if ((src_info & EDMA_RXDESC_SRCINFO_TYPE_MASK) == EDMA_RXDESC_SRCINFO_TYPE_GEM_PORT) {
-		if (unlikely(edma_rx_process_gem(rxdesc_desc, skb))) {
+		if (unlikely(edma_rx_process_gem(rxdesc_desc, skb_head))) {
 			rxdesc_ring->head = NULL;
 			rxdesc_ring->last = NULL;
 			rxdesc_ring->pdesc_head = NULL;
