@@ -152,7 +152,7 @@ int edma_ddrq_ac_queue_wred_en = EDMA_DDRQ_AC_Q_WRED_EN_DEF;
 module_param(edma_ddrq_ac_queue_wred_en, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_ac_queue_wred_en, "DDRQ per queue WRED configuration");
 
-int edma_ddrq_ac_queue_shared_ceiling = EDMA_DDRQ_AC_Q_SHD_CEILING;
+int edma_ddrq_ac_queue_shared_ceiling = EDMA_DDRQ_NO_OP_DEF_VAL;
 module_param(edma_ddrq_ac_queue_shared_ceiling, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_ac_queue_shared_ceiling, "DDRQ per queue shared ceiling configuration");
 
@@ -164,6 +164,14 @@ int edma_ddrq_ac_queue_pre_alloc = EDMA_DDRQ_AC_Q_PRE_ALLOC_DEF;
 module_param(edma_ddrq_ac_queue_pre_alloc, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_ac_queue_pre_alloc, "DDRQ per queue pre alloc configuration");
 
+int edma_ddrq_ac_queue_shared_dynamic = EDMA_DDRQ_AC_Q_SHRD_DYNAMIC;
+module_param(edma_ddrq_ac_queue_shared_dynamic, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_shared_dynamic, "DDRQ per queue shared dynamic configuration");
+
+int edma_ddrq_ac_queue_shared_weight = EDMA_DDRQ_AC_Q_SHRD_WEIGHT;
+module_param(edma_ddrq_ac_queue_shared_weight, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_ac_queue_shared_weight, "DDRQ per queue shared weight configuration");
+
 int edma_ddrq_grp_ac_en = EDMA_DDRQ_AC_GRP_AC_EN_DEF;
 module_param(edma_ddrq_grp_ac_en, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_grp_ac_en, "DDRQ group AC configuration");
@@ -171,6 +179,14 @@ MODULE_PARM_DESC(edma_ddrq_grp_ac_en, "DDRQ group AC configuration");
 int edma_ddrq_grp_color_aware = EDMA_DDRQ_AC_GRP_COLOR_AWARE_DEF;
 module_param(edma_ddrq_grp_color_aware, int, S_IRUGO);
 MODULE_PARM_DESC(edma_ddrq_grp_color_aware, "DDRQ group color aware configuration");
+
+int edma_ddrq_grp_shrd_limit = EDMA_DDRQ_NO_OP_DEF_VAL;
+module_param(edma_ddrq_grp_shrd_limit, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_shrd_limit, "DDRQ group shared limit configuration");
+
+int edma_ddrq_grp_dp_thrd = EDMA_DDRQ_NO_OP_DEF_VAL;
+module_param(edma_ddrq_grp_dp_thrd, int, S_IRUGO);
+MODULE_PARM_DESC(edma_ddrq_grp_dp_thrd, "DDRQ group drop threshold configuration");
 
 int edma_ddrq_grp_id_bm = EDMA_DDRQ_AC_GRP_ID_BM_DEF;
 module_param(edma_ddrq_grp_id_bm, int, S_IRUGO);
