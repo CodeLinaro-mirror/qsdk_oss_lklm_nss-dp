@@ -31,8 +31,8 @@
 /*
  * DDRQ memory region's block wise size map
  */
-static int edma_ddrq_blk_num_map[] = {1024, 2048, 4096};
-static int edma_ddrq_blk_size_map[] = {4096, 8192, 16384, 32768};
+int edma_ddrq_blk_num_map[EDMA_DDRQ_BLK_NUM_MAX_ARR_IDX] = {1024, 2048, 4096};
+int edma_ddrq_blk_size_map[EDMA_DDRQ_BLK_SIZE_MAX_ARR_IDX] = {4096, 8192, 16384, 32768};
 
 /*
  * edma_ddrq_reg_tbl_get()
@@ -1802,10 +1802,22 @@ static int32_t edma_ddrq_get_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 	ddrq_gbl_cfg->ddrq_desc_pf_thres = edma_ddrq_desc_pf_thres;
 	ddrq_gbl_cfg->ddrq_desc_wb_thres = edma_ddrq_desc_wb_thres;
 	ddrq_gbl_cfg->ddrq_data_offset = edma_ddrq_data_offset;
-	ddrq_gbl_cfg->ddrq_blk_num_cfg = edma_ddrq_blk_num;
-	ddrq_gbl_cfg->ddrq_blk_size_cfg = edma_ddrq_blk_size;
 	ddrq_gbl_cfg->ddrq_data_offset0 = edma_ddrq_gbl_data_offset0;
 	ddrq_gbl_cfg->ddrq_pkt_data_align = 1;	// Non configurable
+
+	if ((edma_ddrq_blk_num < 0) || (edma_ddrq_blk_num >= EDMA_DDRQ_BLK_NUM_MAX_ARR_IDX)) {
+		edma_err("Invalid DDRQ BLK num value (%d), allowed range is 0 to %d\n", edma_ddrq_blk_num, EDMA_DDRQ_BLK_NUM_MAX_ARR_IDX - 1);
+		ddrq_gbl_cfg->ddrq_blk_num_cfg = NSS_DP_EDMA_DDRQ_BLK_NUM_DEF;
+	} else {
+		ddrq_gbl_cfg->ddrq_blk_num_cfg = edma_ddrq_blk_num;
+	}
+
+	if ((edma_ddrq_blk_size < 0) || (edma_ddrq_blk_size >= EDMA_DDRQ_BLK_SIZE_MAX_ARR_IDX)) {
+		edma_err("Invalid DDRQ BLK size value (%d), allowed range is 0 to %d\n", edma_ddrq_blk_size, EDMA_DDRQ_BLK_SIZE_MAX_ARR_IDX - 1);
+		ddrq_gbl_cfg->ddrq_blk_size_cfg = NSS_DP_EDMA_DDRQ_BLK_SIZE_DEF;
+	} else {
+		ddrq_gbl_cfg->ddrq_blk_size_cfg = edma_ddrq_blk_size;
+	}
 
 	/*
 	 * Get DDRQ AC queue default configurations
@@ -1965,4 +1977,3 @@ int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg)
 
 	return 0;
 }
-
