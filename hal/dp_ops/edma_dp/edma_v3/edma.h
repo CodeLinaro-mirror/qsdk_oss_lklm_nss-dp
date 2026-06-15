@@ -685,6 +685,9 @@ struct edma_gbl_ctx {
 	struct dentry *root_dentry;	/* Root debugfs entry */
 	struct dentry *stats_dentry;	/* Statistics debugfs entry */
 	struct dentry *bp_stats_dentry;	/* Back pressure statistics debugfs entry */
+#ifdef NSS_DP_DDRQ_SUPPORT
+	struct dentry *ddrq_info_dentry;	/* DDRQ information debugfs entry */
+#endif
 
 	struct edma_misc_stats __percpu *misc_stats;
 			/* Per CPU miscellaneous statistics */
@@ -845,6 +848,8 @@ extern int edma_ddrq_blk_num;
 extern int edma_ddrq_blk_size;
 extern int edma_ddrq_desc_wb_thres;
 extern int edma_ddrq_en_port_bm;;
+extern int edma_ddrq_blk_num_map[EDMA_DDRQ_BLK_NUM_MAX_ARR_IDX];
+extern int edma_ddrq_blk_size_map[EDMA_DDRQ_BLK_SIZE_MAX_ARR_IDX];
 extern int edma_ddrq_vp_port_map[NSS_DP_MAX_PORTS];
 extern int edma_ddrq_ac_queue_ac_en;
 extern int edma_ddrq_ac_queue_color_aware;
