@@ -999,6 +999,7 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 {
 	uint16_t desc_index, next_desc_index;
 	uint32_t dst_port;
+	uint32_t src_port;
 	uint8_t cpu_code, service_code;
 	bool cpu_code_valid, is_ptp_sc, acl_info_valid = false;
 	struct edma_rxdesc_sec_desc *rxdesc_sec, *next_rxdesc_sec;
@@ -1044,6 +1045,14 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 
 		cc_info.cpu_code = cpu_code;
 		cc_info.fake_mac = EDMA_RXDESC_FAKE_MAC_GET(rxdesc_head);
+
+		src_port = EDMA_RXDESC_SRC_INFO_GET(rxdesc_head);
+		if (likely(((src_port & EDMA_RXDESC_SRCINFO_TYPE_MASK) == EDMA_RXDESC_SRCINFO_TYPE_PORTID) &&
+				(EDMA_RXDESC_PORT_ID_GET(src_port) & EDMA_RXDESC_VP_PORT_MASK))) {
+			cc_info.src_vp_num = EDMA_RXDESC_SRC_PORT_ID_GET(rxdesc_head);
+			cc_info.is_src_vp = true;
+		}
+
 		if (cpu_code && ppe_drv_cc_process_skbuff(&cc_info, skb)) {
 			return true;
 		}
