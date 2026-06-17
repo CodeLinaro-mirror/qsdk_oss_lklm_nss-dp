@@ -1179,6 +1179,15 @@ static bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	bool data_ring_auto_index_en;
 	int ret;
 
+	/*
+	 * During umac_reset the memory dealloc/alloc will not be done.
+	 * Initially instance stop is triggered to disable the rings and further
+	 * re-registration happens for all the rings without memory allocation.
+	 */
+	if (ppeds_node->umac_reset_inprogress) {
+		goto auto_idx_info_fill;
+	}
+
 	/* Get ring information from node */
 	ret = edma_ppeds_get_ring_info_to_node(ppeds_node, ppeds_handle);
 	if (!ret) {
@@ -1229,6 +1238,7 @@ static bool edma_ppeds_inst_register(nss_dp_ppeds_handle_t *ppeds_handle)
 	/* Setup mappings */
 	edma_ppeds_setup_mappings(ppeds_node, wifi8_hdl);
 
+auto_idx_info_fill:
 	/* Configure Tx and Rx */
 	edma_ppeds_cfg_tx(ppeds_node);
 	edma_ppeds_cfg_rx(ppeds_node);
@@ -1484,7 +1494,6 @@ static int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	 * enable RXFILL Low threshold interrupt along with the
 	 * associated NAPI
 	 */
-
 	edma_reg_write(EDMA_REG_RXFILL_UGT_THRE(wifi8_cfg->rxfill_ring.ring_id),
 			EDMA_RXFILL_LOW_THRE_MASK & wifi8_hdl->eth_rxfill_low_thr);
 	edma_reg_write(EDMA_REG_RXFILL_INT_MASK(wifi8_cfg->rxfill_ring.ring_id),
