@@ -958,6 +958,7 @@ static bool edma_rx_handle_host_qdisc_packets(struct edma_rxdesc_ring *rxdesc_ri
 	skb->protocol = ethh->h_proto;
 	skb->dev = qdisc_dev;
 	skb->priority = ppe_drv_get_qos_tag(flow_idx);
+	skb->fast_forwarded = 1;
 
 	if (likely(dev_fast_xmit_qdisc(skb, qdisc_dev, bottom_dev))) {
 		dev_put(qdisc_dev);
