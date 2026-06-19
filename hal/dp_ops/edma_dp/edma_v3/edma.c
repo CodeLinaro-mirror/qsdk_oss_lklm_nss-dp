@@ -329,6 +329,10 @@ MODULE_PARM_DESC(edma_udp_st_fc_grp_id, "Flow Control group ID for UDP-ST TX rin
 int edma_udp_st_ring_size = EDMA_TX_UDP_ST_RING_SIZE;
 module_param(edma_udp_st_ring_size, int, 0640);
 MODULE_PARM_DESC(edma_udp_st_ring_size, "Ring size for UDP-ST TX descriptor ring");
+
+int edma_udp_st_pass_through_mode = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+module_param(edma_udp_st_pass_through_mode, int, 0640);
+MODULE_PARM_DESC(edma_udp_st_pass_through_mode, "Pass-through mode for UDP-ST TX descriptors (0=192B, 1=128B, 2=0B, 3=FULL_DATA)");
 #endif
 
 /*
@@ -3446,6 +3450,7 @@ static void edma_recovery_cleanup(bool is_dp_override)
 
 #ifdef NSS_DP_UDP_ST_SUPPORT
 	if (edma_udp_st_tx_ring > EDMA_RING_FLAGS_INVALID_ID) {
+		nss_dp_udp_st_deinit();
 		edma_cfg_tx_udp_st_ring_disable(edma_gbl_ctx);
 		edma_cfg_tx_udp_st_ring_cleanup(edma_gbl_ctx);
 	}
