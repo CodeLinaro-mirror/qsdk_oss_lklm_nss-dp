@@ -870,7 +870,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 	edma_ddrq_ac_queue_cfg_tbl_u ddrq_cfg_l = {0};
 	int32_t queue_id;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -935,7 +935,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 	edma_ddrq_ac_queue_cfg_tbl_u ddrq_cfg_l = {0};
 	int32_t queue_id;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1051,7 +1051,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 			/*
 			 * Update the port's dp dev information as per the updated DDRQ state change
 			 */
-			dev = edma_gbl_ctx.netdev_arr[obj->cfg_id - 1];
+			dev = edma_gbl_ctx->netdev_arr[obj->cfg_id - 1];
 			if (!dev) {
 				edma_err("Not able to find the netdev for %d port\n", (obj->cfg_id));
 				return DDRQ_RET_ERR;
@@ -1088,7 +1088,7 @@ nss_dp_ddrq_ret_t edma_ddrq_grp_cfg_get(uint32_t ddrq_grp_id, nss_dp_ddrq_ac_grp
 {
 	edma_ddrq_ac_grp_cfg_tbl_u ddrq_grp_cfg_l = {0};
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1111,7 +1111,7 @@ nss_dp_ddrq_ret_t edma_ddrq_grp_cfg_set(uint32_t ddrq_grp_id, nss_dp_ddrq_ac_grp
 {
 	edma_ddrq_ac_grp_cfg_tbl_u ddrq_grp_cfg_l = {0};
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1141,7 +1141,7 @@ nss_dp_ddrq_ret_t edma_ddrq_enqueue_disable(nss_dp_ddrq_obj_id_t *obj, bool disa
 {
 	int32_t queue_id, i;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1180,7 +1180,7 @@ nss_dp_ddrq_ret_t edma_ddrq_dequeue_drop(nss_dp_ddrq_obj_id_t *obj, bool drop)
 {
 	int32_t queue_id, i;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1243,9 +1243,9 @@ static int edma_ddrq_enq_ctrl_cfg(fal_passthrough_mode_t pt_mode,
 static int edma_ddrq_mem_region_init(void)
 {
 	uint32_t addr, data;
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return -EINVAL;
 	}
@@ -1595,7 +1595,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_reset(void)
 {
 	uint32_t data;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1616,7 +1616,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_start(void)
 {
 	uint32_t data;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1637,7 +1637,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_stop(void)
 {
 	uint32_t data;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1658,7 +1658,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_restart(void)
 {
 	uint32_t data;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1681,7 +1681,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_get(uint32_t ddrq_id, nss_
 {
 	edma_ddrq_occupancy_threshold_u ddrq_occ_thres_l = {0};
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1699,7 +1699,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_set(uint32_t ddrq_id, nss_
 {
 	edma_ddrq_occupancy_threshold_u ddrq_occ_thres_l = {0};
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1719,7 +1719,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_get(uint32_t ddrq_id, nss_dp_ddrq_oc
 {
 	edma_ddrq_occupancy_stats_u ddrq_occ_stats_l = {0};
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1737,7 +1737,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *s
 {
 	uint32_t data, reg_offset;
 
-	if (!edma_gbl_ctx.ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
@@ -1849,17 +1849,17 @@ static int32_t edma_ddrq_get_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 static int edma_ddrq_get_ddrq_mem_regions(void)
 {
 	int index;
-	struct device_node *np = edma_gbl_ctx.device_node;
+	struct device_node *np = edma_gbl_ctx->device_node;
 	struct reserved_mem *rmem;
 
-	index = of_property_match_string(edma_gbl_ctx.device_node, "memory-region-names",
+	index = of_property_match_string(edma_gbl_ctx->device_node, "memory-region-names",
 						EDMA_DDRQ_DATA_REGION);
 	if (index < 0) {
 		edma_err("Error in matching %s DDRQ region\n", EDMA_DDRQ_DATA_REGION);
 		return index;
 	}
 
-	np = of_parse_phandle(edma_gbl_ctx.device_node, "memory-region", index);
+	np = of_parse_phandle(edma_gbl_ctx->device_node, "memory-region", index);
 	if (!np) {
 		edma_err("Error in getting %s region index\n", EDMA_DDRQ_DATA_REGION);
 		return -ENODEV;
@@ -1870,28 +1870,28 @@ static int edma_ddrq_get_ddrq_mem_regions(void)
 
 	if (!rmem) {
 		edma_err("Error in %s mem lookup\n", EDMA_DDRQ_DATA_REGION);
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = 0;
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.size = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.size = 0;
 		return -ENODEV;
 	}
 
-	edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = rmem->base;
-	edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.size = rmem->size;
+	edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = rmem->base;
+	edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.size = rmem->size;
 
-	index = of_property_match_string(edma_gbl_ctx.device_node, "memory-region-names",
+	index = of_property_match_string(edma_gbl_ctx->device_node, "memory-region-names",
 						EDMA_DDRQ_DESC_REGION);
 	if (index < 0) {
 		edma_err("Error in matching %s DDRQ region\n", EDMA_DDRQ_DESC_REGION);
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = 0;
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.size = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.size = 0;
 		return index;
 	}
 
-	np = of_parse_phandle(edma_gbl_ctx.device_node, "memory-region", index);
+	np = of_parse_phandle(edma_gbl_ctx->device_node, "memory-region", index);
 	if (!np) {
 		edma_err("Error in getting %s region index\n", EDMA_DDRQ_DESC_REGION);
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = 0;
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.size = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.phy_addr = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.size = 0;
 		return -ENODEV;
 	}
 
@@ -1900,19 +1900,19 @@ static int edma_ddrq_get_ddrq_mem_regions(void)
 
 	if (!rmem) {
 		edma_err("Error in %s mem lookup\n", EDMA_DDRQ_DESC_REGION);
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr = 0;
-		edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.size = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr = 0;
+		edma_gbl_ctx->ddrq_def_cfg.ddrq_desc_mem_reg.size = 0;
 		return -ENODEV;
 	}
 
-	edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr = rmem->base;
-	edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.size = rmem->size;
+	edma_gbl_ctx->ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr = rmem->base;
+	edma_gbl_ctx->ddrq_def_cfg.ddrq_desc_mem_reg.size = rmem->size;
 
 	edma_warn("ddrq data reg addr: %pa, size: %zu, ddrq desc reg addr: %pa, size: %zu\n",
-				&edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.phy_addr,
-				edma_gbl_ctx.ddrq_def_cfg.ddrq_data_mem_reg.size,
-				&edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr,
-				edma_gbl_ctx.ddrq_def_cfg.ddrq_desc_mem_reg.size);
+				&edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.phy_addr,
+				edma_gbl_ctx->ddrq_def_cfg.ddrq_data_mem_reg.size,
+				&edma_gbl_ctx->ddrq_def_cfg.ddrq_desc_mem_reg.phy_addr,
+				edma_gbl_ctx->ddrq_def_cfg.ddrq_desc_mem_reg.size);
 	return 0;
 }
 

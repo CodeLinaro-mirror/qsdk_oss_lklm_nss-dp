@@ -82,7 +82,7 @@ int edma_ppeds_rx_fill_ring_alloc(struct edma_rxfill_ring *rxfill_ring, bool hw_
 	/*
 	 * Allocate RxFill ring descriptors
 	 */
-	rxfill_ring->desc = dma_alloc_coherent(&edma_gbl_ctx.pdev->dev,
+	rxfill_ring->desc = dma_alloc_coherent(&edma_gbl_ctx->pdev->dev,
 				(size * rxfill_ring->count),
 				&rxfill_ring->dma, GFP_KERNEL | __GFP_ZERO);
 	if (!rxfill_ring->desc) {
@@ -107,7 +107,7 @@ void edma_ppeds_rx_fill_ring_free(struct edma_rxfill_ring *rxfill_ring)
 #ifdef CONFIG_IO_COHERENCY
 	kfree(rxfill_ring->desc);
 #else
-	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
+	dma_free_coherent(&edma_gbl_ctx->pdev->dev,
 			(rxfill_ring->desc_size * rxfill_ring->count),
 			rxfill_ring->desc, rxfill_ring->dma);
 #endif
@@ -140,7 +140,7 @@ int edma_ppeds_tx_cmpl_ring_alloc(struct edma_txcmpl_ring *txcmpl_ring, bool hw_
 	}
 	txcmpl_ring->dma = (dma_addr_t)virt_to_phys(txcmpl_ring->desc);
 #else
-	txcmpl_ring->desc = dma_alloc_coherent(&edma_gbl_ctx.pdev->dev,
+	txcmpl_ring->desc = dma_alloc_coherent(&edma_gbl_ctx->pdev->dev,
 				(size * txcmpl_ring->count),
 				&txcmpl_ring->dma, GFP_KERNEL | __GFP_ZERO);
 	if (!txcmpl_ring->desc) {
@@ -162,7 +162,7 @@ void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring)
 #ifdef CONFIG_IO_COHERENCY
 	kfree(txcmpl_ring->desc);
 #else
-	dma_free_coherent(&edma_gbl_ctx.pdev->dev,
+	dma_free_coherent(&edma_gbl_ctx->pdev->dev,
 			(txcmpl_ring->desc_size * txcmpl_ring->count),
 			txcmpl_ring->desc, txcmpl_ring->dma);
 #endif
@@ -217,7 +217,7 @@ void edma_ppeds_reset_gbl_ds_ctx()
 {
 	uint32_t i;
 
-	struct edma_gbl_ctx *gbl_ctx = &edma_gbl_ctx;
+	struct edma_gbl_ctx *gbl_ctx = edma_gbl_ctx;
 
 	/*
 	 * Iterate through all RX descriptor rings

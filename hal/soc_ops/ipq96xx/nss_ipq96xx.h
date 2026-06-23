@@ -133,6 +133,7 @@ extern int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE];
 extern int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE];
 extern int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE];
 extern int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+extern int edma_dp_boot_rx_fill_cnt;
 
 extern int edma_dp_ppe_vp_num_tx_rings;
 extern int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP];

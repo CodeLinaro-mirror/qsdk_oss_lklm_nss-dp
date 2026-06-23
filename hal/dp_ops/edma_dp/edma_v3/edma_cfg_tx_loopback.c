@@ -38,7 +38,7 @@ static void edma_cfg_tx_cmpl_loopback_ring_cleanup(struct edma_gbl_ctx *egc,
  */
 static int edma_cfg_tx_cmpl_loopback_ring_setup(struct edma_txcmpl_ring *txcmpl_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct platform_device *pdev = egc->pdev;
 
 	txcmpl_ring->desc = dma_alloc_coherent(&pdev->dev, (sizeof(struct edma_txcmpl_desc) * txcmpl_ring->count),

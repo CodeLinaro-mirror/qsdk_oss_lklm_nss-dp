@@ -20,6 +20,7 @@ int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,-1,-1,-1,-1
 int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
 int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
 int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10};
+int edma_dp_boot_rx_fill_cnt = 0;
 
 int edma_dp_ppe_ds_rx_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
 int edma_dp_ppe_ds_rx_queue_map[EDMA_PPEDS_MAX_NODES] = {210, 218};
@@ -276,14 +277,14 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
  	 *
  	 * TODO: Revisit if this global storage is actually required.
  	 */
-	edma_gbl_ctx.hw_rst = edma_hw_rst;
+	edma_gbl_ctx->hw_rst = edma_hw_rst;
 
 	/*
 	 * Store the obtained edma configuration reset handle (`edma_cfg_rst`) in the global context
 	 * (`edma_gbl_ctx`) for future use. This allows for centralized configuration reset control
 	 * throughout the driver.
 	 */
-	edma_gbl_ctx.cfg_rst = edma_cfg_rst;
+	edma_gbl_ctx->cfg_rst = edma_cfg_rst;
 
 	reset_control_assert(edma_hw_rst);
 	udelay(100);

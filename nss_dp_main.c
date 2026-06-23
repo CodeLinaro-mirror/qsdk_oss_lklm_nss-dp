@@ -40,6 +40,8 @@
 #define JUMBO_MRU_3K 3072
 #define NSS_DP_CAPWAP_VP_RX_CORE_INVALID 0XFFFF
 
+extern char *saved_command_line;
+
 /* ipq40xx_mdio_data */
 struct ipq40xx_mdio_data {
 	struct mii_bus *mii_bus;
@@ -174,29 +176,82 @@ module_param(edma_loopback_feature_type, int, 0644);
 MODULE_PARM_DESC(edma_loopback_feature_type, "loopback feature type 0x0: disabled, 0x1: default, 0x2: ddr extended buffer, 0x4: gretap to mapt, 0x8: speed-mismatch DDR buffering");
 #endif
 
-uint32_t rx_ring_sz_low_mem = 512;
-module_param(rx_ring_sz_low_mem, int, 0640);
-MODULE_PARM_DESC(rx_ring_sz_low_mem, "edma rx ring size for low memory");
+uint32_t rx_ring_sz = 0;
+module_param(rx_ring_sz, int, 0640);
+MODULE_PARM_DESC(rx_ring_sz, "edma rx ring size");
 
-uint32_t rx_ring_sz_medium_mem = 1024;
-module_param(rx_ring_sz_medium_mem, int, 0640);
-MODULE_PARM_DESC(rx_ring_sz_medium_mem, "edma rx ring size for medium memory");
-
-uint32_t rx_ring_sz_high_mem = 4096;
-module_param(rx_ring_sz_high_mem, int, 0640);
-MODULE_PARM_DESC(rx_ring_sz_high_mem, "edma rx ring size for high memory");
-
-uint32_t tx_ring_sz_low_medium_mem = 1024;
-module_param(tx_ring_sz_low_medium_mem, int, 0640);
-MODULE_PARM_DESC(tx_ring_sz_low_medium_mem, "edma tx ring size for low and medium memory");
-
-uint32_t tx_ring_sz_high_mem = 2048;
-module_param(tx_ring_sz_high_mem, int, 0640);
-MODULE_PARM_DESC(tx_ring_sz_high_mem, "edma tx ring size for high memory");
+uint32_t tx_ring_sz = 0;
+module_param(tx_ring_sz, int, 0640);
+MODULE_PARM_DESC(tx_ring_sz, "edma tx ring size");
 
 /*
- * nss_dp_eth_ioctl()
- *	Handle ethernet ioctls with PHY priority for PTP
+ * __get_mem_profile_flag()
+ *	Get profile flag
+ */
+static u32 __get_mem_profile_flag(const char *cmdline)
+{
+	u32 flags = 0;
+
+#ifdef NSS_DP_MEM_PROFILE_MEDIUM
+	flags = NSS_DP_MEM_PROFILE_BALANCED;
+#elif defined(NSS_DP_MEM_PROFILE_LOW)
+	flags = NSS_DP_MEM_PROFILE_OPTIMIZED;
+#else
+	if (!cmdline)
+		return NSS_DP_MEM_PROFILE_HIGH;
+
+	const char *param = strstr(cmdline, "mem-profile=");
+	if (!param)
+		return NSS_DP_MEM_PROFILE_HIGH;
+
+	param += strlen("mem-profile=");
+	if (strncmp(param, "optimized", strlen("optimized")) == 0)
+		flags |= NSS_DP_MEM_PROFILE_OPTIMIZED;
+	else if (strncmp(param, "balanced", strlen("balanced")) == 0)
+		flags |= NSS_DP_MEM_PROFILE_BALANCED;
+	else
+		flags |= NSS_DP_MEM_PROFILE_HIGH;
+#endif
+	return flags;
+}
+
+/*
+ * nss_dp_detect_mem_profile()
+ *	Detect memory profile
+ */
+static void nss_dp_mem_profile_detect(struct edma_gbl_ctx *gbl_ctx)
+{
+	u32 __rx_ring_sz, __tx_ring_sz;
+	u32 flags;
+
+	flags = __get_mem_profile_flag(saved_command_line);
+
+	/*
+	 * Default values for each profile, this is not expected
+	 * to be changed often.
+	 */
+	if (flags & NSS_DP_MEM_PROFILE_OPTIMIZED) {
+		__rx_ring_sz = 512;
+		__tx_ring_sz = 1024;
+	} else if (flags & NSS_DP_MEM_PROFILE_BALANCED) {
+		__rx_ring_sz = 1024;
+		__tx_ring_sz = 1024;
+	} else if (flags & NSS_DP_MEM_PROFILE_HIGH) {
+		__rx_ring_sz = 4096;
+		__tx_ring_sz = 2048;
+	} else {
+		__rx_ring_sz = 4096;
+		__tx_ring_sz = 2048;
+	}
+
+	gbl_ctx->mem_profile = flags;
+	gbl_ctx->rx_ring_sz = rx_ring_sz ? rx_ring_sz : __rx_ring_sz;
+	gbl_ctx->tx_ring_sz = tx_ring_sz ? tx_ring_sz : __tx_ring_sz;
+}
+
+/*
+* nss_dp_eth_ioctl()
+*	Handle ethernet ioctls with PHY priority for PTP
  */
 static int nss_dp_eth_ioctl(struct net_device *netdev, struct ifreq *ifr, int cmd)
 {
@@ -877,51 +932,35 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 		pr_info("GMAC%d(%px) Invalid MAC@ - using %pM\n", dp_priv->macid,
 						dp_priv, netdev->dev_addr);
 	}
-#if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
-	of_property_read_u32(np, "qcom,rx-page-mode", &dp_priv->rx_page_mode);
 
-	if (overwrite_mode) {
-		pr_info("Page mode is overwritten: %d\n", page_mode);
-		dp_priv->rx_page_mode = page_mode;
-	}
-
-	if (jumbo_mru) {
+	if (edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_OPTIMIZED) {
+		/*
+		 * Optimized profile disables jumbo & page mode
+		 */
 		dp_priv->rx_page_mode = false;
-		dp_priv->rx_jumbo_mru = jumbo_mru;
-		pr_info("Jumbo mru is enabled: %d\n", dp_priv->rx_jumbo_mru);
-	}
-#endif
+		dp_priv->rx_jumbo_mru = 0;
+	} else if (edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_BALANCED) {
+		/*
+		 * Balanced profile disables page mode and limits jumbo
+		 */
+		dp_priv->rx_page_mode = false;
+		dp_priv->rx_jumbo_mru = jumbo_mru ? JUMBO_MRU_3K : 0;
+	} else {
+   		u32 __dt_page_mode = 0;
+		/*
+		 * Load DT page mode and check overwrite settings
+		 */
+		of_property_read_u32(np, "qcom,rx-page-mode", &__dt_page_mode);
+		__dt_page_mode = overwrite_mode ? page_mode : __dt_page_mode;
 
-#if defined(NSS_DP_MEM_PROFILE_MEDIUM)
-	/*
-	 * 512 memory profile supports jumbo mru till 3k.
-	 * For 512 memroy profile, page mode needs to be disabled.
-	 */
-	dp_priv->rx_page_mode = false;
-
-	/*
-	 * 512M profile supports Jumbo mru till 3K
-	 */
-	if (jumbo_mru) {
-		if (jumbo_mru > JUMBO_MRU_3K) {
-			pr_info("Set mru to %d for 512M profile\n", jumbo_mru);
-			jumbo_mru = JUMBO_MRU_3K;
-		}
-
-		dp_priv->rx_jumbo_mru = jumbo_mru;
-		pr_info("Jumbo mru is enabled with size: %d\n", dp_priv->rx_jumbo_mru);
+		/*
+		 * Jumbo MRU disables page mode
+		 */
+		dp_priv->rx_page_mode = jumbo_mru ? false : !!__dt_page_mode;
+		dp_priv->rx_jumbo_mru = jumbo_mru ? jumbo_mru : 0;
 	}
 
-	if (overwrite_mode || page_mode) {
-		pr_err("512M profile does not support page mode/jumbo mru\n");
-		return -EFAULT;
-	}
-#elif defined(NSS_DP_MEM_PROFILE_LOW)
-	if (overwrite_mode || page_mode || jumbo_mru) {
-		pr_err("Low memory profiles does not support page mode/jumbo mru\n");
-		return -EFAULT;
-	}
-#endif
+	pr_info("Page mode = %d, Jumbo MRU = %d\n", dp_priv->rx_page_mode, dp_priv->rx_jumbo_mru);
 
 	of_property_read_u32(np, "qcom,ppe-offload-disabled", &val);
 	dp_priv->ppe_offload_disabled = !!val;
@@ -1466,7 +1505,19 @@ int __init nss_dp_init(void)
 {
 	int ret, i;
 
+       edma_gbl_ctx = kzalloc(sizeof(struct edma_gbl_ctx), GFP_KERNEL);
+       if(!edma_gbl_ctx) {
+               pr_err("Failed to allocate edma global structure.\n");
+               return -EINVAL;
+       }
+
 	dp_global_ctx.common_init_done = false;
+
+	/*
+	 * Detect memory profile from bootargs (or compile-time flag).
+	 * Must be called before any profile-dependent configuration.
+	 */
+	nss_dp_mem_profile_detect(edma_gbl_ctx);
 
 #if defined(NSS_DP_MAC_POLL_SUPPORT)
 	dp_global_ctx.enable_polling_task = false;
@@ -1494,20 +1545,22 @@ int __init nss_dp_init(void)
 	 * Get the module params.
 	 * We do not support page_mode or jumbo_mru on low memory profiles.
 	 */
-#if !defined(NSS_DP_MEM_PROFILE_LOW) && !defined(NSS_DP_MEM_PROFILE_MEDIUM)
-	dp_global_ctx.overwrite_mode = overwrite_mode;
-	dp_global_ctx.page_mode = page_mode;
-	dp_global_ctx.jumbo_mru = jumbo_mru;
-#elif defined(NSS_DP_MEM_PROFILE_MEDIUM)
-	dp_global_ctx.jumbo_mru = jumbo_mru;
-	if (overwrite_mode && page_mode) {
-		pr_err("512 memory profiles does not support page mode\n");
+	if (edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_HIGH) {
+		dp_global_ctx.overwrite_mode = overwrite_mode;
+		dp_global_ctx.page_mode = page_mode;
+		dp_global_ctx.jumbo_mru = jumbo_mru;
+	} else if (edma_gbl_ctx->mem_profile & NSS_DP_MEM_PROFILE_BALANCED) {
+		dp_global_ctx.jumbo_mru = jumbo_mru;
+		if (overwrite_mode || page_mode) {
+			pr_err("512M profile does not support page mode\n");
+			return -1;
+		}
+	} else {
+		if (overwrite_mode || page_mode || jumbo_mru) {
+			pr_err("Optimized profile doesn't support overwrite, page & jumbo mode\n");
+			return -1;
+		}
 	}
-#else
-	if ((overwrite_mode && page_mode) || jumbo_mru) {
-		pr_err("Low memory profiles does not support page mode/jumbo mru\n");
-	}
-#endif
 
 	/*
 	 * Configure MHT switch ports to tx ring mapping

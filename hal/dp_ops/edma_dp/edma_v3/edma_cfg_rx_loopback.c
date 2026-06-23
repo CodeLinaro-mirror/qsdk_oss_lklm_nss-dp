@@ -38,7 +38,7 @@ static void edma_cfg_rx_fill_loopback_ring_cleanup(struct edma_gbl_ctx *egc,
  */
 static int edma_cfg_rx_fill_loopback_ring_setup(struct edma_rxfill_ring *rxfill_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txcmpl_ring *txcmpl_ring = &egc->txcmpl_loopback_rings[rxfill_ring->ring_id];
 
 	/*
@@ -55,7 +55,7 @@ static int edma_cfg_rx_fill_loopback_ring_setup(struct edma_rxfill_ring *rxfill_
  */
 static int edma_cfg_rx_desc_loopback_ring_setup(struct edma_rxdesc_ring *rxdesc_ring)
 {
-	struct edma_gbl_ctx *egc = &edma_gbl_ctx;
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
 	struct edma_txdesc_ring *txdesc_ring = &egc->txdesc_loopback_rings[rxdesc_ring->ring_id];
 
 	/*

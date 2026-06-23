@@ -35,6 +35,16 @@
 
 #include "nss_dp_api_if.h"
 #include "nss_dp_hal_if.h"
+/*
+ * Memory profile detected from kernel bootargs (mem-profile=<value>).
+ * NSS_DP_MEM_PROFILE_HIGH : 1G  (default / no param)
+ * NSS_DP_MEM_PROFILE_BALANCED  : 512M (mem-profile=balanced)
+ * NSS_DP_MEM_PROFILE_OPTIMIZED : 128M / 256M (mem-profile=optimized)
+ */
+#define NSS_DP_MEM_PROFILE_OPTIMIZED BIT(0)
+#define NSS_DP_MEM_PROFILE_BALANCED BIT(1)
+#define NSS_DP_MEM_PROFILE_HIGH BIT(2)
+
 #include "nss_dp_hal_info.h"
 #ifdef NSS_DP_PPEDS_SUPPORT
 #include "nss_dp_ppeds.h"
@@ -61,11 +71,25 @@
 /*
  * Rx buffer allocation size as per memory profile
  */
-#if (defined(NSS_DP_MEM_PROFILE_LOW) || defined(NSS_DP_MEM_PROFILE_MEDIUM)) && !defined(__LP64__)
-#define NSS_DP_RX_BUFFER_SIZE		1856
-#else
-#define NSS_DP_RX_BUFFER_SIZE		1984
+/*
+ * On 32-bit platforms (non-LP64), low/medium profiles use a smaller buffer
+ * to reduce memory pressure. On 64-bit platforms the full size is always used.
+ */
+static inline uint32_t nss_dp_rx_buffer_size_get(void)
+{
+	uint32_t mask;
+
+	mask = NSS_DP_MEM_PROFILE_OPTIMIZED | NSS_DP_MEM_PROFILE_BALANCED;
+#ifndef __LP64__
+	/*
+	 * In 32-bit mode all profiles have lower buffer size by default
+	 */
+    	mask |= NSS_DP_MEM_PROFILE_HIGH;
 #endif
+	return edma_gbl_ctx->mem_profile & mask ? 1856 : 1984;
+}
+
+#define NSS_DP_RX_BUFFER_SIZE		nss_dp_rx_buffer_size_get()
 
 /*
  * With Page pool Keep Rx buffer allocation size to (2048-320) = 1728.
