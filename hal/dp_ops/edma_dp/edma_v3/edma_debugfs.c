@@ -829,12 +829,40 @@ static int edma_debugfs_hw_gro_stats_show(struct seq_file *m, void __attribute__
 
 #ifdef NSS_DP_DDRQ_SUPPORT
 /*
- * edma_debugfs_ddrq_info_show()
- *	EDMA debugfs DDRQ information show API
+ * edma_debugfs_ddrq_port_en_bitmask_show()
+ *	EDMA debugfs DDRQ port enable bitmask show API
  */
-static int edma_debugfs_ddrq_info_show(struct seq_file *m, void __attribute__((unused))*p)
+static int edma_debugfs_ddrq_port_en_bitmask_show(struct seq_file *m, void __attribute__((unused))*p)
 {
 	seq_printf(m, "\t\t EDMA DDRQ port enable bitmask = 0x%0x\n", edma_ddrq_en_port_bm);
+	return 0;
+}
+
+/*
+ * edma_debugfs_ddrq_blk_num_show()
+ *	EDMA debugfs DDRQ block number show API
+ */
+static int edma_debugfs_ddrq_blk_num_show(struct seq_file *m, void __attribute__((unused))*p)
+{
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	edma_ddrq_gbl_cfg_t *ddrq_gbl_cfg = &egc->ddrq_def_cfg.ddrq_gbl_cfg;
+	int ddrq_blk_num_cfg = ddrq_gbl_cfg->ddrq_blk_num_cfg;
+
+	seq_printf(m, "\t\t EDMA DDRQ block number = %d\n", edma_ddrq_blk_num_map[ddrq_blk_num_cfg]);
+	return 0;
+}
+
+/*
+ * edma_debugfs_ddrq_blk_size_show()
+ *	EDMA debugfs DDRQ block size show API
+ */
+static int edma_debugfs_ddrq_blk_size_show(struct seq_file *m, void __attribute__((unused))*p)
+{
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	edma_ddrq_gbl_cfg_t *ddrq_gbl_cfg = &egc->ddrq_def_cfg.ddrq_gbl_cfg;
+	int ddrq_blk_size_cfg = ddrq_gbl_cfg->ddrq_blk_size_cfg;
+
+	seq_printf(m, "\t\t EDMA DDRQ block size = %d\n", edma_ddrq_blk_size_map[ddrq_blk_size_cfg]);
 	return 0;
 }
 #endif
@@ -913,20 +941,60 @@ const struct file_operations edma_debugfs_hw_gro_file_ops = {
 
 #ifdef NSS_DP_DDRQ_SUPPORT
 /*
- * edma_debugs_ddrq_info_open()
- *	EDMA DDRQ debugfs open callback API
+ * edma_debugs_ddrq_port_en_bitmask_open()
+ *	EDMA DDRQ port enable bitmask debugfs open callback API
  */
-static int edma_debugs_ddrq_info_open(struct inode *inode, struct file *file)
+static int edma_debugs_ddrq_port_en_bitmask_open(struct inode *inode, struct file *file)
 {
-	return single_open(file, edma_debugfs_ddrq_info_show, inode->i_private);
+	return single_open(file, edma_debugfs_ddrq_port_en_bitmask_show, inode->i_private);
 }
 
 /*
- * edma_debugfs_ddrq_file_ops
- *	File operations for EDMA DDRQ information
+ * edma_debugfs_ddrq_port_en_bitmask_file_ops
+ *	File operations for EDMA DDRQ port enable bitmask information
  */
-const struct file_operations edma_debugfs_ddrq_file_ops = {
-	.open = edma_debugs_ddrq_info_open,
+const struct file_operations edma_debugfs_ddrq_port_en_bitmask_file_ops = {
+	.open = edma_debugs_ddrq_port_en_bitmask_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release
+};
+
+/*
+ * edma_debugs_ddrq_blk_num_open()
+ *	EDMA DDRQ block number debugfs open callback API
+ */
+static int edma_debugs_ddrq_blk_num_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_ddrq_blk_num_show, inode->i_private);
+}
+
+/*
+ * edma_debugfs_ddrq_blk_num_file_ops
+ *	File operations for EDMA DDRQ block number information
+ */
+const struct file_operations edma_debugfs_ddrq_blk_num_file_ops = {
+	.open = edma_debugs_ddrq_blk_num_open,
+	.read = seq_read,
+	.llseek = seq_lseek,
+	.release = seq_release
+};
+
+/*
+ * edma_debugs_ddrq_blk_size_open()
+ *	EDMA DDRQ block size debugfs open callback API
+ */
+static int edma_debugs_ddrq_blk_size_open(struct inode *inode, struct file *file)
+{
+	return single_open(file, edma_debugfs_ddrq_blk_size_show, inode->i_private);
+}
+
+/*
+ * edma_debugfs_ddrq_blk_size_file_ops
+ *	File operations for EDMA DDRQ block size information
+ */
+const struct file_operations edma_debugfs_ddrq_blk_size_file_ops = {
+	.open = edma_debugs_ddrq_blk_size_open,
 	.read = seq_read,
 	.llseek = seq_lseek,
 	.release = seq_release
@@ -1504,9 +1572,27 @@ int edma_debugfs_init(void)
 #endif
 
 #if defined(NSS_DP_DDRQ_SUPPORT)
-	if (!debugfs_create_file("ddrq_info", S_IRUGO, edma_gbl_ctx->root_dentry,
-			NULL, &edma_debugfs_ddrq_file_ops)) {
-		edma_err("Unable to create EDMA DDRQ information file entry in debugfs\n");
+	edma_gbl_ctx->ddrq_info_dentry = debugfs_create_dir("ddrq_info", edma_gbl_ctx->root_dentry);
+	if (!edma_gbl_ctx->ddrq_info_dentry) {
+		edma_err("Unable to create EDMA DDRQ information directory in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("edma_ddrq_port_en_bitmask", S_IRUGO, edma_gbl_ctx->ddrq_info_dentry,
+			NULL, &edma_debugfs_ddrq_port_en_bitmask_file_ops)) {
+		edma_err("Unable to create EDMA DDRQ port enable bitmask file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("edma_ddrq_blk_num", S_IRUGO, edma_gbl_ctx->ddrq_info_dentry,
+			NULL, &edma_debugfs_ddrq_blk_num_file_ops)) {
+		edma_err("Unable to create EDMA DDRQ block number file entry in debugfs\n");
+		goto debugfs_dir_failed;
+	}
+
+	if (!debugfs_create_file("edma_ddrq_blk_size", S_IRUGO, edma_gbl_ctx->ddrq_info_dentry,
+			NULL, &edma_debugfs_ddrq_blk_size_file_ops)) {
+		edma_err("Unable to create EDMA DDRQ block size file entry in debugfs\n");
 		goto debugfs_dir_failed;
 	}
 #endif
@@ -1517,6 +1603,9 @@ debugfs_dir_failed:
 	edma_gbl_ctx->root_dentry = NULL;
 	edma_gbl_ctx->stats_dentry = NULL;
 	edma_gbl_ctx->bp_stats_dentry = NULL;
+#if defined(NSS_DP_DDRQ_SUPPORT)
+	edma_gbl_ctx->ddrq_info_dentry = NULL;
+#endif
 	return -1;
 }
 
@@ -1536,5 +1625,8 @@ void edma_debugfs_exit(void)
 		edma_gbl_ctx->root_dentry = NULL;
 		edma_gbl_ctx->stats_dentry = NULL;
 		edma_gbl_ctx->bp_stats_dentry = NULL;
+#if defined(NSS_DP_DDRQ_SUPPORT)
+		edma_gbl_ctx->ddrq_info_dentry = NULL;
+#endif
 	}
 }
