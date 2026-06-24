@@ -70,14 +70,18 @@ irqreturn_t edma_misc_handle_irq(int irq, void *ctx)
 	edma_debug("Received misc irq %d, status: %d\n", irq, misc_intr_status);
 
 	if (EDMA_MISC_AXI_RD_ERR_STATUS_GET(misc_intr_status)) {
-		edma_err("MISC AXI read error received\n");
+		if (net_ratelimit()) {
+			edma_err("MISC AXI read error received\n");
+		}
 		u64_stats_update_begin(&stats->syncp);
 		++stats->edma_misc_axi_read_err;
 		u64_stats_update_end(&stats->syncp);
 	}
 
 	if (EDMA_MISC_AXI_WR_ERR_STATUS_GET(misc_intr_status)) {
-		edma_err("MISC AXI write error received\n");
+		if (net_ratelimit()) {
+			edma_err("MISC AXI write error received\n");
+		}
 		u64_stats_update_begin(&stats->syncp);
 		++stats->edma_misc_axi_write_err;
 		u64_stats_update_end(&stats->syncp);
