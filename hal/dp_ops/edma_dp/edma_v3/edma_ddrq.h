@@ -37,8 +37,9 @@
 #define EDMA_DDRQ_AC_Q_COLOR_AWARE_DEF	0
 #define EDMA_DDRQ_AC_Q_WRED_EN_DEF	0
 #define EDMA_DDRQ_AC_Q_GRP_ID_DEF	0
-#define EDMA_DDRQ_AC_Q_SHD_CEILING	1500
 #define EDMA_DDRQ_AC_Q_PRE_ALLOC_DEF	2
+#define EDMA_DDRQ_AC_Q_SHRD_DYNAMIC	1
+#define EDMA_DDRQ_AC_Q_SHRD_WEIGHT	7
 
 #define EDMA_DDRQ_AC_GRP_AC_EN_DEF	0
 #define EDMA_DDRQ_AC_GRP_COLOR_AWARE_DEF	0
@@ -88,6 +89,7 @@
 #define EDMA_DDRQ_QUEUE_PRE_ALLOC_LIMIT_MIN	2
 #define EDMA_DDRQ_GET_SHARED_LIMIT(blk_num, prealloc_limit) \
 	((blk_num)-(EDMA_DDRQ_GRP_SHARED_LIMIT_MIN + (prealloc_limit * NSS_DP_DDRQ_MAX_CNT)))
+#define EDMA_DDRQ_GET_SHARED_CEILING(blk_num)	(((blk_num) * 80) / 100)
 
 /*
  * edma_ddrq_ac_queue_cfg_tbl_t
