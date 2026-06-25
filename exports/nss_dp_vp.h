@@ -9,16 +9,33 @@
 #include <linux/bitmap.h>
 #include <ppe_drv_public.h>
 
+#define NSS_DP_VP_TX_FLAG_PKT_MODE BIT(0)		/**< Packet mode is set */
+
+/*
+ * nss_dp_vp_pkt_mode
+ *	VP TX DDRQ packet mode.
+ *	Values match EDMA hardware: EDMA_TXDESC_PASS_THROUGH_MODE_192B=0x0,
+ *	EDMA_TXDESC_PASS_THROUGH_MODE_128B=0x1, EDMA_TXDESC_PASS_THROUGH_MODE_0B=0x2,
+ *	EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA=0x3
+ */
+enum nss_dp_vp_pkt_mode {
+	NSS_DP_VP_PKT_MODE_192 = 0,	/**< DDRQ passthrough mode 192 bytes */
+	NSS_DP_VP_PKT_MODE_128 = 1,	/**< DDRQ passthrough mode 128 bytes */
+	NSS_DP_VP_PKT_MODE_0 = 2,	/**< DDRQ passthrough mode 0 byte */
+	NSS_DP_VP_FULL_PKT_MODE = 3,	/**< DDRQ full packet mode */
+};
+
 /*
  * nss_dp_vp_tx_info
  *	VP Tx info.
  */
 struct nss_dp_vp_tx_info {
-	uint32_t flags;			/**< VP Tx flags. */
-	uint8_t sc;			/**< Service code. */
-	uint8_t svp;			/**< Source VP number. */
-	uint8_t dvp;			/**< Destination VP number. */
-	uint8_t egress_macid;		/**< Egress Port Mac Id. */
+	uint32_t flags;				/**< VP Tx flags. */
+	uint8_t sc;				/**< Service code. */
+	uint8_t svp;				/**< Source VP number. */
+	uint8_t dvp;				/**< Destination VP number. */
+	uint8_t egress_macid;			/**< Egress Port Mac Id. */
+	enum nss_dp_vp_pkt_mode pkt_mode;	/**< Packet mode */
 	bool fake_mac;			/**< Needs Fake Mac. */
 };
 
