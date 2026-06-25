@@ -26,10 +26,12 @@ extern uint32_t edma_dp_gro_rx_ring_sz;
 
 #ifdef NSS_DP_DDRQ_SUPPORT
 #define EDMA_DDRQ_PREHEADER_SIZE	32
+#define EDMA_RX_SKB_DATA_ALIGN_PAD	32   /* for 64B alignment */
 #else
 #define EDMA_DDRQ_PREHEADER_SIZE	0
+#define EDMA_RX_SKB_DATA_ALIGN_PAD	0
 #endif
-#define EDMA_RX_SKB_HEADROOM		(128 + EDMA_DDRQ_PREHEADER_SIZE)
+#define EDMA_RX_SKB_HEADROOM		(128 + EDMA_DDRQ_PREHEADER_SIZE + EDMA_RX_SKB_DATA_ALIGN_PAD)
 
 #define EDMA_RX_PH_SIZE		(sizeof(struct edma_rxdesc_sec_desc))	/* Rx preheader size */
 
