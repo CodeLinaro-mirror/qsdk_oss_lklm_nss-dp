@@ -149,6 +149,43 @@ struct nss_dp_ppeds_wifi8_handle {
 	struct nss_dp_ppeds_tx_cmpl_elem *tx_cmpl_arr;	/**< TxComplete buffer array */
 };
 
+
+/**
+ * nss_dp_ppeds_wifi7_rxfill_ring_info
+ *	WiFi7 PPE-DS RxFill ring filled-count information (single SW ring, no HW buffer management)
+ */
+struct nss_dp_ppeds_wifi7_rxfill_ring_info {
+	uint16_t prim_prod_idx;		/**< RxFill ring producer index */
+	uint16_t prim_cons_idx;		/**< RxFill ring consumer index (read from HW) */
+	uint16_t prim_active_cnt;	/**< RxFill ring active count */
+};
+
+/**
+ * nss_dp_ppeds_wifi8_rxfill_ring_info
+ *	WiFi8 PPE-DS SW and HW RxFill ring filled-count information
+ */
+struct nss_dp_ppeds_wifi8_rxfill_ring_info {
+	uint16_t prim_prod_idx;		/**< SW RxFill ring producer index */
+	uint16_t prim_cons_idx;		/**< SW RxFill ring consumer index (read from HW) */
+	uint16_t prim_active_cnt;	/**< SW RxFill ring active count */
+	uint16_t secd_prod_idx;		/**< HW RxFill ring producer index (read from HW) */
+	uint16_t secd_cons_idx;		/**< HW RxFill ring consumer index */
+	uint16_t secd_active_cnt;	/**< HW RxFill ring active count */
+	bool hw_buff_mgmt_en;		/**< HW buffer manager enabled flag */
+};
+
+/**
+ * nss_dp_ppeds_rxfill_ring_info
+ *	Generic PPE-DS RxFill ring filled-count information, arch-specific via union
+ */
+struct nss_dp_ppeds_rxfill_ring_info {
+	enum edma_ppeds_wifi_arch_mode arch_mode;	/**< WiFi architecture mode */
+	union {
+		struct nss_dp_ppeds_wifi7_rxfill_ring_info wifi7;	/**< WiFi7 RxFill ring info */
+		struct nss_dp_ppeds_wifi8_rxfill_ring_info wifi8;	/**< WiFi8 RxFill ring info */
+	};
+};
+
 /**
  * nss_dp_ppeds_handle
  *	PPE-DS DP handle info
@@ -227,6 +264,9 @@ struct nss_dp_ppeds_ops {
 				/**< PPE-DS enable edma interrupt */
 	void (*service_status_update)(nss_dp_ppeds_handle_t *ppeds_handle, bool enable);
 				/**< PPE-DS check and update ring usage service */
+	void (*get_rxfill_ring_info)(nss_dp_ppeds_handle_t *ppeds_handle,
+				struct nss_dp_ppeds_rxfill_ring_info *info);
+				/**< PPE-DS get RxFill ring filled-count info */
 };
 
 /**

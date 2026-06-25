@@ -998,6 +998,29 @@ static void edma_ppeds_set_rxfill_prod_idx(nss_dp_ppeds_handle_t *ppeds_handle,
 }
 
 /*
+ * edma_ppeds_get_rxfill_ring_info()
+ *	Get WiFi7 RxFill ring filled-count information
+ */
+static void edma_ppeds_get_rxfill_ring_info(nss_dp_ppeds_handle_t *ppeds_handle,
+					struct nss_dp_ppeds_rxfill_ring_info *info)
+{
+	struct edma_ppeds *ppeds_node = container_of(ppeds_handle, struct edma_ppeds, ppeds_handle);
+	struct edma_ppeds_node_wifi7 *wifi7_cfg = &ppeds_node->wifi7_cfg;
+	struct edma_rxfill_ring *rxfill_ring = &wifi7_cfg->rxfill_ring;
+	struct nss_dp_ppeds_wifi7_rxfill_ring_info *wifi7 = &info->wifi7;
+
+	if (info->arch_mode != EDMA_PPEDS_WIFI_ARCH_MODE_WIFI7) {
+		return;
+	}
+
+	wifi7->prim_prod_idx = rxfill_ring->prod_idx;
+	wifi7->prim_cons_idx = edma_reg_read(EDMA_REG_RXFILL_CONS_IDX(rxfill_ring->ring_id)) &
+				EDMA_RXFILL_CONS_IDX_MASK;
+	wifi7->prim_active_cnt = (wifi7->prim_prod_idx - wifi7->prim_cons_idx + rxfill_ring->count) &
+				rxfill_ring->count_mask;
+}
+
+/*
  * edma_ppeds_inst_start()
  *	PPE-DS EDMA instance start API
  */
@@ -1440,4 +1463,5 @@ struct nss_dp_ppeds_ops edma_ppeds_ops_wifi7 = {
 	.set_rxfill_prod_idx	=	edma_ppeds_set_rxfill_prod_idx,
 	.enable_rx_reap_intr	=	edma_ppeds_enable_rx_reap_intr,
 	.service_status_update	=	edma_ppeds_service_status_update,
+	.get_rxfill_ring_info	=	edma_ppeds_get_rxfill_ring_info,
 };
