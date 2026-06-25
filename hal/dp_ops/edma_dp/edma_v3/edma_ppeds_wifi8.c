@@ -571,6 +571,9 @@ static void edma_ppeds_rxdesc_auto_index_conf(uint32_t rx_ring_id, dma_addr_t wl
 	reg_val = edma_reg_read(EDMA_REG_RXDESC_DISABLE(rx_ring_id));
 	reg_val |= EDMA_REG_RXDESC_IDX_UNIT(3);
 	edma_reg_write(EDMA_REG_RXDESC_DISABLE(rx_ring_id), reg_val);
+
+	edma_reg_write(EDMA_REG_RXDESC_UPLOAD_IDX_TRIG(rx_ring_id),
+			EDMA_REG_RXDESC_UP_IDX_TRG_VAL);
 }
 
 static void edma_ppeds_rxfill_hw_buff_conf(uint32_t rxfill_ring_id, dma_addr_t wlan_tqm2ppe_tp_addr)
