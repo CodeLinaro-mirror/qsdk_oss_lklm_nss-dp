@@ -1826,11 +1826,17 @@ static int32_t edma_ddrq_get_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_ac_en = edma_ddrq_ac_queue_ac_en;
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_color_aware = edma_ddrq_ac_queue_color_aware;
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_wred_en = edma_ddrq_ac_queue_wred_en;
-	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_ceiling = edma_ddrq_ac_queue_shared_ceiling;
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_grp_id = edma_ddrq_ac_queue_grp_id;
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_pre_alloc_limit = edma_ddrq_ac_queue_pre_alloc;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_dynamic = edma_ddrq_ac_queue_shared_dynamic;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_weight = edma_ddrq_ac_queue_shared_weight;
 	ddrq_idv_cfg->ddrq_ac_cfg.ddrq_state = EDMA_DDRQ_AC_QUEUE_STATE_ENABLED;
 	ddrq_idv_cfg->ddrq_en_port_bm = edma_ddrq_en_port_bm;
+	if (edma_ddrq_ac_queue_shared_ceiling != EDMA_DDRQ_NO_OP_DEF_VAL) {
+		ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_ceiling = edma_ddrq_ac_queue_shared_ceiling;
+	} else {
+		ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_ceiling = EDMA_DDRQ_GET_SHARED_CEILING(edma_ddrq_blk_num_map[ddrq_gbl_cfg->ddrq_blk_num_cfg]);
+	}
 
 	/*
 	 * Get DDRQ group default configurations
@@ -1838,10 +1844,18 @@ static int32_t edma_ddrq_get_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 	edma_ddrq_grp_cfg_set_inval(&ddrq_grp_cfg->ddrq_grp_cfg);
 	ddrq_grp_cfg->ddrq_grp_cfg.ac_cfg_ac_en= edma_ddrq_grp_ac_en;
 	ddrq_grp_cfg->ddrq_grp_cfg.ac_cfg_color_aware = edma_ddrq_grp_color_aware;
-	ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_gap_shrd_limit = EDMA_DDRQ_GET_SHARED_LIMIT(edma_ddrq_blk_num_map[ddrq_gbl_cfg->ddrq_blk_num_cfg], EDMA_DDRQ_QUEUE_PRE_ALLOC_LIMIT_MIN);
 	ddrq_grp_cfg->ddrq_grp_en_bm = edma_ddrq_grp_id_bm;
-	ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_dp_thrd = ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_gap_shrd_limit -
-					EDMA_DDRQ_AC_GRP_GAP_SHRD_LMT_DRP_THRES_VAL;
+	if (edma_ddrq_grp_shrd_limit != EDMA_DDRQ_NO_OP_DEF_VAL) {
+		ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_gap_shrd_limit = edma_ddrq_grp_shrd_limit;
+	} else {
+		ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_gap_shrd_limit = EDMA_DDRQ_GET_SHARED_LIMIT(edma_ddrq_blk_num_map[ddrq_gbl_cfg->ddrq_blk_num_cfg], EDMA_DDRQ_QUEUE_PRE_ALLOC_LIMIT_MIN);
+	}
+	if (edma_ddrq_grp_dp_thrd != EDMA_DDRQ_NO_OP_DEF_VAL) {
+		ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_dp_thrd = edma_ddrq_grp_dp_thrd;
+	} else {
+		ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_dp_thrd = ddrq_grp_cfg->ddrq_grp_cfg.ac_grp_gap_shrd_limit -
+			EDMA_DDRQ_AC_GRP_GAP_SHRD_LMT_DRP_THRES_VAL;
+	}
 
 	/*
 	 * Get DDRQ loopback default configurations
