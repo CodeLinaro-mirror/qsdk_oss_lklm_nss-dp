@@ -526,7 +526,8 @@ int nss_dp_udp_st_xmit(struct nss_dp_udp_st_xmit_info *xmit_info)
 	}
 
 	buf_len   = skb_headlen(skb);
-	if (is_veip) {
+
+	if (edma_udp_st_pass_through_mode == EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA) {
 		buff_addr = (dma_addr_t)virt_to_phys(skb->data);
 	} else {
 		buff_addr = (dma_addr_t)virt_to_phys(skb->data - EDMA_DDRQ_PREHEADER_SIZE);
@@ -545,12 +546,15 @@ int nss_dp_udp_st_xmit(struct nss_dp_udp_st_xmit_info *xmit_info)
 #if defined(NSS_DP_HIGHMEM_SUPP)
 		EDMA_TXDESC_BUFFER_ADDR_HI_SET(txd, buff_addr);
 #endif
-		if (is_veip) {
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
-		} else {
+		/*
+		 * Use the configurable pass-through mode from module parameter.
+		 * Default is EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA (3).
+		 * If mode is not FULL_DATA, set the data offset.
+		 */
+		if (edma_udp_st_pass_through_mode != EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA) {
 			EDMA_TXDESC_DATA_OFFSET_SET(txd, EDMA_DDRQ_PREHEADER_SIZE);
-			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_128B);
 		}
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_udp_st_pass_through_mode);
 		EDMA_TXDESC_DATA_LEN_SET(txd, buf_len);
 
 		if (unlikely(skb->ip_summed == CHECKSUM_PARTIAL)) {
@@ -564,7 +568,7 @@ int nss_dp_udp_st_xmit(struct nss_dp_udp_st_xmit_info *xmit_info)
 				/*
 				 * HGU case
 				 */
-				EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_UDP_ST_PON);
+				EDMA_TXDESC_SERVICE_CODE_SET(txd, PPE_DRV_SC_UDP_ST_HGU);
 			} else {
 				/*
 				 * SFU case

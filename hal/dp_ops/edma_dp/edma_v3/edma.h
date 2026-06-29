@@ -835,6 +835,7 @@ extern int edma_udp_st_tx_ring;
 extern int edma_udp_st_tx_cmpl_ring;
 extern int edma_udp_st_fc_grp_id;
 extern int edma_udp_st_ring_size;
+extern int edma_udp_st_pass_through_mode;
 #endif
 
 #ifdef NSS_DP_DDRQ_SUPPORT
