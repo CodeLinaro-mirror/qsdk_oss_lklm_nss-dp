@@ -96,7 +96,11 @@ module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
 
 #ifdef NSS_DP_DDRQ_SUPPORT
+#ifdef NSS_DP_SFU_PROFILE
+int edma_passthrough_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+#else
 int edma_passthrough_val = EDMA_PASSTHROUGH_VAL_INVALID;
+#endif
 module_param(edma_passthrough_val, int, 0640);
 MODULE_PARM_DESC(edma_passthrough_val, "EDMA passthrough value to be set in Tx desc");
 

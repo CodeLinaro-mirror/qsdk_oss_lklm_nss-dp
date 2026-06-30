@@ -197,6 +197,10 @@ qca-nss-dp-objs += nss_dp_netstandby.o
 ccflags-y += -DNSS_DP_NETSTANDBY
 endif
 
+ifeq ($(dp-sfu),y)
+ccflags-y += -DNSS_DP_SFU_PROFILE
+endif
+
 ccflags-y += $(NSS_DP_INCLUDE)
 ccflags-y += -Wall -Werror
 ccflags-y += -DEDMA_DEBUG_LEVEL=2
