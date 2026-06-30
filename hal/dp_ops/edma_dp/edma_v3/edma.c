@@ -18,6 +18,7 @@
 #include <ppe_drv_sc.h>
 #include <ppe_drv_acl.h>
 #include <ppe_drv.h>
+#include <ppe_drv_port.h>
 #include <linux/clk.h>
 #include <linux/cpumask.h>
 #include "edma.h"
@@ -3792,6 +3793,7 @@ int edma_vlan_append_handler(struct ctl_table *table, int write,
 		memset(&dp_dev->vlan_info, 0, sizeof(dp_dev->vlan_info));
 		edma_info("Disabled the VLAN Append Functionality, vlan_insert_en:%d, dev_name:%s",
 				dp_dev->vlan_info.vlan_en, dev_name);
+		ppe_drv_port_vlan_append_set(dev, false);
 		dev_put(dev);
 		memset(edma_vlan_append_info, 0, sizeof(edma_vlan_append_info));
 		return ret;
@@ -3872,6 +3874,7 @@ int edma_vlan_append_handler(struct ctl_table *table, int write,
 	edma_info("Enabled the VLAN Append Functionality, vlan_insert_en:%d, dev_name:%s, vlan_tag_info:0x%x, ether_type_0:0x%x, ether_type_1:0x%x",
 			dp_dev->vlan_info.vlan_en, dev_name, ntohl(dp_dev->vlan_info.vlan_tag_info), ntohs(dp_dev->vlan_info.ether_types[0]), ntohs(dp_dev->vlan_info.ether_types[1]));
 
+	ppe_drv_port_vlan_append_set(dev, true);
 	dev_put(dev);
 	memset(edma_vlan_append_info, 0, sizeof(edma_vlan_append_info));
 	return ret;
