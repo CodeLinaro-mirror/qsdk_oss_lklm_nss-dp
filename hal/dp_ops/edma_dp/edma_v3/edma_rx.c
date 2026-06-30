@@ -945,6 +945,128 @@ static void edma_rx_handle_wifi_qos_packets(struct edma_gbl_ctx *egc, struct edm
 }
 
 /*
+ * edma_rx_handle_host_qdisc_packets()
+ *	Handle packet which needs qdisc processing in host.
+ */
+static bool edma_rx_handle_host_qdisc_packets(struct edma_rxdesc_ring *rxdesc_ring,
+		struct edma_rxdesc_desc *rxdesc_head,
+		struct sk_buff *skb)
+{
+	int8_t pre_hdr_mode_en = rxdesc_ring->pre_hdr_mode_en;
+	struct edma_rxdesc_sec_desc *rxdesc_sec;
+	struct net_device *bottom_dev = NULL;
+	struct net_device *qdisc_dev = NULL;
+	struct edma_pcpu_stats *pcpu_stats;
+	struct edma_rx_stats *rx_stats;
+	bool flow_idx_valid = false;
+	struct nss_dp_dev *dp_dev;
+	struct ethhdr *ethh;
+	uint16_t desc_index;
+	uint16_t l3offset;
+	uint32_t dst_port;
+	int32_t flow_idx;
+	uint8_t flags;
+
+	/*
+	 * Get stats for the netdevice
+	 */
+	dp_dev = netdev_priv(skb->dev);
+	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
+	rx_stats = this_cpu_ptr(pcpu_stats->rx_stats);
+
+	if (unlikely(!pre_hdr_mode_en)) {
+		desc_index = ((uint8_t *)rxdesc_head - (uint8_t *)rxdesc_ring->pdesc) >> EDMA_RXDESC_SIZE_SHIFT;
+		rxdesc_sec = EDMA_RXDESC_SEC_DESC(rxdesc_ring, desc_index);
+	} else {
+		pr_debug("Pre hdr mode is enabled\n");
+		rxdesc_sec = (struct edma_rxdesc_sec_desc *)phys_to_virt(EDMA_RXDESC_BUFFER_ADDR_GET(rxdesc_head));
+	}
+
+	flow_idx_valid = EDMA_RX_SDESC_FLOW_IDX_VALID_GET(rxdesc_sec);
+	if (unlikely(!flow_idx_valid)) {
+		u64_stats_update_begin(&rx_stats->syncp);
+		rx_stats->rx_get_host_qdisc_dev_fail++;
+		u64_stats_update_end(&rx_stats->syncp);
+		edma_debug("Flow index is not valid\n");
+		goto qdisc_drop;
+	}
+
+	/*
+	 * Qdisc metadata is RCU protected in ppe driver.
+	 */
+	rcu_read_lock();
+
+	flow_idx = EDMA_RX_SDESC_FLOW_IDX_GET(rxdesc_sec);
+	flags = ppe_drv_get_qdisc_rule_flag(flow_idx);
+
+	qdisc_dev = ppe_drv_get_and_hold_qdisc_netdev(flow_idx);
+	if (unlikely(!qdisc_dev)) {
+		rcu_read_unlock();
+		u64_stats_update_begin(&rx_stats->syncp);
+		rx_stats->rx_get_host_qdisc_dev_fail++;
+		u64_stats_update_end(&rx_stats->syncp);
+		edma_debug("Qdisc netdevice not found, flag: 0x%X\n", flags);
+		goto qdisc_drop;
+	}
+
+	/*
+	 * Use bottom dev as qdisc netdevice if Qdisc is configured on bottom
+	 * interface, otherwise find the bottom dev from the destination port
+	 * info in EDMA descriptor.
+	 */
+	bottom_dev = qdisc_dev;
+	if (unlikely(flags & PPE_DRV_HOST_QDISC_ON_NON_BOTTOM_IFACE)) {
+		dst_port = EDMA_RXDESC_DST_INFO_GET(rxdesc_head);
+		bottom_dev = ppe_drv_port_num_to_dev(dst_port);
+		if (unlikely(!bottom_dev)) {
+			dev_put(qdisc_dev);
+			rcu_read_unlock();
+			u64_stats_update_begin(&rx_stats->syncp);
+			rx_stats->rx_get_host_qdisc_dev_fail++;
+			u64_stats_update_end(&rx_stats->syncp);
+			edma_debug("Bottom netdevice not found for host assisted qdisc flow: 0%X\n", dst_port);
+			goto qdisc_drop;
+		}
+	}
+
+	rcu_read_unlock();
+
+	/*
+	 * Update skb fields before sending for Qdisc processing.
+	 */
+	ethh = (struct ethhdr *)skb->data;
+	l3offset = EDMA_RXDESC_L3_OFFSET_GET(rxdesc_head);
+
+	skb_reset_mac_header(skb);
+	skb_set_network_header(skb, l3offset);
+	skb->protocol = ethh->h_proto;
+	skb->dev = qdisc_dev;
+	skb->priority = ppe_drv_get_qos_tag(flow_idx);
+
+	if (likely(dev_fast_xmit_qdisc(skb, qdisc_dev, bottom_dev))) {
+		dev_put(qdisc_dev);
+		return true;
+	}
+
+	dev_put(qdisc_dev);
+
+	/*
+	 * Update failure stats.
+	 */
+	u64_stats_update_begin(&rx_stats->syncp);
+	rx_stats->rx_host_qdisc_xmit_fail++;
+	u64_stats_update_end(&rx_stats->syncp);
+
+	/*
+	 * Drop the packet as its modified by PPE and we should not send it back to stack.
+	 */
+qdisc_drop:
+	mem_debug_update_skb(skb);
+	dev_kfree_skb_any(skb);
+	return true;
+}
+
+/*
  * edma_rx_handle_sc_cc_packets()
  *	Handle packets with service code or CPU code.
  *
@@ -1051,6 +1173,15 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 		}
 #endif
 		/*
+		 * Check if this is host assisted Qdisc flow.
+		 * Do not process the exception packet here for host assisted qdisc flow,
+		 * this is required for updating the PPE rule in reverse direction.
+		 */
+		if (unlikely((service_code == PPE_DRV_SC_HOST_QOS) && !cpu_code_valid)) {
+			return edma_rx_handle_host_qdisc_packets(rxdesc_ring, rxdesc_head, skb);
+		}
+
+		/*
 		 * Fill the service code metadata structure.
 		 */
 		sc_info.service_code = service_code;
@@ -1061,7 +1192,7 @@ static inline bool edma_rx_handle_sc_cc_packets(struct edma_gbl_ctx *egc,
 		}
 
 		/*
-		 * Serivce codes can return true / false based on the callbacks registered to them.
+		 * Service codes can return true / false based on the callbacks registered to them.
 		 */
 		if (unlikely(ppe_drv_sc_process_skbuff(&sc_info, skb))) {
 			return true;

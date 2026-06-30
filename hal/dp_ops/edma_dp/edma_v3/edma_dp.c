@@ -330,6 +330,8 @@ static void edma_dp_get_ndo_stats(struct nss_dp_data_plane_ctx *dpc,
 		stats->stats.rx_nr_frag_packets += rxp.rx_nr_frag_pkts;
 		stats->stats.rx_fraglist_packets += rxp.rx_fraglist_pkts;
 		stats->stats.rx_nr_frag_headroom_err += rxp.rx_nr_frag_headroom_err;
+		stats->stats.rx_get_host_qdisc_dev_fail += rxp.rx_get_host_qdisc_dev_fail;
+		stats->stats.rx_host_qdisc_xmit_fail += rxp.rx_host_qdisc_xmit_fail;
 
 		pcpu_tx_stats = per_cpu_ptr(dp_info->pcpu_stats.tx_stats, i);
 

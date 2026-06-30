@@ -903,7 +903,7 @@ static bool edma_rx_handle_host_qdisc_packets(struct edma_rxdesc_ring *rxdesc_ri
 	flow_idx_valid = EDMA_RX_SDESC_FLOW_IDX_VALID_GET(rxdesc_sec);
 	if (unlikely(!flow_idx_valid)) {
 		u64_stats_update_begin(&rx_stats->syncp);
-		rx_stats->rx_get_qdisc_dev_fail++;
+		rx_stats->rx_get_host_qdisc_dev_fail++;
 		u64_stats_update_end(&rx_stats->syncp);
 		edma_debug("Flow index is not valid\n");
 		goto qdisc_drop;
@@ -921,7 +921,7 @@ static bool edma_rx_handle_host_qdisc_packets(struct edma_rxdesc_ring *rxdesc_ri
 	if (unlikely(!qdisc_dev)) {
 		rcu_read_unlock();
 		u64_stats_update_begin(&rx_stats->syncp);
-		rx_stats->rx_get_qdisc_dev_fail++;
+		rx_stats->rx_get_host_qdisc_dev_fail++;
 		u64_stats_update_end(&rx_stats->syncp);
 		edma_debug("Qdisc netdevice not found, flag: 0x%X\n", flags);
 		goto qdisc_drop;
@@ -940,12 +940,14 @@ static bool edma_rx_handle_host_qdisc_packets(struct edma_rxdesc_ring *rxdesc_ri
 			dev_put(qdisc_dev);
 			rcu_read_unlock();
 			u64_stats_update_begin(&rx_stats->syncp);
-			rx_stats->rx_get_qdisc_dev_fail++;
+			rx_stats->rx_get_host_qdisc_dev_fail++;
 			u64_stats_update_end(&rx_stats->syncp);
 			edma_debug("Bottom netdevice not found for host assisted qdisc flow: 0%X\n", dst_port);
 			goto qdisc_drop;
 		}
 	}
+
+	rcu_read_unlock();
 
 	/*
 	 * Update skb fields before sending for Qdisc processing.
@@ -961,18 +963,16 @@ static bool edma_rx_handle_host_qdisc_packets(struct edma_rxdesc_ring *rxdesc_ri
 
 	if (likely(dev_fast_xmit_qdisc(skb, qdisc_dev, bottom_dev))) {
 		dev_put(qdisc_dev);
-		rcu_read_unlock();
 		return true;
 	}
 
 	dev_put(qdisc_dev);
-	rcu_read_unlock();
 
 	/*
 	 * Update failure stats.
 	 */
 	u64_stats_update_begin(&rx_stats->syncp);
-	rx_stats->rx_fail_qdisc_xmit++;
+	rx_stats->rx_host_qdisc_xmit_fail++;
 	u64_stats_update_end(&rx_stats->syncp);
 
 	/*
