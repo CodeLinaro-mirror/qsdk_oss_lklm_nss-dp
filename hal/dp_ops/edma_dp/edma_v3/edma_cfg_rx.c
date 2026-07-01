@@ -1495,11 +1495,22 @@ static void edma_cfg_rx_rings_to_rx_fill_mapping(struct edma_gbl_ctx *egc)
 void edma_cfg_rx_desc_ring_enable(struct edma_rxdesc_ring *rxdesc_ring)
 {
 	uint32_t data;
-	uint32_t i = rxdesc_ring->ring_id;
+	uint32_t ring_id;
 
-	data = edma_reg_read(EDMA_REG_RXDESC_DISABLE(i));
+	if (!rxdesc_ring) {
+		return;
+	}
+
+	ring_id = rxdesc_ring->ring_id;
+
+	data = edma_reg_read(EDMA_REG_RXDESC_CTRL(ring_id));
+	data |= EDMA_RXDESC_RX_EN;
+	edma_reg_write(EDMA_REG_RXDESC_CTRL(ring_id), data);
+
+	data = edma_reg_read(EDMA_REG_RXDESC_DISABLE(ring_id));
 	data &= ~EDMA_RXDESC_RX_DISABLE;
-	edma_reg_write(EDMA_REG_RXDESC_DISABLE(i), data);
+	edma_reg_write(EDMA_REG_RXDESC_DISABLE(ring_id), data);
+	edma_debug("Rx ring %d enabled\n", ring_id);
 }
 
 /*
@@ -1509,15 +1520,23 @@ void edma_cfg_rx_desc_ring_enable(struct edma_rxdesc_ring *rxdesc_ring)
 void edma_cfg_rx_fill_ring_enable(struct edma_rxfill_ring *rxfill_ring)
 {
 	uint32_t data;
-	uint32_t i = rxfill_ring->ring_id;
+	uint32_t ring_id;
 
-	data = edma_reg_read(EDMA_REG_RXFILL_RING_EN(i));
+	if (!rxfill_ring) {
+		return;
+	}
+
+	ring_id = rxfill_ring->ring_id;
+
+	data = edma_reg_read(EDMA_REG_RXFILL_RING_EN(ring_id));
 	data |= EDMA_RXFILL_RING_EN;
-	edma_reg_write(EDMA_REG_RXFILL_RING_EN(i), data);
+	edma_reg_write(EDMA_REG_RXFILL_RING_EN(ring_id), data);
 
-	data = edma_reg_read(EDMA_REG_RXFILL_DISABLE(i));
+	data = edma_reg_read(EDMA_REG_RXFILL_DISABLE(ring_id));
 	data &= ~EDMA_RXFILL_RING_DISABLE;
-	edma_reg_write(EDMA_REG_RXFILL_DISABLE(i), data);
+	edma_reg_write(EDMA_REG_RXFILL_DISABLE(ring_id), data);
+
+	edma_debug("Rxfill ring %d enabled\n", ring_id);
 }
 
 /*
@@ -1545,6 +1564,23 @@ void edma_cfg_rx_rings_enable(struct edma_gbl_ctx *egc)
 	}
 }
 
+bool edma_cfg_rx_ring_enq_en_mapped_queues(uint32_t queue_id, uint32_t max_queues, bool enable)
+{
+	uint32_t i;
+	sw_error_t ret;
+
+	for (i = queue_id; i < (queue_id + max_queues); i++) {
+		ret = fal_qm_enqueue_ctrl_set(EDMA_SWITCH_DEV_ID, i, enable);
+		if (ret != SW_OK) {
+			edma_err("Failed queue operation enable %d on queue: %d", enable, i);
+			return false;
+		}
+		edma_debug("queue: %d enq op:%d is done\n", i, enable);
+	}
+
+	return true;
+}
+
 /*
  * edma_cfg_rx_ring_en_mapped_queues()
  *	Enable / Disable the queues associated to the RX rings.
@@ -1556,7 +1592,7 @@ bool edma_cfg_rx_ring_en_mapped_queues(struct edma_gbl_ctx *egc, uint32_t queue_
 	a_bool_t en = enable;
 
 	for (i = queue_id; i < (queue_id + max_queues); i++) {
-		ret = fal_qm_enqueue_ctrl_set(0, i, en);
+		ret = fal_qm_enqueue_ctrl_set(EDMA_SWITCH_DEV_ID, i, en);
 		if (ret != SW_OK) {
 			edma_err("%px: Failed queue operation en %d", egc, enable);
 			return false;
@@ -1567,6 +1603,7 @@ bool edma_cfg_rx_ring_en_mapped_queues(struct edma_gbl_ctx *egc, uint32_t queue_
 			edma_err("%px: Failed dequeue operation en %d", egc, enable);
 			return false;
 		}
+		edma_debug("queue: %d enq/deq op:%d is done\n", i, en);
 	}
 
 	return true;
@@ -1632,6 +1669,14 @@ void edma_cfg_rx_desc_ring_disable(struct edma_rxdesc_ring *rxdesc_ring)
 {
 	uint32_t data;
 
+	if (!rxdesc_ring) {
+		return;
+	}
+
+	data = edma_reg_read(EDMA_REG_RXDESC_CTRL(rxdesc_ring->ring_id));
+	data &= ~EDMA_RXDESC_RX_EN;
+	edma_reg_write(EDMA_REG_RXDESC_CTRL(rxdesc_ring->ring_id), data);
+
 	data = edma_reg_read(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id));
 	data |= EDMA_RXDESC_RX_DISABLE;
 	edma_reg_write(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id), data);
@@ -1639,6 +1684,7 @@ void edma_cfg_rx_desc_ring_disable(struct edma_rxdesc_ring *rxdesc_ring)
 	do {
 		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(rxdesc_ring->ring_id));
 	} while (!data);
+	edma_debug("rx ring %d disabled\n", rxdesc_ring->ring_id);
 }
 
 /*
@@ -1649,6 +1695,10 @@ void edma_cfg_rx_fill_ring_disable(struct edma_rxfill_ring *rxfill_ring)
 {
 	uint32_t data;
 
+	if (!rxfill_ring) {
+		return;
+	}
+
 	data = edma_reg_read(EDMA_REG_RXFILL_RING_EN(rxfill_ring->ring_id));
 	data &= ~EDMA_RXFILL_RING_EN;
 	edma_reg_write(EDMA_REG_RXFILL_RING_EN(rxfill_ring->ring_id), data);
@@ -1656,6 +1706,11 @@ void edma_cfg_rx_fill_ring_disable(struct edma_rxfill_ring *rxfill_ring)
 	data = edma_reg_read(EDMA_REG_RXFILL_DISABLE(rxfill_ring->ring_id));
 	data |= EDMA_RXFILL_RING_DISABLE;
 	edma_reg_write(EDMA_REG_RXFILL_DISABLE(rxfill_ring->ring_id), data);
+
+	do {
+		data = edma_reg_read(EDMA_REG_RXFILL_DISABLE_DONE(rxfill_ring->ring_id));
+	} while (!data);
+	edma_debug("rxfill %d ring disabled\n", rxfill_ring->ring_id);
 }
 
 /*

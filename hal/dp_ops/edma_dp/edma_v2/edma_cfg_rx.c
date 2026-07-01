@@ -1205,7 +1205,7 @@ bool edma_cfg_rx_ring_en_mapped_queues(struct edma_gbl_ctx *egc, uint32_t queue_
 	a_bool_t en = enable;
 
 	for (i = queue_id; i < (queue_id + max_queues); i++) {
-		ret = fal_qm_enqueue_ctrl_set(0, i, en);
+		ret = fal_qm_enqueue_ctrl_set(EDMA_SWITCH_DEV_ID, i, en);
 		if (ret != SW_OK) {
 			edma_err("%px: Failed queue operation en %d", egc, enable);
 			return false;

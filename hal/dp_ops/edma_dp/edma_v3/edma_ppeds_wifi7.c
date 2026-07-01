@@ -984,6 +984,63 @@ static uint16_t edma_ppeds_get_rxfill_cons_idx(nss_dp_ppeds_handle_t *ppeds_hand
 }
 
 /*
+ * edma_ppeds_host_rings_configuration_enable()
+ *	API to enable EDMA host rings configurations while WLAN reset
+ */
+static void edma_ppeds_host_rings_configuration_enable(struct edma_gbl_ctx *gbl_ctx)
+{
+	struct edma_host_info *host_info = &init_info.host_info;
+	struct edma_rx_rings_info *rx_info = &host_info->sfe_info.rx_info;
+	uint32_t num_queues_per_ring = rx_info->num_queues_per_ring;
+	uint32_t i, queue_start = 0;
+
+	edma_enable_rx_interrupts(gbl_ctx);
+	edma_cfg_rx_rings_enable(gbl_ctx);
+	edma_cfg_tx_rings_enable(gbl_ctx);
+
+	for (i = 0; i < rx_info->num_rx_rings; i++) {
+		queue_start = gbl_ctx->rx_queue_start + rx_info->rx_map[i].ppe_queue_base;
+
+		/*
+		 * Enable the PPE queues corresponding to host RX ring to stop the incoming
+		 * traffic on the ring.
+		 */
+		if (!edma_cfg_rx_ring_en_mapped_queues(gbl_ctx, queue_start, num_queues_per_ring, true)) {
+			edma_err("Failed to enable the host rx queue:%d\n", queue_start);
+		}
+	}
+}
+
+/*
+ * edma_ppeds_host_rings_configuration_disable()
+ *	API to disable EDMA host rings configurations while WLAN reset
+ */
+static void edma_ppeds_host_rings_configuration_disable(struct edma_gbl_ctx *gbl_ctx)
+{
+	struct edma_host_info *host_info = &init_info.host_info;
+	struct edma_rx_rings_info *rx_info = &host_info->sfe_info.rx_info;
+	uint32_t num_queues_per_ring = rx_info->num_queues_per_ring;
+	uint32_t i, queue_start = 0;
+
+	for (i = 0; i < rx_info->num_rx_rings; i++) {
+		queue_start = gbl_ctx->rx_queue_start + rx_info->rx_map[i].ppe_queue_base;
+
+		/*
+		 * Disable the PPE queues corresponding to host RX ring to stop the incoming
+		 * traffic on the ring.
+		 */
+		if (!edma_cfg_rx_ring_en_mapped_queues(gbl_ctx, queue_start, num_queues_per_ring, false)) {
+			edma_err("Failed to disable the host rx queue:%d\n", queue_start);
+		}
+	}
+
+	edma_cfg_rx_rings_disable(gbl_ctx);
+	edma_cfg_tx_rings_disable(gbl_ctx);
+	edma_disable_rx_interrupts(gbl_ctx);
+
+}
+
+/*
  * edma_ppeds_set_rxfill_prod_idx()
  *	Set rxfill ring producer index
  */
@@ -1044,6 +1101,33 @@ static int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	}
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_START_IN_PROG;
 	write_unlock_bh(&drv->lock);
+
+	if (ppeds_node->umac_reset_inprogress) {
+		/*
+		 * Clear dequeue drop on all the DDRQs
+		 */
+		edma_ddrq_dequeue_drop_disable_all();
+		edma_debug("Cleared the DDRQs dequeue drop configuration\n");
+
+		/*
+		 * Reset enqueue disable on all the DDRQs
+		 */
+		edma_ddrq_enqueue_enable_all();
+		edma_debug("DDRQs enqueue configurations are enabled\n");
+
+		/*
+		 * Enable enqueue for all the ISQs
+		 */
+		if (!edma_cfg_rx_ring_enq_en_mapped_queues(edma_ddrq_isq_base, EDMA_DDRQ_ISQ_NUM, true)) {
+			edma_err("Error in enabling enqueue of ISQs (base: %d)\n", edma_ddrq_isq_base);
+		}
+
+		/*
+		 * Enabling the host rings related configurations
+		 */
+		edma_ppeds_host_rings_configuration_enable(egc);
+		edma_debug("The host ring configurations are enabled successfully\n");
+	}
 
 	/*
 	 * Configure RxFill Low threshold value and
@@ -1135,6 +1219,8 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	struct edma_ppeds_drv *drv = &gbl_ctx->ppeds_drv;
 	struct edma_ppeds_node_cfg *node_cfg = &(drv->ppeds_node_cfg[ppeds_node->db_idx]);
 	uint32_t data;
+	uint32_t passthr_1st_pc, passthr_2nd_pc;
+	uint32_t poll_timeout = EDMA_DDRQ_HW_CONSUME_LOOP_CNT;
 
 	ppeds_node->umac_reset_inprogress = info_hdl->umac_reset_inprogress;
 	write_lock_bh(&drv->lock);
@@ -1146,6 +1232,21 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	}
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_STOP_IN_PROG;
 	write_unlock_bh(&drv->lock);
+
+	if (ppeds_node->umac_reset_inprogress) {
+		/*
+		 * Disabling enqueue for all the ISQs
+		 */
+		if (!edma_cfg_rx_ring_enq_en_mapped_queues(edma_ddrq_isq_base, EDMA_DDRQ_ISQ_NUM, false)) {
+			edma_err("Error in disabling enqueue of ISQs (base: %d)\n", edma_ddrq_isq_base);
+		}
+
+		mdelay(5);
+		/*
+		 * Disable enqueue for all the DDRQs
+		 */
+		edma_ddrq_enqueue_disable_all();
+	}
 
 	/*
 	 * Disable TxDesc rings.
@@ -1229,11 +1330,41 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		napi_disable(&wifi7_cfg->rxfill_ring.napi);
 	}
 
-	/*
-	 * Wait for 5ms and then clean the tx complete ring
-	 */
-	mdelay(5);
-	edma_ppeds_tx_complete(wifi7_cfg->txcmpl_ring.count, &wifi7_cfg->txcmpl_ring);
+	if (ppeds_node->umac_reset_inprogress) {
+		/*
+		 * Disable EDMA host rings related configurations
+		 */
+		edma_ppeds_host_rings_configuration_disable(gbl_ctx);
+		edma_debug("EDMA host ring configurations got disabled\n");
+
+		/*
+		 * Enabling dequeue drop on all the DDRQs
+		 */
+		edma_ddrq_dequeue_drop_enable_all();
+
+		/*
+		 * Wait for 25ms and then clean the tx complete ring
+		 */
+		mdelay(20);
+		do {
+			mdelay(5);
+			passthr_1st_pc = edma_reg_read(EDMA_REG_TXDESC_PASSTHR_UNREL(wifi7_cfg->tx_ring.id));
+			passthr_2nd_pc = edma_reg_read((EDMA_REG_TXDESC_PASSTHR_UNREL(wifi7_cfg->tx_ring.id) + 4));
+			edma_debug("passthr_1st_pc: %d, passthr_2nd_pc: %d", passthr_1st_pc, passthr_2nd_pc);
+			if (--poll_timeout == 0) {
+				edma_err("Timeout waiting for passthrough counters to stabilize\n");
+				break;
+			}
+		} while (passthr_1st_pc != passthr_2nd_pc);
+
+		edma_ppeds_tx_complete(wifi7_cfg->txcmpl_ring.count, &wifi7_cfg->txcmpl_ring);
+	} else {
+		/*
+		 * Wait for 5ms and then clean the tx complete ring
+		 */
+		mdelay(5);
+		edma_ppeds_tx_complete(wifi7_cfg->txcmpl_ring.count, &wifi7_cfg->txcmpl_ring);
+	}
 
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_STOP_DONE;
