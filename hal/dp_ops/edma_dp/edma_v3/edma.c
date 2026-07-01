@@ -597,6 +597,42 @@ bool edma_nsm_sawf_sc_stats_read(struct nss_dp_hal_nsm_sawf_sc_stats *nsm_stats,
 }
 
 /*
+ * edma_disable_rx_interrupts()
+ *	Disable EDMA RX interrupt masks.
+ */
+void edma_disable_rx_interrupts(struct edma_gbl_ctx *egc)
+{
+	uint32_t i;
+
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_rxdesc_ring *rxdesc_ring =
+					egc->rxdesc_info[i].rxdesc_ring;
+			if (!rxdesc_ring) {
+				continue;
+			}
+			edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id),
+					EDMA_MASK_INT_CLEAR);
+			edma_debug("Rx desc ring : %d INTR mask (%d) got disabled", rxdesc_ring->ring_id, egc->rxdesc_intr_mask);
+		}
+	}
+
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_rxfill_ring *rxfill_ring =
+					egc->rxfill_info[i].rxfill_ring;
+			if (!rxfill_ring) {
+				continue;
+			}
+			edma_reg_write(EDMA_REG_RXFILL_INT_MASK(rxfill_ring->ring_id),
+					EDMA_MASK_INT_CLEAR);
+			edma_debug("rxfill ring : %d INTR got disabled\n", rxfill_ring->ring_id);
+		}
+	}
+
+}
+
+/*
  * edma_disable_interrupts()
  *	Disable EDMA RX/TX interrupt masks.
  */
@@ -609,7 +645,7 @@ void edma_disable_interrupts(struct edma_gbl_ctx *egc)
 			struct edma_rxdesc_ring *rxdesc_ring =
 					egc->rxdesc_info[i].rxdesc_ring;
 			edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id),
-					egc->rxdesc_intr_mask);
+					EDMA_MASK_INT_CLEAR);
 		}
 	}
 
@@ -635,6 +671,46 @@ void edma_disable_interrupts(struct edma_gbl_ctx *egc)
 	 * Clear MISC interrupt mask.
 	 */
 	edma_reg_write(EDMA_REG_MISC_INT_MASK, EDMA_MASK_INT_CLEAR);
+}
+
+/*
+ * edma_enable_rx_interrupts()
+ *	Enable RX EDMA interrupt masks.
+ */
+void edma_enable_rx_interrupts(struct edma_gbl_ctx *egc)
+{
+	uint32_t i;
+
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_rxdesc_ring *rxdesc_ring =
+					egc->rxdesc_info[i].rxdesc_ring;
+			if (!rxdesc_ring) {
+				continue;
+			}
+			edma_reg_write(EDMA_REG_RXDESC_INT_MASK(rxdesc_ring->ring_id),
+					egc->rxdesc_intr_mask);
+			edma_debug("Rx desc ring : %d INTR mask (%d) got enabled", rxdesc_ring->ring_id, egc->rxdesc_intr_mask);
+		}
+	}
+
+	for (i = 0; i < egc->rxfill_ring_max; i++) {
+		if (egc->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
+			struct edma_rxfill_ring *rxfill_ring =
+					egc->rxfill_info[i].rxfill_ring;
+			if (!rxfill_ring) {
+				continue;
+			}
+			/*
+			 * Configure just the low threshold value, the interrupts
+			 * are enabled when the available number of descriptors
+			 * in rx-fill ring goes below low threshold mark.
+			 */
+			edma_reg_write(EDMA_REG_RXFILL_UGT_THRE(rxfill_ring->ring_id),
+					EDMA_RXFILL_UGT_THRESHOLD);
+			edma_debug("rxfill ring : %d INTR got enabled\n", rxfill_ring->ring_id);
+		}
+	}
 }
 
 /*
