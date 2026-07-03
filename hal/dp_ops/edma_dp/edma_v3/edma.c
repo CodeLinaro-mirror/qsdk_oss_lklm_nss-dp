@@ -237,6 +237,24 @@ module_param_array(edma_dp_ppe_vp_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_ppe_vp_tx_ring_to_core_map, "TX to core map for host ppe_vp");
 
 /*
+ * PPE-VP feature ring information
+ */
+module_param(edma_dp_ppe_vp_feat_num_rings, int, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_feat_num_rings, "Number of ppe_vp feature RX rings (0 to disable)");
+
+module_param_array(edma_dp_ppe_vp_feat_rx_rings, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_feat_rx_rings, "RX rings for ppe_vp features");
+
+module_param_array(edma_dp_ppe_vp_feat_rx_queue_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_feat_rx_queue_map, "Queue base for each ppe_vp feature RX ring");
+
+module_param_array(edma_dp_ppe_vp_feat_rxfill_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_feat_rxfill_map, "RX ring to RX fill ring mapping for ppe_vp features");
+
+module_param_array(edma_dp_ppe_vp_feat_type_map, int, NULL, S_IRUGO);
+MODULE_PARM_DESC(edma_dp_ppe_vp_feat_type_map, "VP feature sub-type per ppe_vp feature RX ring");
+
+/*
  * Each bit denotes the configured mode for that particular EDMA Tx/Rx rings IDs:
  *   Bit is set : The particular ring is configured in pre-header mode
  *   Bit is not set : The particular ring is configured in secondary ring mode
@@ -989,6 +1007,7 @@ static int edma_validate_host_ring_info(void)
 	struct edma_tx_rings_info *tx_info = &host_info->sfe_info.tx_info;
 	uint32_t rxfill_ring_bitmap = 0;
 	uint32_t txcmpl_ring_bitmap = 0;
+	uint32_t vp_feat_rxfill_bitmap = 0;
 	int i;
 
 	/*
@@ -1068,6 +1087,43 @@ static int edma_validate_host_ring_info(void)
 	tx_info = &host_info->vp_info.tx_info;
 	if (edma_validate_host_txrx_rings(NULL, tx_info, 0, txcmpl_ring_bitmap)) {
 		edma_err("Validating host PPE VP tx rings failed\n");
+		return -EINVAL;
+	}
+
+	/*
+	 * Validate host PPE VP feature rx rings (optional, num_rx_rings may be 0).
+	 * VP feat rings use a dedicated rxfill ring separate from the host rxfill
+	 * pool, so build and validate a VP feat-specific rxfill bitmap.
+	 */
+	rx_info = &host_info->vp_feat_info.rx_info;
+	if (!rx_info->num_rx_rings) {
+		edma_info("VP feature rings not allocated\n");
+		return 0;
+	}
+
+	/*
+	 * Build the bitmap
+	 */
+	for (i = 0; i < rx_info->num_rx_rings; i++) {
+		uint32_t fill_id = rx_info->rx_map[i].rx_fill_ring_id;
+
+		if ((fill_id < 0) || (fill_id >= EDMA_MAX_RXFILL_RINGS)) {
+			edma_err("Invalid VP feat rx_fill_ring_id (%d) at index %d, max allowed: %d\n",
+				fill_id, i, EDMA_MAX_RXFILL_RINGS - 1);
+			return -EINVAL;
+		}
+
+		/* Check for duplicate VP feat RXFILL ring ID */
+		if (vp_feat_rxfill_bitmap & (1 << fill_id)) {
+			edma_err("Duplicate VP feat rx_fill_ring_id (%d) found at index %d\n", fill_id, i);
+			return -EINVAL;
+		}
+
+		vp_feat_rxfill_bitmap |= (1 << fill_id);
+	}
+
+	if (edma_validate_host_txrx_rings(rx_info, NULL, vp_feat_rxfill_bitmap, 0)) {
+		edma_err("Validating host PPE VP feature rx rings failed\n");
 		return -EINVAL;
 	}
 
@@ -1385,6 +1441,19 @@ static int edma_parse_ini(void)
 			int c = ((i * EDMA_MAX_TX_RINGS_PER_CORE) + j);
 			tx_info->tx_ring_per_core_map[i][j] = edma_dp_ppe_vp_tx_ring_to_core_map[c];
 		}
+	}
+
+	/*
+	 * PPE VP feature ring configurations.
+	 */
+	rx_info = &host_info->vp_feat_info.rx_info;
+	rx_info->num_queues_per_ring = edma_dp_host_queues_per_ring;
+	rx_info->num_rx_rings = edma_dp_ppe_vp_feat_num_rings;
+
+	for (i = 0; i < EDMA_MAX_RXDESC_RING_PER_TYPE; i++) {
+		rx_info->rx_map[i].rx_ring_id = edma_dp_ppe_vp_feat_rx_rings[i];
+		rx_info->rx_map[i].ppe_queue_base = edma_dp_ppe_vp_feat_rx_queue_map[i];
+		rx_info->rx_map[i].rx_fill_ring_id = edma_dp_ppe_vp_feat_rxfill_map[i];
 	}
 
 	/*
@@ -2257,7 +2326,7 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	struct edma_host_info *host_info = &init_info->host_info;
 	int num_tx_rings, num_txcmpl_rings;
 	int num_rx_rings, num_rxfill_rings;
-	int32_t alloc_size, buf_len = 0;
+	int32_t alloc_size, buf_len = 0, i;
 
 	/*
 	 * Set buffer allocation size
@@ -2343,6 +2412,44 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	 * simply mark them into the global pool so that these will be initialized and setup
 	 * at once. This makes it easy to add/delete a new type of host ring.
 	 */
+
+	/*
+	 * TO-DO: Further for other host rings like VP host rings, SMD host rings,
+	 * simply mark them into the global pool so that these will be initialized and setup
+	 * at once. This makes it easy to add/delete a new type of host ring.
+	 */
+
+	/*
+	 * Mark PPE VP feature RX and RXFILL rings.
+	 * These rings use the same buffer parameters as host rings since they
+	 * receive the same packet types, but are tagged HOST_VP_FEAT to enable
+	 * feature-specific (e.g. CAPWAP) processing in the data path.
+	 */
+	rx_rings = &host_info->vp_feat_info.rx_info;
+	if (!(rx_rings->num_rx_rings)) {
+		edma_info("VP feature ring not enabled\n");
+		return;
+	}
+
+	edma_init_rxfill_rings(egc, edma_dp_ppe_vp_feat_rxfill_map,
+				rx_rings->num_rx_rings, EDMA_RING_TYPE_HOST,
+				EDMA_RING_TYPE_FLAGS_HOST_VP_FEAT,
+				EDMA_RX_RING_SIZE,
+				alloc_size, buf_len, egc->rx_page_mode);
+
+	edma_init_rxdesc_rings(egc, rx_rings->rx_map, rx_rings->num_rx_rings,
+				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_VP_FEAT,
+				EDMA_RX_RING_SIZE, rx_rings->num_queues_per_ring);
+
+	/*
+	 * Maps ring to specific feature type.
+	 */
+	for (i = 0; i < rx_rings->num_rx_rings; i++) {
+		uint32_t ring_id = rx_rings->rx_map[i].rx_ring_id;
+
+		egc->rxdesc_info[ring_id].vp_feat_type =
+			(edma_vp_feat_type_t)edma_dp_ppe_vp_feat_type_map[i];
+	}
 }
 
 #ifdef NSS_DP_HW_GRO
