@@ -428,4 +428,20 @@ nss_dp_ddrq_ret_t nss_dp_ddrq_drop_cnt_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_
  * API's completion's status
  */
 nss_dp_ddrq_ret_t nss_dp_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats);
+
+/**
+ * nss_dp_ddrq_bypass_cfg_set
+ *	API to set/reset DDRQ bypass configuration on the given queue id
+ *
+ * @datatypes
+ * nss_dp_ddrq_ret_t
+ * nss_dp_ddrq_obj_id_t
+ *
+ * @param[in] obj DDRQ object pointer
+ * @param[in] set Knob for setting/resetting the DDRQ bypass configuration
+ *
+ * @return
+ * API's completion's status
+ */
+nss_dp_ddrq_ret_t nss_dp_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set);
 #endif	/** __NSS_DP_DDRQ_H__ */
