@@ -941,6 +941,57 @@ static void edma_cfg_rx_point_offload_rings_to_rx_fill_mapping(struct edma_gbl_c
 #endif
 
 /*
+ * edma_cfg_get_vp_queues()
+ *	Return the absolute PPE queue base and count for the given VP feature type.
+ *
+ *	edma_v2 supports only CAPWAP as a VP feature type. The queue base is
+ *	derived from rx_ring_queue_map at the VP ring index. The queue count
+ *	is derived from the two EDMA_QID2RID_NUM_PER_REG-wide register writes
+ *	performed during QID2RID programming for the VP ring.
+ */
+int edma_cfg_get_vp_queues(edma_vp_feat_type_t feat_type,
+				   uint32_t *queue_base,
+				   uint32_t *num_queues)
+{
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	uint32_t vp_idx;
+
+	if (!queue_base || !num_queues) {
+		edma_err("%px: queue_base or num_queues is NULL\n", egc);
+		return -EINVAL;
+	}
+
+	if (!egc->rx_vp_rings) {
+		edma_err("%px: No vp rings found\n", egc);
+		return -ENOENT;
+	}
+
+	switch(feat_type) {
+	case EDMA_VP_FEAT_TYPE_CAPWAP:
+	case EDMA_VP_FEAT_TYPE_DTLS:
+		vp_idx = egc->rxdesc_vp_ring_idx;
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	if (vp_idx >= egc->num_rxdesc_rings) {
+		edma_err("%px: vp_idx(%u) is greater than max rx_desc_rings(%u)\n",
+				egc, vp_idx, egc->num_rxdesc_rings);
+		return -EINVAL;
+	}
+
+	*queue_base = egc->rx_ring_queue_map[0][vp_idx];
+	*num_queues = 2 * EDMA_QID2RID_NUM_PER_REG;
+
+	edma_debug("VP feature type(%u): queue_base(%u) num_queues(%u) vp_idx(%u)\n",
+			feat_type, *queue_base, *num_queues, vp_idx);
+
+	return 0;
+}
+EXPORT_SYMBOL(edma_cfg_get_vp_queues);
+
+/*
  * edma_cfg_rx_mcast_qid_to_core_mapping
  *	Configure mcast queue to core mapping.
  */
