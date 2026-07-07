@@ -1209,6 +1209,46 @@ static void edma_cfg_rx_point_offload_rings_to_rx_fill_mapping(struct edma_gbl_c
 #endif
 
 /*
+ * edma_cfg_get_vp_queues()
+ *	Return the absolute PPE queue base and count for the given VP feature type.
+ *
+ *	Iterates the RxDesc ring pool looking for an IN_USE ring whose vp_feat_type
+ *	matches the requested type. Returns the queue base already offset by
+ *	rx_queue_start so callers can use it directly as a PPE queue number.
+ */
+int edma_cfg_get_vp_queues(edma_vp_feat_type_t feat_type,
+				   uint32_t *queue_base,
+				   uint32_t *num_queues)
+{
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	uint32_t i;
+
+	if (!queue_base || !num_queues)
+		return -EINVAL;
+
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+		struct edma_rxdesc_ring_info *info = &egc->rxdesc_info[i];
+		bool in_use, is_vp;
+
+		if (info->vp_feat_type != feat_type)
+			continue;
+
+		in_use = info->status_flags & EDMA_RING_STATUS_FLAGS_IN_USE;
+		is_vp = info->type_flags & EDMA_RING_TYPE_FLAGS_HOST_VP_FEAT;
+
+		/* Only VP rings and in use ones will be mapped */
+		if (in_use && is_vp) {
+			*queue_base = egc->rx_queue_start + info->ppe_queue_base;
+			*num_queues = info->ppe_num_queues;
+			return 0;
+		}
+	}
+
+	return -ENOENT;
+}
+EXPORT_SYMBOL(edma_cfg_get_vp_queues);
+
+/*
  * edma_cfg_rx_mcast_qid_to_core_mapping
  *	Configure mcast queue to core mapping.
  */
