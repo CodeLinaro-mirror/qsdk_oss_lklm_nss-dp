@@ -823,6 +823,7 @@ extern struct edma_gbl_ctx *edma_gbl_ctx;
 extern struct edma_init_info init_info;
 extern uint32_t edma_hang_recover;
 extern int edma_dp_extension_en;
+extern int edma_ddrq_sp_cloned_pt_mode;
 
 extern int edma_rx_ring_mode_bitmask;
 extern int edma_tx_ring_mode_bitmask;
