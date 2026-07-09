@@ -146,7 +146,7 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 	struct nss_dp_dev *dp_dev;
 	struct sk_buff *segs;
 	uint32_t skbq;
-	uint8_t cpu_id;
+	uint8_t cpu_id = smp_processor_id();
 	int ret;
 	enum edma_tx_gso result;
 #ifdef NSS_DP_MHT_SW_PORT_MAP
@@ -172,7 +172,7 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 		txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[0][skbq];
 	}
 #else
-	txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[skbq][0];
+	txdesc_ring = (struct edma_txdesc_ring *)dp_dev->dp_info.txr_map[cpu_id][0];
 #endif
 
 	pcpu_stats = &dp_dev->dp_info.pcpu_stats;
@@ -211,7 +211,6 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 			}
 #endif
 			if (likely(!dp_global_ctx.tx_requeue_stop)) {
-				cpu_id = smp_processor_id();
 				edma_debug("Stopping tx queue due to lack of tx descriptors\n");
 				u64_stats_update_begin(&stats->syncp);
 				++stats->tx_queue_stopped[cpu_id];
