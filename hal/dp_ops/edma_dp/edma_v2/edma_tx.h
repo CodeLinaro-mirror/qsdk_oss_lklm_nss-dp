@@ -178,6 +178,7 @@ enum edma_tx {
 	EDMA_TX_OK = 0,			/* Tx success */
 	EDMA_TX_FAIL_NO_DESC = 1,	/* Not enough descriptors */
 	EDMA_TX_FAIL = 2,		/* Tx failure */
+	EDMA_TX_FAIL_SKB_FREED,		/* Tx failure, skb already freed by callee */
 };
 
 /*
@@ -272,6 +273,9 @@ struct edma_tx_cmpl_stats {
 struct edma_tx_desc_stats {
 	uint64_t no_desc_avail;			/* No descriptor available to transmit */
 	uint64_t tso_max_seg_exceed;		/* Packets extending EDMA_TX_TSO_SEG_MAX segments */
+#ifdef NSS_DP_TX_SMALL_PACKET_WAR
+	uint64_t tx_pad_fail;			/* Failed to pad short packet */
+#endif
 	struct edma_ring_util_stats ring_stats;    /* Tracking EDMA Tx ring utilization */
 	struct u64_stats_sync syncp;		/* Synchronization pointer */
 };
