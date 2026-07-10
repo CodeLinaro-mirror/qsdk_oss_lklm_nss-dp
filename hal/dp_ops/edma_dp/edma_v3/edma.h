@@ -375,16 +375,6 @@ struct edma_txcmpl_ring_info {
 };
 
 /*
- * edma_vp_feat_type
- *	VP feature ring sub-types
- */
-typedef enum edma_vp_feat_type {
-	EDMA_VP_FEAT_TYPE_NONE = 0,	/* Not a VP feature ring */
-	EDMA_VP_FEAT_TYPE_CAPWAP,	/* CAPWAP VP feature ring */
-	EDMA_VP_FEAT_TYPE_MAX,		/* Sentinel — keep last */
-} edma_vp_feat_type_t;
-
-/*
  * edma_rxdesc_ring_info
  *	RX desc ring information
  */

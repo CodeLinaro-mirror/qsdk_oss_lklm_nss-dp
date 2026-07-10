@@ -269,6 +269,40 @@ int32_t nss_dp_get_port_num(struct net_device *netdev);
 uint16_t edma_cfg_rx_point_offload_ring_queue_get(void);
 
 /**
+ * edma_vp_feat_type
+ *	VP feature ring sub-types, used to identify the feature-specific
+ *	RX ring and its associated PPE queue range.
+ */
+typedef enum edma_vp_feat_type {
+	EDMA_VP_FEAT_TYPE_NONE = 0,	/**< Not a VP feature ring */
+	EDMA_VP_FEAT_TYPE_CAPWAP,	/**< CAPWAP VP feature ring */
+	EDMA_VP_FEAT_TYPE_DTLS,		/**< DTLS VP feature ring */
+	EDMA_VP_FEAT_TYPE_MAX,		/**< Sentinel — keep last */
+} edma_vp_feat_type_t;
+
+/**
+ * edma_cfg_get_vp_queues
+ *	Get the absolute PPE queue base and queue count for a given VP feature type.
+ *
+ * The returned queue_base is already offset by rx_queue_start, so callers
+ * can use it directly as the PPE queue number without any further arithmetic.
+ *
+ * The mapping is SoC-specific and populated at EDMA init time from the
+ * per-SoC arrays (e.g. edma_dp_ppe_vp_feat_rx_queue_map[] in nss_ipqXXXX.c).
+ * EDMA must be fully initialised before this function is called.
+ *
+ * @param[in]  feat_type   VP feature type (e.g. EDMA_VP_FEAT_TYPE_CAPWAP).
+ * @param[out] queue_base  Absolute PPE queue base for the feature.
+ * @param[out] num_queues  Number of PPE queues assigned to the feature ring.
+ *
+ * @return
+ *  0 on success.
+ * -EINVAL if queue_base or num_queues is NULL.
+ * -ENOENT if feat_type is not configured on this SoC.
+ */
+int edma_cfg_get_vp_queues(edma_vp_feat_type_t feat_type, uint32_t *queue_base, uint32_t *num_queues);
+
+/**
  * nss_dp_point_offload_info_get
  *	Get point offload ring number.
  *
