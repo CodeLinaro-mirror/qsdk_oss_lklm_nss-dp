@@ -375,6 +375,13 @@ MODULE_PARM_DESC(edma_udp_st_pass_through_mode, "Pass-through mode for UDP-ST TX
 #endif
 
 /*
+ * Pass-through mode used for skbs that are cloned, or not SFE forwarded
+ */
+int edma_ddrq_sp_cloned_pt_mode = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+module_param(edma_ddrq_sp_cloned_pt_mode, int, 0640);
+MODULE_PARM_DESC(edma_ddrq_sp_cloned_pt_mode, "Pass-through mode for cloned/non-SFE-forwarded skbs (0=192B, 1=128B, 2=0B, 3=FULL_DATA)");
+
+/*
  * Input String length for VLAN insertion.
  */
 #define EDMA_VLAN_APPEND_INFO_STR_LEN 40

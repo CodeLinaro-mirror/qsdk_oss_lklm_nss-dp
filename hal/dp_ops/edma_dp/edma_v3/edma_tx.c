@@ -441,7 +441,15 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 	uint32_t nr_frags = 0, buf_len = 0, num_descs = 0, start_idx = 0, end_idx = 0;
 	struct edma_pri_txdesc *txd = *txdesc;
 	dma_addr_t buff_addr;
-	uint8_t pt_val = (unlikely(skb_cloned(skb)) ? EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA : dp_dev->pt_info.dst_pt_mode_val);
+	uint8_t pt_val;
+
+	if (unlikely(skb_cloned(skb))) {
+		pt_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+	} else if (!(skb->fast_forwarded || skb->fast_xmit)) {
+		pt_val = edma_ddrq_sp_cloned_pt_mode;
+	} else {
+		pt_val = dp_dev->pt_info.dst_pt_mode_val;
+	}
 
 	/*
 	 * Hold onto the index mapped to *txdesc.
@@ -679,6 +687,8 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 
 	if (unlikely(skb_cloned(skb))) {
 		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
+	} else if (!(skb->fast_forwarded || skb->fast_xmit)) {
+		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, edma_ddrq_sp_cloned_pt_mode);
 	}
 
 #ifdef CONFIG_IPQ_PON
@@ -734,7 +744,13 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 		u64_stats_update_end(&stats->syncp);
 	}
 
-	pt_val = (unlikely(skb_cloned(skb)) ? EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA : dp_dev->pt_info.dst_pt_mode_val);
+	if (unlikely(skb_cloned(skb))) {
+		pt_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
+	} else if (!(skb->fast_forwarded || skb->fast_xmit)) {
+		pt_val = edma_ddrq_sp_cloned_pt_mode;
+	} else {
+		pt_val = dp_dev->pt_info.dst_pt_mode_val;
+	}
 	if (unlikely(skb_has_frag_list(skb))) {
 		struct edma_pri_txdesc *start_desc = NULL;
 		uint32_t start_idx = 0, end_idx = 0;
