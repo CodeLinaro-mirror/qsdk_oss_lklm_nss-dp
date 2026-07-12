@@ -281,10 +281,12 @@ nss_dp_ddrq_ret_t nss_dp_ddrq_dequeue_drop(nss_dp_ddrq_obj_id_t *obj, bool drop)
  * @datatypes
  * nss_dp_ddrq_ret_t
  *
+ * @param[in] ddrq_id DDRQ queue ID
+ *
  * @return
  * API's completion's status
  */
-nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_reset(void);
+nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_reset(uint32_t ddrq_id);
 
 /**
  * nss_dp_ddrq_occupancy_stats_start
@@ -309,18 +311,6 @@ nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_start (void);
  * API's completion's status
  */
 nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_stop (void);
-
-/**
- * nss_dp_ddrq_occupancy_stats_restart
- *	API to restart DDRQ occupancy statistic's capture
- *
- * @datatypes
- * nss_dp_ddrq_ret_t
- *
- * @return
- * API's completion's status
- */
-nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_restart (void);
 
 /**
  * nss_dp_ddrq_occupancy_stats_threshold_set

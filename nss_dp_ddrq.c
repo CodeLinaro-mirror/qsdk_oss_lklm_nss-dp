@@ -64,9 +64,9 @@ EXPORT_SYMBOL(nss_dp_ddrq_dequeue_drop);
  * nss_dp_ddrq_occupancy_stats_reset()
  *	API to reset DDRQ occupancy stats
  */
-nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_reset(void)
+nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_reset(uint32_t ddrq_id)
 {
-	return nss_dp_hal_ddrq_occupancy_stats_reset();
+	return nss_dp_hal_ddrq_occupancy_stats_reset(ddrq_id);
 }
 EXPORT_SYMBOL(nss_dp_ddrq_occupancy_stats_reset);
 
@@ -89,16 +89,6 @@ nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_stop(void)
 	return nss_dp_hal_ddrq_occupancy_stats_stop();
 }
 EXPORT_SYMBOL(nss_dp_ddrq_occupancy_stats_stop);
-
-/*
- * nss_dp_ddrq_occupancy_stats_restart()
- *	API to restart DDRQ occupancy stats test instance
- */
-nss_dp_ddrq_ret_t nss_dp_ddrq_occupancy_stats_restart(void)
-{
-	return nss_dp_hal_ddrq_occupancy_stats_restart();
-}
-EXPORT_SYMBOL(nss_dp_ddrq_occupancy_stats_restart);
 
 /*
  * nss_dp_ddrq_occupancy_stats_threshold_set()
