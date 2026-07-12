@@ -636,9 +636,9 @@ nss_dp_ddrq_ret_t nss_dp_hal_ddrq_dequeue_drop(nss_dp_ddrq_obj_id_t *obj, bool d
  * nss_dp_hal_ddrq_occupancy_stats_reset()
  *	API to reset DDRQ occupancy stats
  */
-nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_reset(void)
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_reset(uint32_t ddrq_id)
 {
-	return edma_ddrq_occupancy_stats_reset();
+	return edma_ddrq_occupancy_stats_reset(ddrq_id);
 }
 
 /*
@@ -657,15 +657,6 @@ nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_start(void)
 nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_stop(void)
 {
 	return edma_ddrq_occupancy_stats_stop();
-}
-
-/*
- * nss_dp_hal_ddrq_occupancy_stats_restart()
- *	API to restart the DDRQ occupancy test instance
- */
-nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_restart(void)
-{
-	return edma_ddrq_occupancy_stats_restart();
 }
 
 /*

@@ -700,8 +700,10 @@ struct edma_gbl_ctx {
 	struct dentry *root_dentry;	/* Root debugfs entry */
 	struct dentry *stats_dentry;	/* Statistics debugfs entry */
 	struct dentry *bp_stats_dentry;	/* Back pressure statistics debugfs entry */
+	struct dentry *queue_stats_dentry; /*Queue statistics debugfs entry*/
 #ifdef NSS_DP_DDRQ_SUPPORT
 	struct dentry *ddrq_info_dentry;	/* DDRQ information debugfs entry */
+	struct dentry *sramq_info_dentry;	/* SRAMQ information debugfs entry */
 #endif
 
 	struct edma_misc_stats __percpu *misc_stats;

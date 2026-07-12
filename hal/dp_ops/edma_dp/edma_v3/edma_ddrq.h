@@ -464,10 +464,9 @@ nss_dp_ddrq_ret_t edma_ddrq_grp_cfg_get(uint32_t ddrq_grp_id, nss_dp_ddrq_ac_grp
 nss_dp_ddrq_ret_t edma_ddrq_grp_cfg_set(uint32_t ddrq_grp_id, nss_dp_ddrq_ac_grp_cfg_tbl_t *ddrq_grp_cfg);
 nss_dp_ddrq_ret_t edma_ddrq_enqueue_disable(nss_dp_ddrq_obj_id_t *obj, bool disable);
 nss_dp_ddrq_ret_t edma_ddrq_dequeue_drop(nss_dp_ddrq_obj_id_t *obj, bool drop);
-nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_reset(void);
+nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_reset(uint32_t ddrq_id);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_start(void);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_stop(void);
-nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_restart(void);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_threshold_t *threshold);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_set(uint32_t ddrq_id, nss_dp_ddrq_occupancy_threshold_t *threshold);
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_stats_t *ddrq_stats);
