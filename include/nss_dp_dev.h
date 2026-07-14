@@ -71,25 +71,7 @@
 /*
  * Rx buffer allocation size as per memory profile
  */
-/*
- * On 32-bit platforms (non-LP64), low/medium profiles use a smaller buffer
- * to reduce memory pressure. On 64-bit platforms the full size is always used.
- */
-static inline uint32_t nss_dp_rx_buffer_size_get(void)
-{
-	uint32_t mask;
-
-	mask = NSS_DP_MEM_PROFILE_OPTIMIZED | NSS_DP_MEM_PROFILE_BALANCED;
-#ifndef __LP64__
-	/*
-	 * In 32-bit mode all profiles have lower buffer size by default
-	 */
-    	mask |= NSS_DP_MEM_PROFILE_HIGH;
-#endif
-	return edma_gbl_ctx->mem_profile & mask ? 1856 : 1984;
-}
-
-#define NSS_DP_RX_BUFFER_SIZE		nss_dp_rx_buffer_size_get()
+#define NSS_DP_RX_BUFFER_SIZE		(skb_active_profile->value)
 
 /*
  * With Page pool Keep Rx buffer allocation size to (2048-320) = 1728.
