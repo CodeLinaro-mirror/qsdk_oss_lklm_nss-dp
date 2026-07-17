@@ -35,6 +35,10 @@
 int edma_ddrq_blk_num_map[EDMA_DDRQ_BLK_NUM_MAX_ARR_IDX] = {1024, 2048, 4096};
 int edma_ddrq_blk_size_map[EDMA_DDRQ_BLK_SIZE_MAX_ARR_IDX] = {4096, 8192, 16384, 32768};
 
+#define EDMA_DDRQ_QOS_STATS_SLOT_COUNT	8
+static DEFINE_SPINLOCK(edma_ddrq_qos_stats_lock);
+static uint32_t edma_ddrq_qos_stats_qid_map[EDMA_DDRQ_QOS_STATS_SLOT_COUNT];
+
 /*
  * edma_ddrq_reg_tbl_get()
  *	API to get DDRQ AC queue configuration table's value from the hardware
@@ -162,6 +166,21 @@ static int32_t edma_ddrq_reg_dbg_cnt_occ_stats_set(uint32_t reg_addr_idx, uint32
 }
 
 /*
+ * edma_ddrq_drop_tbl_set()
+ *	API to set DDRQ drop count statistics in the hardware
+ */
+static int32_t edma_ddrq_drop_tbl_set(uint32_t reg_addr_idx, uint32_t *val, uint32_t num)
+{
+	uint32_t i = 0;
+
+	for(i = 0; i < num; i++) {
+		edma_reg_write((EDMA_REG_DDRQ_AC_QUEUE_DROP_CNT_TBL(reg_addr_idx) + i * 4), val[i]);
+	}
+
+	return 0;
+}
+
+/*
  * edma_ddrq_ac_queue_cfg_dump_local()
  *	API to dump local DDRQ AC queue configurations
  */
@@ -233,6 +252,23 @@ static int32_t edma_ddrq_drop_cnt_tbl_get(uint32_t index, edma_ddrq_ac_queue_dro
 	}
 
 	return 0;
+}
+
+/*
+ * edma_ddrq_drop_cnt_tbl_set()
+ *	API to set DDRQ drop count table statistics
+ */
+static int32_t edma_ddrq_drop_cnt_tbl_set(uint32_t index, edma_ddrq_ac_queue_drop_cnt_tbl_u *ddrq_drop_stats)
+{
+	int32_t ret;
+
+	ret = edma_ddrq_drop_tbl_set(index, ddrq_drop_stats->val, sizeof(edma_ddrq_ac_queue_drop_cnt_tbl_u)/sizeof(uint32_t));
+	if (ret) {
+		edma_err("failed to set ddrq queue drop count table for %u index\n", index);
+		return ret;
+	}
+
+	return ret;
 }
 
 /*
@@ -2272,6 +2308,16 @@ static int32_t edma_ddrq_get_def_cfg(edma_ddrq_cfg_t *ddrq_cfg)
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_dynamic = edma_ddrq_ac_queue_shared_dynamic;
 	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_weight = edma_ddrq_ac_queue_shared_weight;
 	ddrq_idv_cfg->ddrq_ac_cfg.ddrq_state = EDMA_DDRQ_AC_QUEUE_STATE_ENABLED;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_gap_grn_grn_min = EDMA_DDRQ_AC_Q_MIN_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_gap_grn_yel_min = EDMA_DDRQ_AC_Q_MIN_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_gap_grn_red_min = EDMA_DDRQ_AC_Q_MIN_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_gap_grn_yel_max = EDMA_DDRQ_AC_Q_MAX_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_gap_grn_red_max = EDMA_DDRQ_AC_Q_MAX_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_grn_resume_offset = EDMA_DDRQ_AC_Q_RES_OFF_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_yel_resume_offset = EDMA_DDRQ_AC_Q_RES_OFF_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_red_resume_offset = EDMA_DDRQ_AC_Q_RES_OFF_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_bp_en = EDMA_DDRQ_AC_Q_BP_EN_DEF;
+	ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_ecn_mark_en = EDMA_DDRQ_AC_Q_ECN_MARK_EN_DEF;
 	ddrq_idv_cfg->ddrq_en_port_bm = edma_ddrq_en_port_bm;
 	if (edma_ddrq_ac_queue_shared_ceiling != EDMA_DDRQ_NO_OP_DEF_VAL) {
 		ddrq_idv_cfg->ddrq_ac_cfg.ac_cfg_shared_ceiling = edma_ddrq_ac_queue_shared_ceiling;
@@ -2384,6 +2430,568 @@ static int edma_ddrq_get_ddrq_mem_regions(void)
 }
 
 /*
+ * nss_dp_ddrq_disable()
+ *	DDRQ disable callback stub.
+ */
+static int nss_dp_ddrq_disable(uint32_t ddrq_id)
+{
+	nss_dp_ddrq_obj_id_t obj_id;
+	nss_dp_ddrq_ret_t ret;
+
+
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%u) passed for DDRQ disable configuration\n",
+				ddrq_id);
+		return 0;
+	}
+
+	obj_id.cfg_type= NSS_DP_DDRQ_CFG_TYPE_QUEUE;
+	obj_id.cfg_id = ddrq_id;
+
+	ret = edma_ddrq_enqueue_disable(&obj_id, true);
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error (%d) in ddrq_id: %u enqueue disable\n", ret, obj_id.cfg_id);
+		return -EINVAL;
+	}
+
+	ret = edma_ddrq_dequeue_drop(&obj_id, true);
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error (%d) in ddrq_id: %u dequeue drop set\n", ret, obj_id.cfg_id);
+		if (edma_ddrq_enqueue_disable(&obj_id, false) != DDRQ_RET_SUCCESS) {
+			edma_err("Error in ddrq_id: %u enqueue rollback\n", obj_id.cfg_id);
+		}
+		return -EINVAL;
+	}
+
+	mdelay(30);
+
+	edma_debug("DDRQ disable successful for queue:%u\n", ddrq_id);
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_enable()
+ *	DDRQ enable callback stub.
+ */
+static int nss_dp_ddrq_enable(uint32_t ddrq_id)
+{
+	nss_dp_ddrq_obj_id_t obj_id;
+	nss_dp_ddrq_ret_t ret;
+
+
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%u) passed for DDRQ enqueue configuration\n",
+				ddrq_id);
+		return 0;
+	}
+
+	obj_id.cfg_type= NSS_DP_DDRQ_CFG_TYPE_QUEUE;
+	obj_id.cfg_id = ddrq_id;
+
+	ret = edma_ddrq_dequeue_drop(&obj_id, false);
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error (%d) in ddrq_id: %u dequeue drop reset\n", ret, obj_id.cfg_id);
+		return -EINVAL;
+	}
+
+	ret = edma_ddrq_enqueue_disable(&obj_id, false);
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error (%d) in ddrq_id: %u enqueue enable\n", ret, obj_id.cfg_id);
+		if (edma_ddrq_dequeue_drop(&obj_id, true) != DDRQ_RET_SUCCESS) {
+			edma_err("Error in ddrq_id: %u dequeue drop rollback\n", obj_id.cfg_id);
+		}
+		return -EINVAL;
+	}
+
+	edma_debug("DDRQ enable successful for queue:%u\n", ddrq_id);
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_cfg_reset()
+ *	DDRQ default configuration reset callback stub.
+ */
+static int nss_dp_ddrq_cfg_reset(uint32_t port_id)
+{
+	nss_dp_ddrq_obj_id_t ddrq_obj_id;
+	nss_dp_ddrq_ac_queue_cfg_tbl_t ddrq_cfg;
+	fal_portscheduler_resource_t cfg = {0};
+	nss_dp_ddrq_ret_t ret;
+	sw_error_t sw_err;
+	uint32_t qid;
+	uint32_t qid_end;
+	uint32_t stats_id;
+
+	if (!port_id) {
+		edma_err("Invalid port id (%u) passed for DDRQ reset configuration\n", port_id);
+		return 0;
+	}
+
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+		return 0;
+	}
+
+	sw_err = fal_port_scheduler_resource_get(EDMA_SWITCH_DEV_ID, port_id, &cfg);
+	if (sw_err != SW_OK) {
+		edma_err("Error in getting PPE PORT (%u) queue base information\n", port_id);
+		return -EINVAL;
+	}
+
+	qid_end = cfg.ucastq_start + cfg.ucastq_num;
+	for (qid = cfg.ucastq_start; qid < qid_end; qid++) {
+		if (qid >= NSS_DP_DDRQ_MAX_CNT) {
+			break;
+		}
+
+		ddrq_obj_id.cfg_type = NSS_DP_DDRQ_CFG_TYPE_QUEUE;
+		ddrq_obj_id.cfg_id = qid;
+		ddrq_cfg = edma_gbl_ctx->ddrq_def_cfg.ddrq_idv_cfg.ddrq_ac_cfg;
+		ddrq_cfg.ddrq_state = NSS_DP_DDRQ_INV_VAL;
+
+		ret = edma_ddrq_cfg_set(&ddrq_obj_id, &ddrq_cfg);
+		if (ret != DDRQ_RET_SUCCESS) {
+			edma_err("Error (%d) in resetting default DDRQ cfg for queue:%u\n", ret, qid);
+			return -EINVAL;
+		}
+
+		/*
+		 * Release queue's accumulate stats instance only if it is
+		 * currently mapped to the queue.
+		 */
+		stats_id = qid % EDMA_DDRQ_QOS_STATS_SLOT_COUNT;
+		edma_debug("DDRQ cfg reset queue:%u stats_id:%u\n", qid, stats_id);
+		spin_lock_bh(&edma_ddrq_qos_stats_lock);
+		if (edma_ddrq_qos_stats_qid_map[stats_id] == qid) {
+			edma_debug("DDRQ cfg reset releasing stats slot:%u qid:%u\n",
+				   stats_id, edma_ddrq_qos_stats_qid_map[stats_id]);
+			edma_ddrq_qos_stats_qid_map[stats_id] = NSS_DP_DDRQ_MAX_CNT;
+		}
+		spin_unlock_bh(&edma_ddrq_qos_stats_lock);
+	}
+
+	edma_debug("DDRQ default config reset successful for port:%u\n", port_id);
+	return 0;
+}
+
+/*
+ * edma_ddrq_qos_blk_cfg_convert()
+ *	Convert queue thresholds from one block size representation to another.
+ */
+static uint32_t edma_ddrq_qos_blk_cfg_convert(uint32_t cfg_val,
+					      uint32_t src_blk_size,
+					      uint32_t dst_blk_size)
+{
+	uint64_t cfg_bytes;
+	uint64_t converted;
+
+	if (!dst_blk_size) {
+		return 0;
+	}
+
+	cfg_bytes = cfg_val;
+	cfg_bytes *= src_blk_size;
+	converted = DIV_ROUND_UP_ULL(cfg_bytes, dst_blk_size);
+	if (converted > U32_MAX) {
+		return U32_MAX;
+	}
+
+	return converted;
+}
+
+/*
+ * nss_dp_ddrq_limit_set()
+ *	DDRQ limit set callback stub.
+ */
+static int nss_dp_ddrq_limit_set(struct ppe_drv_qos_ddrq_limit_set_cfg *cfg)
+{
+	edma_ddrq_gbl_cfg_t *ddrq_gbl_cfg = &edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg;
+	struct ppe_drv_qos_queue *qos_queue;
+	struct ppe_drv_qos_queue qos_queue_local;
+	nss_dp_ddrq_obj_id_t ddrq_obj_id;
+	nss_dp_ddrq_ac_queue_cfg_tbl_t ddrq_cfg;
+	ppe_drv_qos_queue_ceiling_unit_t q_ceiling_unit;
+	uint32_t ddrq_blk_size;
+	uint32_t min_th_orig;
+	uint32_t max_th_orig;
+	uint32_t resume_off_orig;
+	uint32_t color;
+	uint32_t qlimit_orig;
+	uint64_t qlimit_bytes;
+
+	if (!cfg || !cfg->qos_queue) {
+		edma_err("Invalid qos queue configuration received\n");
+		return -EINVAL;
+	}
+
+	qos_queue_local = *cfg->qos_queue;
+	qos_queue = &qos_queue_local;
+	q_ceiling_unit = cfg->qdisc_ceiling_unit;
+
+	if (qos_queue->ucast_qid >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%u) passed\n", qos_queue->ucast_qid);
+		return 0;
+	}
+
+	ddrq_blk_size = edma_ddrq_blk_size_map[ddrq_gbl_cfg->ddrq_blk_size_cfg];
+	if (!ddrq_blk_size) {
+		edma_err("Invalid DDRQ block size:0 for queue:%u\n", qos_queue->ucast_qid);
+		return -EINVAL;
+	}
+
+	/*
+	 * Convert queue limit to DDRQ block units before programming DDRQ.
+	 * Byte-based qdiscs use PPE 256-byte blocks, while packet-based qdiscs
+	 * use packet count and port MTU to derive the queue size in bytes.
+	 */
+	switch (q_ceiling_unit) {
+	case PPE_DRV_QOS_QUEUE_CEILING_UNIT_BYTES:
+		qlimit_orig = qos_queue->qlimit;
+		qos_queue->qlimit = edma_ddrq_qos_blk_cfg_convert(qos_queue->qlimit,
+								  PPE_DRV_QOS_MEM_BLOCK_SIZE,
+								  ddrq_blk_size);
+
+		edma_debug("DDRQ qlimit conversion queue:%u q_ceiling_unit:%u qlimit:%u->%u ddrq_blk_size:%u\n",
+			   qos_queue->ucast_qid, q_ceiling_unit, qlimit_orig, qos_queue->qlimit, ddrq_blk_size);
+
+		/*
+		 * RED queue thresholds and resume offsets are represented in PPE
+		 * 256B blocks. Convert them to DDRQ block units before programming DDRQ.
+		 */
+		if (qos_queue->red_en) {
+			for (color = PPE_DRV_QOS_QUEUE_COLOR_GREEN;
+			     color < PPE_DRV_QOS_QUEUE_COLOR_MAX; color++) {
+				min_th_orig = qos_queue->min_th[color];
+				max_th_orig = qos_queue->max_th[color];
+				resume_off_orig = qos_queue->resume_off[color];
+
+				qos_queue->min_th[color] = edma_ddrq_qos_blk_cfg_convert(min_th_orig,
+											  PPE_DRV_QOS_MEM_BLOCK_SIZE,
+											  ddrq_blk_size);
+				qos_queue->max_th[color] = edma_ddrq_qos_blk_cfg_convert(max_th_orig,
+											  PPE_DRV_QOS_MEM_BLOCK_SIZE,
+											  ddrq_blk_size);
+				qos_queue->resume_off[color] = edma_ddrq_qos_blk_cfg_convert(resume_off_orig,
+											      PPE_DRV_QOS_MEM_BLOCK_SIZE,
+											      ddrq_blk_size);
+			}
+		}
+		break;
+	case PPE_DRV_QOS_QUEUE_CEILING_UNIT_PACKETS:
+		if (!cfg->port_mtu) {
+			edma_err("Invalid port MTU:0 for packet-based qlimit conversion queue:%u\n",
+				 qos_queue->ucast_qid);
+			return -EINVAL;
+		}
+
+		qlimit_orig = qos_queue->qlimit;
+		qlimit_bytes = (uint64_t)qos_queue->qlimit * cfg->port_mtu;
+		qos_queue->qlimit = DIV_ROUND_UP_ULL(qlimit_bytes, ddrq_blk_size);
+		if (qos_queue->qlimit == 0 && qlimit_orig) {
+			qos_queue->qlimit = 1;
+		}
+
+		edma_debug("DDRQ qlimit packet conversion queue:%u q_ceiling_unit:%u qlimit(pkt):%u->%u mtu:%u ddrq_blk_size:%u\n",
+			   qos_queue->ucast_qid, q_ceiling_unit, qlimit_orig, qos_queue->qlimit,
+			   cfg->port_mtu, ddrq_blk_size);
+		break;
+	default:
+		edma_err("Invalid qdisc ceiling unit:%u for queue:%u\n",
+			 q_ceiling_unit, qos_queue->ucast_qid);
+		return -EINVAL;
+	}
+
+	ddrq_obj_id.cfg_type= NSS_DP_DDRQ_CFG_TYPE_QUEUE;
+	ddrq_obj_id.cfg_id = qos_queue->ucast_qid;
+
+	edma_ddrq_cfg_set_inval(&ddrq_cfg);
+	ddrq_cfg.ac_cfg_color_aware = qos_queue->color_en;
+	ddrq_cfg.ac_cfg_wred_en = qos_queue->red_en;
+	ddrq_cfg.ac_cfg_shared_ceiling = qos_queue->qlimit;
+	ddrq_cfg.ac_cfg_gap_grn_grn_min = qos_queue->min_th[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+	ddrq_cfg.ac_cfg_gap_grn_yel_min = qos_queue->min_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+	ddrq_cfg.ac_cfg_gap_grn_yel_max = qos_queue->max_th[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+	ddrq_cfg.ac_cfg_gap_grn_red_min = qos_queue->min_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+	ddrq_cfg.ac_cfg_gap_grn_red_max = qos_queue->max_th[PPE_DRV_QOS_QUEUE_COLOR_RED];
+	ddrq_cfg.ac_cfg_grn_resume_offset = qos_queue->resume_off[PPE_DRV_QOS_QUEUE_COLOR_GREEN];
+	ddrq_cfg.ac_cfg_yel_resume_offset = qos_queue->resume_off[PPE_DRV_QOS_QUEUE_COLOR_YELLOW];
+	ddrq_cfg.ac_cfg_red_resume_offset = qos_queue->resume_off[PPE_DRV_QOS_QUEUE_COLOR_RED];
+
+	if (edma_ddrq_cfg_set(&ddrq_obj_id, &ddrq_cfg) != DDRQ_RET_SUCCESS) {
+		edma_err("Error in configuring DDRQ:%u AC configurations\n", ddrq_obj_id.cfg_id);
+		return -EINVAL;
+	}
+
+	edma_debug("DDRQ limit set successful for queue:%u q_ceiling_unit:%u\n",
+			ddrq_obj_id.cfg_id, q_ceiling_unit);
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_enqueue_ctrl()
+ *	DDRQ enqueue control callback stub.
+ */
+static int nss_dp_ddrq_enqueue_ctrl(uint32_t ddrq_id, bool enable)
+{
+	nss_dp_ddrq_obj_id_t obj_id;
+	nss_dp_ddrq_ret_t ret;
+
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%u) passed for DDRQ enqueue control:%d configuration\n",
+				ddrq_id, enable);
+		return 0;
+	}
+
+	obj_id.cfg_type= NSS_DP_DDRQ_CFG_TYPE_QUEUE;
+	obj_id.cfg_id = ddrq_id;
+
+	ret = edma_ddrq_enqueue_disable(&obj_id, !enable);
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error (%d) in ddrq_id: %u enqueue:%d\n", ret, obj_id.cfg_id, enable);
+		return -EINVAL;
+	}
+
+	edma_debug("DDRQ enqueue control successful for queue:%u, enable:%u\n",
+			ddrq_id, enable);
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_dequeue_drop_ctrl()
+ *	DDRQ dequeue drop control callback stub.
+ */
+static int nss_dp_ddrq_dequeue_drop_ctrl(uint32_t ddrq_id, bool enable)
+{
+	nss_dp_ddrq_obj_id_t obj_id;
+	nss_dp_ddrq_ret_t ret;
+
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%u) passed for DDRQ enqueue control:%d configuration\n",
+				ddrq_id, enable);
+		return 0;
+	}
+
+	obj_id.cfg_type= NSS_DP_DDRQ_CFG_TYPE_QUEUE;
+	obj_id.cfg_id = ddrq_id;
+
+	ret = edma_ddrq_dequeue_drop(&obj_id, enable);
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error (%d) in ddrq_id: %u dequeue drop enable:%d\n", ret, obj_id.cfg_id, enable);
+		return -EINVAL;
+	}
+
+	edma_debug("DDRQ dequeue drop control successful for queue:%u, enable:%u\n",
+			ddrq_id, enable);
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_stats_get()
+ *	DDRQ statistics get callback stub.
+ */
+static int nss_dp_ddrq_stats_get(uint32_t ddrq_id, struct ppe_drv_qos_q_stat *stats)
+{
+	nss_dp_ddrq_obj_id_t obj_id;
+	nss_dp_ddrq_ret_t ret;
+	nss_dp_ddrq_ac_queue_drop_cnt_tbl_t ddrq_drop_stats = {0};
+	nss_dp_ddrq_accu_stats_t ddrq_accu_stats = {0};
+	edma_ddrq_acc_stats_u ddrq_acc_stats_l = {0};
+	nss_dp_ddrq_accu_stats_info_t stats_info = {0};
+	uint32_t stats_id = ddrq_id % EDMA_DDRQ_QOS_STATS_SLOT_COUNT;
+
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%u) passed for getting the DDRQ statistics \n",
+				ddrq_id);
+		return 0;
+	}
+
+	if (!stats) {
+		edma_err("Invalid qos statistics descriptor received for qid:%u\n", ddrq_id);
+		return -EINVAL;
+	}
+
+	obj_id.cfg_type= NSS_DP_DDRQ_CFG_TYPE_QUEUE;
+	obj_id.cfg_id = ddrq_id;
+
+	ret = edma_ddrq_drop_stats_get(&obj_id, &ddrq_drop_stats);
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error:%d in getting DDRQ:%u drop statistics\n", ret, obj_id.cfg_id);
+		return -EINVAL;
+	}
+
+	spin_lock_bh(&edma_ddrq_qos_stats_lock);
+	stats_info.stats_id = stats_id;
+	stats_info.stats_count = 1;
+	stats_info.oper_type = NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_GET;
+	if (edma_ddrq_qos_stats_qid_map[stats_id] != ddrq_id) {
+		if (edma_ddrq_qos_stats_qid_map[stats_id] != NSS_DP_DDRQ_MAX_CNT) {
+			spin_unlock_bh(&edma_ddrq_qos_stats_lock);
+			edma_info("DDRQ accumulate stats instance busy for ddrq:%u, stats_id:%u, mapped_qid:%u\n",
+				 ddrq_id, stats_id, edma_ddrq_qos_stats_qid_map[stats_id]);
+			return -EBUSY;
+		}
+
+		ddrq_acc_stats_l.ddrq_stats.ddrq_id = ddrq_id;
+		if (edma_ddrq_accu_stats_tbl_set(stats_id, &ddrq_acc_stats_l)) {
+			spin_unlock_bh(&edma_ddrq_qos_stats_lock);
+			edma_err("Error in setting the DDRQ accumulate stats for %u ddrq, stats_id: %u\n",
+					ddrq_id, stats_id);
+			return -EINVAL;
+		}
+		edma_ddrq_qos_stats_qid_map[stats_id] = ddrq_id;
+	}
+
+	ret = edma_ddrq_accu_stats_get(&obj_id, &stats_info, &ddrq_accu_stats);
+	spin_unlock_bh(&edma_ddrq_qos_stats_lock);
+
+	if (ret != DDRQ_RET_SUCCESS) {
+		edma_err("Error:%d in getting DDRQ:%u accumulate stats\n", ret, obj_id.cfg_id);
+		return -EINVAL;
+	}
+
+	stats->tx_pkts += ddrq_accu_stats.ddrq_accu_tx_pkts;
+	stats->tx_bytes += ddrq_accu_stats.ddrq_accu_tx_bytes;
+
+	stats->drop_pkts += ddrq_drop_stats.ac_drop_cnt_tbl_grn_tail_drop_pkt;
+	stats->drop_pkts += ddrq_drop_stats.ac_drop_cnt_tbl_yel_tail_drop_pkt;
+	stats->drop_pkts += ddrq_drop_stats.ac_drop_cnt_tbl_red_tail_drop_pkt;
+	stats->drop_bytes += ddrq_drop_stats.ac_drop_cnt_tbl_grn_tail_drop_byte;
+	stats->drop_bytes += ddrq_drop_stats.ac_drop_cnt_tbl_yel_tail_drop_byte;
+	stats->drop_bytes += ddrq_drop_stats.ac_drop_cnt_tbl_red_tail_drop_byte;
+
+	edma_debug("DDRQ stats get successful for queue:%u\n", ddrq_id);
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_stats_reset()
+ *	DDRQ statistics reset callback stub.
+ */
+static int nss_dp_ddrq_stats_reset(uint32_t ddrq_id)
+{
+	edma_ddrq_acc_stats_u ddrq_acc_stats_l = {0};
+	edma_ddrq_ac_queue_drop_cnt_tbl_u ddrq_drop_stats_l = {0};
+	uint32_t stats_id = ddrq_id % EDMA_DDRQ_QOS_STATS_SLOT_COUNT;
+	int32_t ret = 0;
+
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%u) passed for resetting the DDRQ statistics\n", ddrq_id);
+		return 0;
+	}
+
+	/*
+	 * Reset the queue accumulate counters only when this queue is currently
+	 * associated with the calculated stats slot. Queue-slot release is done
+	 * from nss_dp_ddrq_cfg_reset() during default DDRQ configuration reset.
+	 */
+	edma_debug("DDRQ stats reset queue:%u stats_id:%u mapped_qid:%u\n",
+		   ddrq_id, stats_id, edma_ddrq_qos_stats_qid_map[stats_id]);
+	spin_lock_bh(&edma_ddrq_qos_stats_lock);
+	if (edma_ddrq_qos_stats_qid_map[stats_id] == ddrq_id) {
+		ddrq_acc_stats_l.ddrq_stats.ddrq_id = ddrq_id;
+		ret = edma_ddrq_accu_stats_tbl_set(stats_id, &ddrq_acc_stats_l);
+	}
+	spin_unlock_bh(&edma_ddrq_qos_stats_lock);
+
+	if (ret) {
+		edma_err("Error in resetting DDRQ:%u accumulate stats, stats_id: %u\n",
+			 ddrq_id, stats_id);
+		return -EINVAL;
+	}
+
+	ret = edma_ddrq_drop_cnt_tbl_set(ddrq_id, &ddrq_drop_stats_l);
+	if (ret) {
+		edma_err("Error in resetting DDRQ:%u drop count stats\n", ddrq_id);
+		return -EINVAL;
+	}
+
+	edma_debug("DDRQ stats reset successful for queue:%u\n", ddrq_id);
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_accu_stats_start()
+ *	DDRQ accumulate statistics start callback stub.
+ */
+static int nss_dp_ddrq_accu_stats_start(void)
+{
+	if (edma_ddrq_occupancy_stats_start() != DDRQ_RET_SUCCESS) {
+		edma_err("Error in starting DDRQ statistics\n");
+		return -EINVAL;
+	}
+
+	edma_debug("DDRQ accumulate stats start successful\n");
+	return 0;
+}
+
+/*
+ * nss_dp_ddrq_accu_stats_stop()
+ *	DDRQ accumulate statistics stop callback stub.
+ */
+static int nss_dp_ddrq_accu_stats_stop(void)
+{
+	if (edma_ddrq_occupancy_stats_stop() != DDRQ_RET_SUCCESS) {
+		edma_err("Error in stopping DDRQ statistics\n");
+		return -EINVAL;
+	}
+
+	edma_debug("DDRQ accumulate stats stop successful\n");
+	return 0;
+}
+
+/*
+ * edma_ddrq_qos_ops
+ *	DDRQ callbacks registered with PPE QoS layer.
+ */
+static const struct ppe_drv_qos_ddrq_ops edma_ddrq_qos_ops = {
+	.ddrq_disable = nss_dp_ddrq_disable,
+	.ddrq_enable = nss_dp_ddrq_enable,
+	.ddrq_limit_set = nss_dp_ddrq_limit_set,
+	.ddrq_enqueue_ctrl = nss_dp_ddrq_enqueue_ctrl,
+	.ddrq_dequeue_drop_ctrl = nss_dp_ddrq_dequeue_drop_ctrl,
+	.ddrq_stats_get = nss_dp_ddrq_stats_get,
+	.ddrq_stats_reset = nss_dp_ddrq_stats_reset,
+	.ddrq_cfg_reset = nss_dp_ddrq_cfg_reset,
+	.ddrq_accu_stats_start = nss_dp_ddrq_accu_stats_start,
+	.ddrq_accu_stats_stop = nss_dp_ddrq_accu_stats_stop,
+};
+
+/*
+ * edma_ddrq_qos_ops_register()
+ *	Register DDRQ callbacks with PPE QoS layer.
+ */
+void edma_ddrq_qos_ops_register(void)
+{
+	uint32_t i;
+
+
+	spin_lock_bh(&edma_ddrq_qos_stats_lock);
+	for (i = 0; i < EDMA_DDRQ_QOS_STATS_SLOT_COUNT; i++) {
+		edma_ddrq_qos_stats_qid_map[i] = NSS_DP_DDRQ_MAX_CNT;
+	}
+	spin_unlock_bh(&edma_ddrq_qos_stats_lock);
+	ppe_drv_qos_ddrq_callback_register(&edma_ddrq_qos_ops);
+	edma_debug("DDRQ QoS callbacks registration successful\n");
+}
+
+/*
+ * edma_ddrq_qos_ops_unregister()
+ *	Unregister DDRQ callbacks from PPE QoS layer.
+ */
+void edma_ddrq_qos_ops_unregister(void)
+{
+	uint32_t i;
+
+
+	spin_lock_bh(&edma_ddrq_qos_stats_lock);
+	for (i = 0; i < EDMA_DDRQ_QOS_STATS_SLOT_COUNT; i++) {
+		edma_ddrq_qos_stats_qid_map[i] = NSS_DP_DDRQ_MAX_CNT;
+	}
+	spin_unlock_bh(&edma_ddrq_qos_stats_lock);
+	ppe_drv_qos_ddrq_callback_unregister();
+	edma_debug("DDRQ QoS callbacks unregistration successful\n");
+}
+
+/*
  * edma_ddrq_init()
  *	API to initialize DDRQ related configurations
  */
@@ -2436,5 +3044,21 @@ int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg)
 		}
 	}
 
+	/*
+	 * Register DDRQ callback operations with PPE QoS layer after successful
+	 * DDRQ initialization.
+	 */
+	edma_ddrq_qos_ops_register();
+
 	return 0;
+}
+
+/*
+ * edma_ddrq_exit()
+ *	API to cleanup DDRQ related configurations
+ */
+void edma_ddrq_exit(void)
+{
+	edma_ddrq_qos_ops_unregister();
+	edma_debug("DDRQ cleanup successful\n");
 }
