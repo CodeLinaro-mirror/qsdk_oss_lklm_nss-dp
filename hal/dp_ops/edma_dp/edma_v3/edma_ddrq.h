@@ -48,6 +48,11 @@ static inline void edma_reg_write(uint32_t reg_off, uint32_t val);
 #define EDMA_DDRQ_AC_Q_PRE_ALLOC_DEF	2
 #define EDMA_DDRQ_AC_Q_SHRD_DYNAMIC	1
 #define EDMA_DDRQ_AC_Q_SHRD_WEIGHT	7
+#define EDMA_DDRQ_AC_Q_MIN_DEF		0
+#define EDMA_DDRQ_AC_Q_MAX_DEF		0
+#define EDMA_DDRQ_AC_Q_RES_OFF_DEF	0
+#define EDMA_DDRQ_AC_Q_BP_EN_DEF	0
+#define EDMA_DDRQ_AC_Q_ECN_MARK_EN_DEF	0
 
 #define EDMA_DDRQ_AC_GRP_AC_EN_DEF	0
 #define EDMA_DDRQ_AC_GRP_COLOR_AWARE_DEF	0
@@ -482,6 +487,9 @@ nss_dp_ddrq_ret_t edma_ddrq_pending_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_
 nss_dp_ddrq_ret_t edma_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats);
 nss_dp_ddrq_ret_t edma_ddrq_drop_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats);
 nss_dp_ddrq_ret_t edma_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set);
+void edma_ddrq_qos_ops_register(void);
+void edma_ddrq_qos_ops_unregister(void);
 int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg);
+void edma_ddrq_exit(void);
 int32_t edma_ddrq_dp_dev_set(struct net_device *dev);
 #endif		/* __EDMA_DDRQ_H__ */
