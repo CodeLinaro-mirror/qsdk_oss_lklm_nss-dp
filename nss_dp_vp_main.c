@@ -42,7 +42,7 @@ netdev_tx_t nss_dp_vp_xmit(struct net_device *netdev, struct nss_dp_vp_tx_info *
 	struct nss_dp_dev *dp_priv;
 
 	if (unlikely(!skb || !netdev)) {
-		return NETDEV_TX_OK;
+		return NETDEV_TX_BUSY;
 	}
 
 	dp_priv = (struct nss_dp_dev *)netdev_priv(netdev);
