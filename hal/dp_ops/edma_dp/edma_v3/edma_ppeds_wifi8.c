@@ -13,6 +13,10 @@
 #include "edma_cfg_tx.h"
 #include <ppe_drv.h>
 
+#ifdef NSS_DP_PON_SUPPORT
+#include <nss_dp_gem.h>
+#endif
+
 /*
  * edma_ppeds_tx_complete()
  *	PPE-DS EDMA Tx complete processing API
@@ -1632,6 +1636,13 @@ static int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		 * Enabling the host rings related configurations
 		 */
 		edma_ppeds_host_rings_configuration_enable(gbl_ctx);
+
+#ifdef NSS_DP_PON_SUPPORT
+		/*
+		 * Re-enable enqueue and dequeue for all PON MAC PPE queues.
+		 */
+		edma_ppeds_pon_pq_enable();
+#endif
 	}
 
 	/*
@@ -1905,6 +1916,21 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		 * Disable EDMA host rings related configurations
 		 */
 		edma_ppeds_host_rings_configuration_disable(gbl_ctx);
+
+#ifdef NSS_DP_PON_SUPPORT
+		/*
+		 * Disable enqueue/dequeue and flush each PON MAC PPE queue.
+		 */
+		edma_ppeds_pon_pq_disable();
+
+		/*
+		 * Drain TCF SRAM and zero PPE TCONT credits for all 32 TCONTs.
+		 * Calls pon_tcf_bwmrpt_drainout_tcont_by_bitmap directly via the
+		 * registered callback — safe from process context.
+		 */
+		if (nss_dp_pon_drainout(NSS_DP_PON_TCONT_BITMAP_ALL, "umac_reset_wifi8") != 0)
+			edma_warn("PON TCF drainout failed for wifi8\n");
+#endif
 
 		/*
 		 * Enabling dequeue drop on all the DDRQs
