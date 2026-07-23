@@ -1005,9 +1005,18 @@ enum edma_tx edma_tx_ring_xmit(struct net_device *netdev, struct nss_dp_vp_tx_in
 #ifdef NSS_DP_TX_SMALL_PACKET_WAR
 	if (unlikely(skb->len < NSS_DP_EDMA_TX_MIN_PKT_SZ)) {
 		if (skb_put_padto(skb, NSS_DP_EDMA_TX_MIN_PKT_SZ)) {
-			edma_debug("skb: %p padding failed to minimum length len:: %d ring: %d\n",
-					skb, skb->len, txdesc_ring->id);
-			return EDMA_TX_FAIL;
+			/*
+			 * skb_put_padto() already freed the skb via kfree_skb()
+			 * on failure. Do NOT access skb after this point.
+			 * Return EDMA_TX_FAIL_SKB_FREED so callers know not to
+			 * free the skb again.
+			 */
+			edma_debug("skb padding failed to minimum length ring: %d\n",
+					txdesc_ring->id);
+			u64_stats_update_begin(&txdesc_stats->syncp);
+			++txdesc_stats->tx_pad_fail;
+			u64_stats_update_end(&txdesc_stats->syncp);
+			return EDMA_TX_FAIL_SKB_FREED;
 		}
 	}
 #endif

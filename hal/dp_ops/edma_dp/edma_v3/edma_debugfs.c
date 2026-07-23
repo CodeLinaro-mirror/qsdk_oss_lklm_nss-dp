@@ -295,6 +295,14 @@ static void edma_debugfs_print_tx_desc_section(struct seq_file *m,
 			   stats[ring_ids[i]].tso_max_seg_exceed);
 	seq_printf(m, "\n");
 
+#ifdef NSS_DP_TX_SMALL_PACKET_WAR
+	seq_printf(m, "%-*s", EDMA_DEBUGFS_FIELD_WIDTH, "tx_pad_fail");
+	for (i = 0; i < count; i++)
+		seq_printf(m, " %*llu", EDMA_DEBUGFS_RING_COL_WIDTH,
+			   stats[ring_ids[i]].tx_pad_fail);
+	seq_printf(m, "\n");
+#endif
+
 	for (j = 0; j < EDMA_RING_USAGE_MAX_FULL; j++) {
 		seq_printf(m, "%-*s", EDMA_DEBUGFS_FIELD_WIDTH,
 			   edma_debugfs_ring_usage_dump[j]);
@@ -618,6 +626,9 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 			start = edma_dp_stats_fetch_begin(&tx_desc_stats_ptr->syncp);
 			tx_desc_stats[i].no_desc_avail = tx_desc_stats_ptr->no_desc_avail;
 			tx_desc_stats[i].tso_max_seg_exceed = tx_desc_stats_ptr->tso_max_seg_exceed;
+#ifdef NSS_DP_TX_SMALL_PACKET_WAR
+			tx_desc_stats[i].tx_pad_fail = tx_desc_stats_ptr->tx_pad_fail;
+#endif
 			memcpy(&tx_desc_stats[i].ring_stats, &tx_desc_stats_ptr->ring_stats,
 			       sizeof(struct edma_ring_util_stats));
 		} while (edma_dp_stats_fetch_retry(&tx_desc_stats_ptr->syncp, start));

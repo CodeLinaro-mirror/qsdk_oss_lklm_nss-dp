@@ -221,7 +221,13 @@ static netdev_tx_t edma_dp_xmit(struct nss_dp_data_plane_ctx *dpc,
 no_requeue:
 #endif
 		if (unlikely(ret != EDMA_TX_OK)) {
-			dev_kfree_skb_any(skb);
+			/*
+			 * EDMA_TX_FAIL_SKB_FREED: skb already freed by callee
+			 * (skb_put_padto failed). Do not free again.
+			 */
+			if (likely(ret != EDMA_TX_FAIL_SKB_FREED))
+				dev_kfree_skb_any(skb);
+
 			u64_stats_update_begin(&stats->syncp);
 			++stats->tx_drops;
 			u64_stats_update_end(&stats->syncp);
@@ -251,7 +257,13 @@ no_requeue:
 		 */
 		ret = edma_tx_ring_xmit(netdev, NULL, skb, txdesc_ring, stats);
 		if (unlikely(ret != EDMA_TX_OK)) {
-			dev_kfree_skb_any(skb);
+			/*
+			 * EDMA_TX_FAIL_SKB_FREED: skb already freed by callee
+			 * (skb_put_padto failed). Do not free again.
+			 */
+			if (likely(ret != EDMA_TX_FAIL_SKB_FREED))
+				dev_kfree_skb_any(skb);
+
 			u64_stats_update_begin(&stats->syncp);
 			++stats->tx_drops;
 			u64_stats_update_end(&stats->syncp);

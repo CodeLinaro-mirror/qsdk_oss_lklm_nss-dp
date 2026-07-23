@@ -227,7 +227,13 @@ no_requeue:
                         return NETDEV_TX_OK;
 #endif
 		if (unlikely(ret != EDMA_TX_OK)) {
-			dev_kfree_skb_any(skb);
+			/*
+			 * EDMA_TX_FAIL_SKB_FREED: skb already freed by callee
+			 * (skb_put_padto failed). Do not free again.
+			 */
+			if (likely(ret != EDMA_TX_FAIL_SKB_FREED))
+				dev_kfree_skb_any(skb);
+
 			u64_stats_update_begin(&stats->syncp);
 			++stats->tx_drops;
 			u64_stats_update_end(&stats->syncp);
@@ -261,7 +267,13 @@ no_requeue:
                         return NETDEV_TX_OK;
 #endif
 		if (unlikely(ret != EDMA_TX_OK)) {
-			dev_kfree_skb_any(skb);
+			/*
+			 * EDMA_TX_FAIL_SKB_FREED: skb already freed by callee
+			 * (skb_put_padto failed). Do not free again.
+			 */
+			if (likely(ret != EDMA_TX_FAIL_SKB_FREED))
+				dev_kfree_skb_any(skb);
+
 			u64_stats_update_begin(&stats->syncp);
 			++stats->tx_drops;
 			u64_stats_update_end(&stats->syncp);
