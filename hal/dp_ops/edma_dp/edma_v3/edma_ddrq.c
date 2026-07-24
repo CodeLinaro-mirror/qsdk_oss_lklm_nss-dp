@@ -89,7 +89,6 @@ static int32_t edma_ddrq_reg_grp_tbl_get(uint32_t reg_addr_idx, uint32_t *val, u
 static int32_t edma_ddrq_reg_grp_tbl_set(uint32_t reg_addr_idx, uint32_t *val, uint32_t num)
 {
 	uint32_t i = 0;
-	edma_warn("idx : %d, num : %d\n", reg_addr_idx, num);
 
 	if (num > 3) {
 		edma_err("invalid num (%d) for ddrq grp tbl set cfg\n", num);
@@ -232,7 +231,6 @@ static int32_t edma_ddrq_grp_cfg_tbl_get(uint32_t index, edma_ddrq_ac_grp_cfg_tb
 		return ret;
 	}
 
-	edma_warn("ddrq grp tbl get done for %d\n", index);
 	return ret;
 }
 
@@ -242,7 +240,6 @@ static int32_t edma_ddrq_grp_cfg_tbl_get(uint32_t index, edma_ddrq_ac_grp_cfg_tb
  */
 static int32_t edma_ddrq_grp_cfg_tbl_set(uint32_t index, edma_ddrq_ac_grp_cfg_tbl_u *ddrq_cfg)
 {
-	edma_warn("ddrq grp cfg set for %d\n\n", index);
 	return edma_ddrq_reg_grp_tbl_set(index, ddrq_cfg->val, sizeof(edma_ddrq_ac_grp_cfg_tbl_u)/sizeof(uint32_t));
 }
 
@@ -1003,7 +1000,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 						obj->cfg_id, queue_id, queue_cnt);
 			return DDRQ_RET_INVAL;
 		}
-		edma_warn("port: %d, queue base: %d, queue cnt: %d\n", obj->cfg_id, queue_id, queue_cnt);
+		edma_debug("port: %d, queue base: %d, queue cnt: %d\n", obj->cfg_id, queue_id, queue_cnt);
 
 		for (i = 0; i < queue_cnt; i++) {
 			if (edma_ddrq_ac_queue_cfg_tbl_get(queue_id + i + EDMA_DDRQ_CFG_BASE_INDEX, &ddrq_cfg_l)) {
@@ -1053,7 +1050,6 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 			 */
 			dev = edma_gbl_ctx->netdev_arr[obj->cfg_id - 1];
 			if (!dev) {
-				edma_err("Not able to find the netdev for %d port\n", (obj->cfg_id));
 				return DDRQ_RET_ERR;
 			}
 			if (edma_ddrq_dp_dev_set(dev)) {
@@ -1116,20 +1112,17 @@ nss_dp_ddrq_ret_t edma_ddrq_grp_cfg_set(uint32_t ddrq_grp_id, nss_dp_ddrq_ac_grp
 		return DDRQ_RET_ERR;
 	}
 
-	edma_warn("ddrq grp config setting to be done for %d group\n", ddrq_grp_id);
 	if (edma_ddrq_grp_cfg_tbl_get(ddrq_grp_id, &ddrq_grp_cfg_l)) {
 		edma_err("Error in getting DDRQ group cfg table configuration for %d group\n", ddrq_grp_id);
 		return DDRQ_RET_ERR;
 	}
-	edma_warn("ddrq grp cfg tbl get done for %d\n", ddrq_grp_id);
 	edma_ddrq_ac_grp_cfg_tbl_copy_new_cfg(&ddrq_grp_cfg_l.ddrq_grp_cfg, ddrq_grp_cfg);
-	edma_warn("ddrq grp cfg copy new cfg done for %d\n", ddrq_grp_id);
 	if (edma_ddrq_grp_cfg_tbl_set(ddrq_grp_id, &ddrq_grp_cfg_l)) {
 		edma_err("Error in setting DDRQ group config table for %d group\n", ddrq_grp_id);
 		return DDRQ_RET_ERR;
 	}
 
-	edma_warn("ddrq grp cfg tbl set done for %d grp id\n", ddrq_grp_id);
+	edma_debug("ddrq grp cfg tbl set done for %d grp id\n", ddrq_grp_id);
 	return DDRQ_RET_SUCCESS;
 }
 
@@ -1232,7 +1225,7 @@ static int edma_ddrq_enq_ctrl_cfg(fal_passthrough_mode_t pt_mode,
 		return -EINVAL;
 	}
 
-	edma_warn("ddrq enq ctrl cfg successful for %d PT mode\n", pt_mode);
+	edma_debug("ddrq enq ctrl cfg successful for %d PT mode\n", pt_mode);
 	return 0;
 }
 
@@ -1257,7 +1250,7 @@ static int edma_ddrq_mem_region_init(void)
 	edma_reg_write(EDMA_REG_DDRQ_RX_DATA_BASE_ADDR_L_OFFSET, addr);
 
 	addr = edma_reg_read(EDMA_REG_DDRQ_RX_DATA_BASE_ADDR_L_OFFSET);
-	edma_warn("EDMA_REG_DDRQ_RX_DATA_BASE_ADDR_L_OFFSET: 0x%0x\n", addr);
+	edma_debug("EDMA_REG_DDRQ_RX_DATA_BASE_ADDR_L_OFFSET: 0x%0x\n", addr);
 	/*
 	 * Update Lower DDRQ descriptor space address in the hardware
 	 */
@@ -1265,7 +1258,7 @@ static int edma_ddrq_mem_region_init(void)
 	edma_reg_write(EDMA_REG_DDRQ_RX_DESC_BASE_ADDR_L_OFFSET, addr);
 
 	addr = edma_reg_read(EDMA_REG_DDRQ_RX_DESC_BASE_ADDR_L_OFFSET);
-	edma_warn("EDMA_REG_DDRQ_RX_DESC_BASE_ADDR_L_OFFSET: 0x%0x\n", addr);
+	edma_debug("EDMA_REG_DDRQ_RX_DESC_BASE_ADDR_L_OFFSET: 0x%0x\n", addr);
 	/*
 	 * Update Higher DDRQ data & descriptor space addresses in the hardware
 	 */
@@ -1278,7 +1271,7 @@ static int edma_ddrq_mem_region_init(void)
 	edma_reg_write(EDMA_REG_DDRQ_RX_BASE_ADDR_H_OFFSET, addr);
 
 	addr = edma_reg_read(EDMA_REG_DDRQ_RX_BASE_ADDR_H_OFFSET);
-	edma_warn("EDMA_REG_DDRQ_RX_BASE_ADDR_H_OFFSET: 0x%0x\n", addr);
+	edma_debug("EDMA_REG_DDRQ_RX_BASE_ADDR_H_OFFSET: 0x%0x\n", addr);
 	return 0;
 }
 
@@ -1324,7 +1317,7 @@ static int edma_ddrq_def_gbl_cfg_set(edma_ddrq_cfg_t *ddrq_cfg)
 	edma_reg_write(EDMA_REG_DDRQ_GBL_CFG_OFFSET, data);
 
 	data = edma_reg_read(EDMA_REG_DDRQ_GBL_CFG_OFFSET);
-	edma_warn("EDMA_REG_DDRQ_GBL_CFG_OFFSET value: 0x%0x\n", data);
+	edma_debug("EDMA_REG_DDRQ_GBL_CFG_OFFSET value: 0x%0x\n", data);
 
 	/*
 	 * Set DDRQ memory regions details in the hardware
@@ -1339,19 +1332,19 @@ static int edma_ddrq_def_gbl_cfg_set(edma_ddrq_cfg_t *ddrq_cfg)
 	edma_reg_write(EDMA_REG_PORT_CTRL, data);
 
 	data = edma_reg_read(EDMA_REG_PORT_CTRL);
-	edma_warn("EDMA_REG_PORT_CTRL: 0x%0x\n", data);
+	edma_debug("EDMA_REG_PORT_CTRL: 0x%0x\n", data);
 
 
 	data = EDMA_REG_DDRQ_DATA_OFFSET_REG0_CFG_SET(ddrq_gbl_cfg->ddrq_data_offset0) |
 		EDMA_REG_DDRQ_DATA_OFFSET_REG1_CFG_SET(EDMA_DDRQ_GBL_DATA_OFFSET_REG1_VAL);
 	edma_reg_write(EDMA_REG_DDRQ_DATA_OFFSET_REG0_OFFSET, data);
-	edma_warn("EDMA_REG_DDRQ_DATA_OFFSET_REG0_OFFSET : 0x%0x\n",
+	edma_debug("EDMA_REG_DDRQ_DATA_OFFSET_REG0_OFFSET : 0x%0x\n",
 				edma_reg_read(EDMA_REG_DDRQ_DATA_OFFSET_REG0_OFFSET));
 
 	data = EDMA_REG_DDRQ_DATA_OFFSET_REG2_CFG_SET(EDMA_DDRQ_GBL_DATA_OFFSET_REG2_VAL) |
 		EDMA_REG_DDRQ_DATA_OFFSET_REG3_CFG_SET(EDMA_DDRQ_GBL_DATA_OFFSET_REG3_VAL);
 	edma_reg_write(EDMA_REG_DDRQ_DATA_OFFSET_REG1_OFFSET, data);
-	edma_warn("EDMA_REG_DDRQ_DATA_OFFSET_REG1_OFFSET : 0x%0x\n",
+	edma_debug("EDMA_REG_DDRQ_DATA_OFFSET_REG1_OFFSET : 0x%0x\n",
 				edma_reg_read(EDMA_REG_DDRQ_DATA_OFFSET_REG1_OFFSET));
 
 	/*
@@ -1389,7 +1382,7 @@ static int edma_ddrq_def_idv_cfg_set(edma_ddrq_idv_cfg_t *ddrq_idv_cfg)
 
 	ddrq_obj_id.cfg_type= NSS_DP_DDRQ_CFG_TYPE_PORT;
 	cur_ddrq_bm_word = ddrq_idv_cfg->ddrq_en_port_bm;
-	edma_warn("ddrq_en_port_bm 0x%0x\n", cur_ddrq_bm_word);
+	edma_debug("ddrq_en_port_bm 0x%0x\n", cur_ddrq_bm_word);
 	while (cur_ddrq_bm_word) {
 		bit_set = ffs((uint32_t)cur_ddrq_bm_word);
 		ddrq_obj_id.cfg_id = bit_set;
@@ -1410,7 +1403,7 @@ static int edma_ddrq_def_grp_cfg_set(edma_ddrq_grp_cfg_t *ddrq_grp_cfg)
 	uint32_t ddrq_grp_bm_word, bit_set, grp_id;
 
 		ddrq_grp_bm_word = ddrq_grp_cfg->ddrq_grp_en_bm;
-		edma_warn("ddrq_grp_en_bm: 0x%0x\n", ddrq_grp_bm_word);
+		edma_debug("ddrq_grp_en_bm: 0x%0x\n", ddrq_grp_bm_word);
 		while (ddrq_grp_bm_word) {
 			bit_set = ffs((uint32_t)ddrq_grp_bm_word);
 			grp_id = bit_set - 1;
@@ -1439,7 +1432,7 @@ static int edma_ddrq_lp_cc_cfg(edma_ddrq_lp_cfg_t *lp_cfg)
 		edma_err("Error in getting pt cpu code cfg\n");
 		return -EINVAL;
 	}
-	edma_warn("cpucode0: %d, cpucode1: %d, drop cc: %d, qbase: %d\n", cc.cpucode[0], cc.cpucode[1],
+	edma_debug("cpucode0: %d, cpucode1: %d, drop cc: %d, qbase: %d\n", cc.cpucode[0], cc.cpucode[1],
 					 cc.drop_cpucode, lp_cfg->queue_base);
 
 	if (!ppe_drv_cc_ucast_qbase_profile_set(cc.cpucode[0], lp_cfg->queue_base)) {
@@ -1483,7 +1476,7 @@ static int edma_ddrq_lp_fc_grp_id_set(edma_ddrq_lp_cfg_t *lp_cfg)
 	data |= ((lp_cfg->lp_fc_grp_id & EDMA_REG_LP_FC_GRP_ID_MASK) << ((lp_cfg->lp_id % 6) * 5));
 	edma_reg_write(reg, data);
 
-	edma_warn("fc grp reg : 0x%0x, data: 0x%0x, fc_grp_id: %d\n", reg, data, lp_cfg->lp_fc_grp_id);
+	edma_debug("fc grp reg : 0x%0x, data: 0x%0x, fc_grp_id: %d\n", reg, data, lp_cfg->lp_fc_grp_id);
 
 	return 0;
 }
@@ -1499,7 +1492,7 @@ static int edma_ddrq_qid_to_lp_ring_mapping(edma_ddrq_lp_cfg_t *lp_cfg)
 	uint32_t lp_max_q = lp_q + lp_cfg->num_queues;
 	uint32_t qid, reg_index, data;
 
-	edma_warn("lp_edma_id: %d, lp_q: %d, lp_max_q: %d\n",
+	edma_debug("lp_edma_id: %d, lp_q: %d, lp_max_q: %d\n",
 			lp_ring_edma_id, lp_q, lp_max_q);
 
 	for (qid = lp_q; qid < lp_max_q; qid++) {
@@ -1958,8 +1951,6 @@ int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg)
 		return -EINVAL;
 	}
 
-	edma_warn("EDMA_DDRQ_PREHEADER_SIZE : %d, EDMA_RX_SKB_HEADROOM: %d\n",
-			 EDMA_DDRQ_PREHEADER_SIZE, EDMA_RX_SKB_HEADROOM);
 	if (!ddrq_cfg->ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return 0;
