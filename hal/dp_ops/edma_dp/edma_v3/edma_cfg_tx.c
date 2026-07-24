@@ -402,9 +402,14 @@ void edma_cfg_tx_desc_ring_enable(struct edma_txdesc_ring *txdesc_ring)
 {
 	uint32_t data;
 
+	if (!txdesc_ring) {
+		return;
+	}
+
 	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
 	data |= EDMA_TXDESC_CTRL_TXEN_SET(EDMA_TXDESC_TX_ENABLE);
 	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
+	edma_debug("tx ring %d enabled\n", txdesc_ring->id);
 }
 
 /*
@@ -485,9 +490,14 @@ void edma_cfg_tx_desc_ring_disable(struct edma_txdesc_ring *txdesc_ring)
 {
 	uint32_t data;
 
+	if (!txdesc_ring) {
+		return;
+	}
+
 	data = edma_reg_read(EDMA_REG_TXDESC_CTRL(txdesc_ring->id));
 	data &= ~EDMA_TXDESC_TX_ENABLE;
 	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), data);
+	edma_debug("tx ring %d disabled\n", txdesc_ring->id);
 }
 
 /*

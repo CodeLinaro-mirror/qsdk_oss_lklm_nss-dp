@@ -22,6 +22,14 @@
 #include "edma_procfs.h"
 #include "nss_dp_ddrq.h"
 
+/*
+ * edma_reg_read()/edma_reg_write() are defined in edma.h.
+ * Keep forward declarations here because edma.h includes this header
+ * before those inline definitions.
+ */
+static inline uint32_t edma_reg_read(uint32_t reg_off);
+static inline void edma_reg_write(uint32_t reg_off, uint32_t val);
+
 #define EDMA_DDRQ_NO_OP_DEF_VAL		-1
 #define EDMA_DDRQ_DATA_OFFSET_DEF	0
 #define EDMA_DDRQ_GBL_EN_HW_DEF		1
@@ -46,6 +54,7 @@
 #define EDMA_DDRQ_AC_GRP_ID_BM_DEF	1
 
 #define EDMA_DDRQ_ISQ_BASE		238
+#define EDMA_DDRQ_ISQ_NUM		8
 
 #define EDMA_DDRQ_LP_QUEUE_BASE_DEF	246
 #define EDMA_DDRQ_LP_NUM_QUEUES_DEF	8
@@ -93,6 +102,27 @@
 #define EDMA_DDRQ_GET_SHARED_LIMIT(blk_num, prealloc_limit) \
 	((blk_num)-(EDMA_DDRQ_GRP_SHARED_LIMIT_MIN + (prealloc_limit * NSS_DP_DDRQ_MAX_CNT)))
 #define EDMA_DDRQ_GET_SHARED_CEILING(blk_num)	(((blk_num) * 80) / 100)
+#define EDMA_DDRQ_ENQ_DIS_REG_OFFSET_LIST \
+	EDMA_REG_DDRQ_ENQ_DIS_REG0_OFFSET, \
+	EDMA_REG_DDRQ_ENQ_DIS_REG1_OFFSET, \
+	EDMA_REG_DDRQ_ENQ_DIS_REG2_OFFSET, \
+	EDMA_REG_DDRQ_ENQ_DIS_REG3_OFFSET, \
+	EDMA_REG_DDRQ_ENQ_DIS_REG4_OFFSET, \
+	EDMA_REG_DDRQ_ENQ_DIS_REG5_OFFSET
+
+#define EDMA_DDRQ_DEQ_DROP_REG_OFFSET_LIST \
+	EDMA_REG_DDRQ_DEQ_DROP_REG0_OFFSET, \
+	EDMA_REG_DDRQ_DEQ_DROP_REG1_OFFSET, \
+	EDMA_REG_DDRQ_DEQ_DROP_REG2_OFFSET, \
+	EDMA_REG_DDRQ_DEQ_DROP_REG3_OFFSET, \
+	EDMA_REG_DDRQ_DEQ_DROP_REG4_OFFSET, \
+	EDMA_REG_DDRQ_DEQ_DROP_REG5_OFFSET
+
+/*
+ * The loop count maximum value, which the software uses to wait for the
+ * EDMA HW to consume all the packets in the DDRQs for the particular Tx ring.
+ */
+#define EDMA_DDRQ_HW_CONSUME_LOOP_CNT		100
 
 /*
  * edma_ddrq_ac_queue_cfg_tbl_t
@@ -272,6 +302,79 @@ typedef union {
 	edma_ddrq_occupancy_stats_t ddrq_occ_stats;		/* Occupancy stat configuration */
 	uint32_t val[4];					/* Helper for hardware read/write of configuration */
 } edma_ddrq_occupancy_stats_u;
+
+/*
+ * edma_ddrq_regs_set_reset()
+ *	Set or reset all registers in a register-set table.
+ */
+static inline void edma_ddrq_regs_set_reset(const uint32_t *reg_offsets, uint32_t val)
+{
+	uint32_t i;
+
+	for (i = 0; i < EDMA_REG_DDRQ_ENQ_DIS_AND_DEQ_DRP_OFF_CNT; i++) {
+		edma_reg_write(reg_offsets[i], val);
+		edma_debug("reg offset: %d, data: 0x%0x\n",
+				reg_offsets[i], edma_reg_read(reg_offsets[i]));
+	}
+}
+
+/*
+ * edma_ddrq_enq_dis_reg_offsets_get()
+ *	Get EDMA enqueue-disable register offsets.
+ */
+static inline const uint32_t *edma_ddrq_enq_dis_reg_offsets_get(void)
+{
+	static const uint32_t reg_offsets[] = {EDMA_DDRQ_ENQ_DIS_REG_OFFSET_LIST};
+
+	return reg_offsets;
+}
+
+/*
+ * edma_ddrq_deq_drop_reg_offsets_get()
+ *	Get EDMA dequeue-drop register offsets.
+ */
+static inline const uint32_t *edma_ddrq_deq_drop_reg_offsets_get(void)
+{
+	static const uint32_t reg_offsets[] = {EDMA_DDRQ_DEQ_DROP_REG_OFFSET_LIST};
+
+	return reg_offsets;
+}
+
+/*
+ * edma_ddrq_enqueue_disable_all()
+ *	Disable the enqueue of all the DDRQs.
+ */
+static inline void edma_ddrq_enqueue_disable_all(void)
+{
+	edma_ddrq_regs_set_reset(edma_ddrq_enq_dis_reg_offsets_get(), EDMA_REG_DDRQ_ENQ_DIS_SET_ALL);
+}
+
+/*
+ * edma_ddrq_enqueue_enable_all()
+ *	Enable the enqueue of all the DDRQs
+ */
+static inline void edma_ddrq_enqueue_enable_all(void)
+{
+	edma_ddrq_regs_set_reset(edma_ddrq_enq_dis_reg_offsets_get(), EDMA_REG_DDRQ_ENQ_DIS_RESET_ALL);
+}
+
+/*
+ * edma_ddrq_dequeue_drop_enable_all()
+ *	Enable dequeue drop on all the DDRQs.
+ */
+static inline void edma_ddrq_dequeue_drop_enable_all(void)
+{
+	edma_ddrq_regs_set_reset(edma_ddrq_deq_drop_reg_offsets_get(), EDMA_REG_DDRQ_DEQ_DROP_SET_ALL);
+}
+
+/*
+ * edma_ddrq_dequeue_drop_disable_all()
+ *	Disable dequeue drop on all the DDRQs.
+ */
+static inline void edma_ddrq_dequeue_drop_disable_all(void)
+{
+	edma_ddrq_regs_set_reset(edma_ddrq_deq_drop_reg_offsets_get(), EDMA_REG_DDRQ_DEQ_DROP_RESET_ALL);
+}
 
 nss_dp_ddrq_ret_t edma_ddrq_ppe_ports_queue_profile_set(void);
 nss_dp_ddrq_ret_t edma_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_cfg_tbl_t *ddrq_cfg, uint32_t count);
