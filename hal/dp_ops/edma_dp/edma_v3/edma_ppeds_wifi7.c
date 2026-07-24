@@ -1221,6 +1221,7 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 	uint32_t data;
 	uint32_t passthr_1st_pc, passthr_2nd_pc;
 	uint32_t poll_timeout = EDMA_DDRQ_HW_CONSUME_LOOP_CNT;
+	uint16_t prod_idx;
 
 	ppeds_node->umac_reset_inprogress = info_hdl->umac_reset_inprogress;
 	write_lock_bh(&drv->lock);
@@ -1343,11 +1344,18 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		edma_ddrq_dequeue_drop_enable_all();
 
 		/*
-		 * Wait for 25ms and then clean the tx complete ring
+		 * Write cons_idx to max value in order for DDRQ to push all packets
+		 * onto the completion ring without boundary.
 		 */
-		mdelay(20);
+		edma_reg_write(EDMA_REG_TXCMPL_CONS_IDX(wifi7_cfg->txcmpl_ring.id),
+					wifi7_cfg->txcmpl_ring.count);
+
+		/*
+		 * Wait for 20ms and then clean the tx complete ring
+		 */
+		mdelay(19);
 		do {
-			mdelay(5);
+			mdelay(1);
 			passthr_1st_pc = edma_reg_read(EDMA_REG_TXDESC_PASSTHR_UNREL(wifi7_cfg->tx_ring.id));
 			passthr_2nd_pc = edma_reg_read((EDMA_REG_TXDESC_PASSTHR_UNREL(wifi7_cfg->tx_ring.id) + 4));
 			edma_debug("passthr_1st_pc: %d, passthr_2nd_pc: %d", passthr_1st_pc, passthr_2nd_pc);
@@ -1357,7 +1365,19 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 			}
 		} while (passthr_1st_pc != passthr_2nd_pc);
 
-		edma_ppeds_tx_complete(wifi7_cfg->txcmpl_ring.count, &wifi7_cfg->txcmpl_ring);
+		/*
+		 * Reset the PROD_IDX and CONS_IDX, once all packets are pushed to txcmpl
+		 * ring.
+		 */
+		data = edma_reg_read(EDMA_REG_TXCMPL_PROD_IDX(wifi7_cfg->txcmpl_ring.id));
+		prod_idx = data & EDMA_TXCMPL_PROD_IDX_MASK;
+		edma_reg_write(EDMA_REG_TXCMPL_CONS_IDX(wifi7_cfg->txcmpl_ring.id), prod_idx);
+
+		edma_debug("UMAC RESET:Txcmpl prod:%d cons:%d passthr_1st_pc=0x%x(%u) passthr_2nd_pc=0x%x(%u)\n",
+				prod_idx,
+				edma_reg_read(EDMA_REG_TXCMPL_CONS_IDX(wifi7_cfg->txcmpl_ring.id)),
+				passthr_1st_pc, passthr_1st_pc,
+				passthr_2nd_pc, passthr_2nd_pc);
 	} else {
 		/*
 		 * Wait for 5ms and then clean the tx complete ring
