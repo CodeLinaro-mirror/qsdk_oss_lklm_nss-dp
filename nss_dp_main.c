@@ -247,6 +247,10 @@ static void nss_dp_mem_profile_detect(struct edma_gbl_ctx *gbl_ctx)
 	gbl_ctx->mem_profile = flags;
 	gbl_ctx->rx_ring_sz = rx_ring_sz ? rx_ring_sz : __rx_ring_sz;
 	gbl_ctx->tx_ring_sz = tx_ring_sz ? tx_ring_sz : __tx_ring_sz;
+
+#if (defined(NSS_DP_IPQ96XX) || defined(NSS_DP_IPQ52XX))
+	nss_dp_hal_configure_ring_size(flags);
+#endif
 }
 
 /*

@@ -128,14 +128,21 @@ extern int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE];
 extern int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE];
 extern int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
 extern int edma_dp_boot_rx_fill_cnt;
+extern uint32_t edma_dp_host_rx_ring_sz;
+extern uint32_t edma_dp_host_rxfill_ring_sz;
+extern uint32_t edma_dp_host_tx_ring_sz;
+extern uint32_t edma_dp_host_txcmpl_ring_sz;
 
 extern int edma_dp_ppe_vp_num_tx_rings;
 extern int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP];
 extern int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP];
 extern int edma_dp_ppe_vp_num_tx_rings_per_core;
 extern int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE];
+extern uint32_t edma_dp_ppe_vp_tx_ring_sz;
 
 #ifdef NSS_DP_HW_GRO
+extern uint32_t edma_dp_gro_rx_ring_sz;
+extern uint32_t edma_dp_gro_rxfill_ring_sz;
 #define EDMA_GRO_PPE_QUEUE_BASE			230
 extern int edma_dp_gro_ppe_queue_base;
 #endif
@@ -157,6 +164,8 @@ extern int edma_dp_ppe_vp_feat_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE];
 extern int edma_dp_ppe_vp_feat_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE];
 extern int edma_dp_ppe_vp_feat_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE];
 extern int edma_dp_ppe_vp_feat_type_map[EDMA_MAX_RXDESC_RING_PER_TYPE];
+extern uint32_t edma_dp_ppe_vp_feat_rx_ring_sz;
+extern uint32_t edma_dp_ppe_vp_feat_rxfill_ring_sz;
 
 /**
  * nss_dp_hal_gmac_stats
@@ -204,6 +213,7 @@ extern struct nss_dp_data_plane_ops nss_dp_edma_ops;
 extern int32_t nss_dp_hal_configure_clocks(void *ctx);
 extern int nss_dp_hal_cache_info_setup(void *ctx);
 extern int32_t nss_dp_hal_hw_reset(void *ctx);
+extern void nss_dp_hal_configure_ring_size(uint32_t mem_profile);
 #ifdef NSS_DP_PPEDS_SUPPORT
 extern struct nss_dp_ppeds_ops edma_ppeds_ops_wifi7;
 extern struct nss_dp_ppeds_ops edma_ppeds_ops_wifi8;

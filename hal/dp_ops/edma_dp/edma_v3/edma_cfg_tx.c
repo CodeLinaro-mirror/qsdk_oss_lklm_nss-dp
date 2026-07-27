@@ -76,7 +76,7 @@ static void edma_cfg_tx_cmpl_ring_cleanup(struct edma_gbl_ctx *egc,
 	/*
 	 * Free any buffers assigned to any descriptors
 	 */
-	edma_tx_complete(EDMA_TX_RING_SIZE - 1, txcmpl_ring);
+	edma_tx_complete(txcmpl_ring->count, txcmpl_ring);
 
 	/*
 	 * Free TxCmpl ring descriptors
@@ -135,7 +135,7 @@ static void edma_cfg_tx_desc_ring_cleanup(struct edma_gbl_ctx *egc,
 		skb = (struct sk_buff *)EDMA_TXDESC_OPAQUE_GET(txdesc);
 		dev_kfree_skb_any(skb);
 
-		cons_idx = ((cons_idx + 1) & EDMA_TX_RING_SIZE_MASK);
+		cons_idx = ((cons_idx + 1) & EDMA_TX_RING_SIZE_MASK(txdesc_ring->count));
 	}
 
 	edma_reg_write(EDMA_REG_TXDESC_PROD_IDX(txdesc_ring->id), cons_idx_prev);
