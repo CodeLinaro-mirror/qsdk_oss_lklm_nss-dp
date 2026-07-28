@@ -824,6 +824,7 @@ struct edma_gbl_ctx {
 	uint32_t mem_profile;
 	uint32_t rx_ring_sz;
 	uint32_t tx_ring_sz;
+	uint32_t umac_reset_delay_war_inc_cnt;
 };
 
 typedef void (*edma_rx_wifi_qos_handler_t) (struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,

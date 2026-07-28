@@ -1569,6 +1569,13 @@ static void edma_ppeds_host_rings_configuration_disable(struct edma_gbl_ctx *gbl
 	}
 
 	edma_cfg_rx_rings_disable(gbl_ctx);
+
+	/*
+	 * Due to HW WAR, 1ms of delay is done for all rings to go to DISABLE DONE.
+	 * Count the rxdesc delay.
+	 */
+	gbl_ctx->umac_reset_delay_war_inc_cnt++;
+
 	edma_cfg_tx_rings_disable(gbl_ctx);
 	edma_disable_rx_interrupts(gbl_ctx);
 
@@ -1812,9 +1819,12 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		data |= EDMA_RXDESC_RX_DISABLE;
 		edma_reg_write(EDMA_REG_RXDESC_DISABLE(wifi8_cfg->rx_ring[i].ring_id), data);
 
-		do {
-			data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(wifi8_cfg->rx_ring[i].ring_id));
-		} while (!data);
+		/*
+		 * WAR: 1ms of delay is added for rxdesc rings to reach DISABLE DONE state.
+		 *	DISABLE done register check is removed.
+		 * TODO: need to remove after correct fix from EDMA<->DDRQ.
+		 */
+		mdelay(1);
 
 		/*
 		 * Reset the ring if Hardware support is present.
