@@ -1681,9 +1681,6 @@ void edma_cfg_rx_desc_ring_disable(struct edma_rxdesc_ring *rxdesc_ring)
 	data |= EDMA_RXDESC_RX_DISABLE;
 	edma_reg_write(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id), data);
 
-	do {
-		data = edma_reg_read(EDMA_REG_RXDESC_DISABLE_DONE(rxdesc_ring->ring_id));
-	} while (!data);
 	edma_debug("rx ring %d disabled\n", rxdesc_ring->ring_id);
 }
 
@@ -1728,6 +1725,14 @@ void edma_cfg_rx_rings_disable(struct edma_gbl_ctx *egc)
 		if (egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)
 			edma_cfg_rx_desc_ring_disable(egc->rxdesc_info[i].rxdesc_ring);
 	}
+
+	/*
+	 * WAR: 1ms of delay is added for all rxdesc rings to reach DISABLE DONE state.
+	 *	DISABLE done register check is now removed.
+	 * TODO: need to remove after correct fix from EDMA<->DDRQ.
+	 */
+	mdelay(1);
+
 
 	/*
 	 * Disable RxFill Rings
