@@ -930,6 +930,8 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_cfg_tbl_t *ddrq_cfg)
 {
 	edma_ddrq_ac_queue_cfg_tbl_u ddrq_cfg_l = {0};
+	bool ac_en;
+	bool ac_fc_en;
 	int32_t queue_id;
 
 	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
@@ -969,8 +971,31 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 
 			if (ddrq_cfg->ddrq_state) {
 				edma_ddrq_qid_to_ring_mapping(obj->cfg_id , true);
+
+				/*
+				 * When ac_en/ac_fc_en are set to 1, the flow control will be overriden
+				 * for that queue and packets drop gets enabled.
+				 */
+				ac_en = true;
+				ac_fc_en = true;
+				if (!ppe_drv_qos_ac_ctrl_cfg(obj->cfg_id, ac_en, ac_fc_en)) {
+					edma_err("Error in configuring qid:%d ac_en:%d ac_fc_en:%d configuration\n",
+							obj->cfg_id, ac_en, ac_fc_en);
+					return DDRQ_RET_ERR;
+				}
 			} else {
 				edma_ddrq_qid_to_ring_mapping(obj->cfg_id, false);
+
+				/*
+				 * Reset ac_en/ac_fc_en to its default value
+				 */
+				ac_en = true;
+				ac_fc_en = false;
+				if (!ppe_drv_qos_ac_ctrl_cfg(obj->cfg_id, ac_en, ac_fc_en)) {
+					edma_err("Error in configuring qid:%d ac_en:%d ac_fc_en:%d configuration\n",
+							obj->cfg_id, ac_en, ac_fc_en);
+					return DDRQ_RET_ERR;
+				}
 			}
 		}
 	} else if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_PORT) {
@@ -1022,8 +1047,29 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 				if (ddrq_cfg->ddrq_state) {
 					edma_ddrq_qid_to_ring_mapping(queue_id + i, true);
 					edma_ddrq_vp_tbl_cfg(queue_id + i, obj->cfg_id);
+
+					/*
+					 * When ac_en/ac_fc_en are set to 1, the flow control will be overriden
+					 * for that queue and packets drop gets enabled.
+					 */
+					ac_en = true;
+					ac_fc_en = true;
+					if (!ppe_drv_qos_ac_ctrl_cfg(queue_id + i, ac_en, ac_fc_en)) {
+						edma_warn("Error in configuring qid:%d ac_en:%d ac_fc_en:%d configuration\n",
+								queue_id + i, ac_en, ac_fc_en);
+					}
 				} else {
 					edma_ddrq_qid_to_ring_mapping(queue_id + i, false);
+
+					/*
+					 * Reset ac_en/ac_fc_en to its default value
+					 */
+					ac_en = true;
+					ac_fc_en = false;
+					if (!ppe_drv_qos_ac_ctrl_cfg(queue_id + i, ac_en, ac_fc_en)) {
+						edma_warn("Error in configuring qid:%d ac_en:%d ac_fc_en:%d configuration\n",
+								queue_id + i, ac_en, ac_fc_en);
+					}
 				}
 			}
 		}
