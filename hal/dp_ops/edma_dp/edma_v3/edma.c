@@ -3411,7 +3411,11 @@ done:
 		if (!(edma_gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
 			continue;
 
-		snprintf(edma_rxdesc_irq_name[i], 20, "edma_rxdesc_%d", i);
+		if (edma_gbl_ctx->rxdesc_info[i].type_flags & EDMA_RING_TYPE_FLAGS_HOST_GRO) {
+			snprintf(edma_rxdesc_irq_name[i], 20, "edma_rxdesc_gro_%d", i);
+		} else {
+			snprintf(edma_rxdesc_irq_name[i], 20, "edma_rxdesc_%d", i);
+		}
 
 		irq_set_status_flags(edma_gbl_ctx->rxdesc_info[i].intr_num, IRQ_DISABLE_UNLAZY);
 
