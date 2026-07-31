@@ -902,7 +902,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 		}
 
 		for (i = 0; i < count; i++) {
-			if (edma_ddrq_ac_queue_cfg_state_get(queue_id + i, ddrq_cfg)) {
+			if (edma_ddrq_ac_queue_cfg_state_get(queue_id + i, cfg)) {
 				edma_err("Error in getting the DDRQ state for %d idx\n", queue_id + i);
 			}
 
@@ -1490,25 +1490,30 @@ static int edma_ddrq_qid_to_lp_ring_mapping(edma_ddrq_lp_cfg_t *lp_cfg)
 	uint32_t lp_ring_edma_id = lp_cfg->lp_id + EDMA_LP_RING_ID_BASE;
 	uint32_t lp_q  = lp_cfg->queue_base;
 	uint32_t lp_max_q = lp_q + lp_cfg->num_queues;
-	uint32_t qid, reg_index, data;
+	uint32_t qid, reg_index, data, cur_data;
 
 	edma_debug("lp_edma_id: %d, lp_q: %d, lp_max_q: %d\n",
 			lp_ring_edma_id, lp_q, lp_max_q);
 
 	for (qid = lp_q; qid < lp_max_q; qid++) {
 		reg_index = qid/EDMA_QID2RID_NUM_PER_REG;
+		cur_data = edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
 
 		if ((qid % EDMA_QID2RID_NUM_PER_REG) == 0) {
 			data = EDMA_RX_RING_ID_QUEUE0_SET(lp_ring_edma_id);
+			cur_data = EDMA_RX_RING_ID_QUEUE0_RESET(cur_data);
 		} else if ((qid % EDMA_QID2RID_NUM_PER_REG) == 1) {
 			data = EDMA_RX_RING_ID_QUEUE1_SET(lp_ring_edma_id);
+			cur_data = EDMA_RX_RING_ID_QUEUE1_RESET(cur_data);
 		} else if ((qid % EDMA_QID2RID_NUM_PER_REG) == 2) {
 			data = EDMA_RX_RING_ID_QUEUE2_SET(lp_ring_edma_id);
+			cur_data = EDMA_RX_RING_ID_QUEUE2_RESET(cur_data);
 		} else if ((qid % EDMA_QID2RID_NUM_PER_REG) == 3) {
 			data = EDMA_RX_RING_ID_QUEUE3_SET(lp_ring_edma_id);
+			cur_data = EDMA_RX_RING_ID_QUEUE3_RESET(cur_data);
 		}
 
-		data |= edma_reg_read(EDMA_QID2RID_TABLE_MEM(reg_index));
+		data |= cur_data;
 		edma_reg_write(EDMA_QID2RID_TABLE_MEM(reg_index), data);
 
 		edma_info("LP QID2RID(%d) reg: 0x%0x, data: 0x%0x\n", qid,
