@@ -95,6 +95,13 @@ static void edma_rx_wifi_qos_mlo_assist(struct edma_gbl_ctx *egc, struct edma_rx
 					struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
 
 /*
+ * edma_rx_wifi_qos_wifi8_ppeds()
+ *	return void.
+ */
+static void edma_rx_wifi_qos_wifi8_ppeds(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+					struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+					struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
+/*
  * edma_rx_wifi_qos_udp_st()
  *	In case of UDP-ST, fetch the UDP-ST metadata from Tree ID.
  */
@@ -108,6 +115,7 @@ static edma_rx_wifi_qos_handler_t edma_rx_wifi_qos_handlers[] = {
 	edma_rx_wifi_qos_scs,         /**< PPE_DRV_TREE_ID_TYPE_SCS */
 	edma_rx_wifi_qos_wifi_tid,    /**< PPE_DRV_TREE_ID_TYPE_WIFI_TID */
 	edma_rx_wifi_qos_mlo_assist,  /**< PPE_DRV_TREE_ID_TYPE_MLO_ASSIST */
+	edma_rx_wifi_qos_wifi8_ppeds, /**< PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS */
 	edma_rx_wifi_qos_udp_st       /**< PPE_DRV_TREE_ID_TYPE_UDP_ST */
 };
 
@@ -864,6 +872,17 @@ static void edma_rx_wifi_qos_mlo_assist(struct edma_gbl_ctx *egc, struct edma_rx
 	 */
 	skb->mark = EDMA_RX_MLO_METADATA_CONSTRUCT(mlo_mark, wifi_qos);
 	edma_debug("%px : mlo mark configured = 0x%x\n", egc, skb->mark);
+}
+
+/*
+ * edma_rx_wifi_qos_wifi8_ppeds()
+ *	return void.
+ */
+static void edma_rx_wifi_qos_wifi8_ppeds(struct edma_gbl_ctx *egc, struct edma_rxdesc_ring *rxdesc_ring,
+				  struct edma_rxdesc_desc *rxdesc_head, struct sk_buff *skb,
+				  struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec)
+{
+	return;
 }
 
 /*
