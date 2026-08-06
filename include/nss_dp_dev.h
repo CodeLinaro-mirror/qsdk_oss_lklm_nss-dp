@@ -320,6 +320,10 @@ struct nss_dp_dev {
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	bool nss_dp_mht_dev;		/* Netdevice belongs to MHT switch */
 #endif
+#ifdef NSS_DP_HTT_SW_PORT_MAP
+	bool nss_dp_htt_dev;		/* Netdevice belongs to Huntington switch */
+#endif
+
 	uint32_t fixed_link_speed;	/* Fixed link speed for the port connected to the switch */
 #ifdef NSS_DP_PON_SUPPORT
 	bool gem_port;			/* PON Port Type */

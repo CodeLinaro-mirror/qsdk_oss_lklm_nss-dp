@@ -981,6 +981,10 @@ static int32_t nss_dp_of_get_pdata(struct device_node *np,
 	if (dp_global_ctx.is_mht_dev)
 		dp_priv->nss_dp_mht_dev = of_property_read_bool(np, "qcom,mht-dev");
 #endif
+#ifdef NSS_DP_HTT_SW_PORT_MAP
+	dp_priv->nss_dp_htt_dev = of_property_read_bool(np, "qcom,htt-dev");
+#endif
+
 	return 0;
 }
 

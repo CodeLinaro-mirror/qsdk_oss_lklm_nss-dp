@@ -168,6 +168,7 @@ ccflags-y += -DNSS_DP_HIGHER_RING_MASK_CONFIG
 ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
 ccflags-y += -DNSS_DP_RING_IDX_CONFIG
 ccflags-y += -DNSS_DP_EDMA_RING_RESET
+ccflags-y += -DNSS_DP_HTT_SW_PORT_MAP
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx))
@@ -177,6 +178,7 @@ ccflags-y += -DNSS_DP_HIGHER_RING_MASK_CONFIG
 ccflags-y += -DNSS_DP_EDMA_SKIP_PL_OFFSET
 ccflags-y += -DNSS_DP_RING_IDX_CONFIG
 ccflags-y += -DNSS_DP_EDMA_RING_RESET
+ccflags-y += -DNSS_DP_HTT_SW_PORT_MAP
 endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq54xx))
