@@ -354,10 +354,10 @@ static int edma_debugfs_rx_rings_stats_show(struct seq_file *m, void __attribute
 	struct edma_rxdesc_ring *rxdesc_ring;
 	struct edma_rx_fill_stats *fill_stats;
 	struct edma_rx_desc_stats *desc_stats;
-	uint32_t i, j, ring_idx, rings_in_section;
+	uint32_t i, ring_idx, rings_in_section;
 	unsigned int start;
 #ifdef NSS_DP_PPEDS_SUPPORT
-	uint32_t ppeds_idx, valid_count;
+	uint32_t j, ppeds_idx, valid_count;
 	char ring_header[EDMA_DEBUGFS_RING_COL_WIDTH + 1];
 	struct edma_ppeds_wifi7_cfg *ppeds_node_cfg;
 	struct edma_ppeds_drv *drv = &edma_gbl_ctx->ppeds_drv;
@@ -528,10 +528,10 @@ static int edma_debugfs_tx_rings_stats_show(struct seq_file *m, void __attribute
 	struct edma_txcmpl_ring *txcmpl_ring;
 	struct edma_tx_desc_stats *tx_desc_stats_ptr;
 	struct edma_tx_cmpl_stats *tx_cmpl_stats_ptr;
-	uint32_t i, j, ring_idx, rings_in_section;
+	uint32_t i, ring_idx, rings_in_section;
 	unsigned int start;
 #ifdef NSS_DP_PPEDS_SUPPORT
-	uint32_t ppeds_idx, valid_count;
+	uint32_t j, ppeds_idx, valid_count;
 	char ring_header[EDMA_DEBUGFS_RING_COL_WIDTH + 1];
 	struct edma_ppeds_wifi7_cfg *ppeds_node_cfg;
 	struct edma_txdesc_ring *tx_ring;
