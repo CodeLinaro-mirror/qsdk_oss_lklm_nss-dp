@@ -90,12 +90,16 @@
                                        | NETIF_F_SG \
                                        | NETIF_F_RXCSUM \
                                        | NETIF_F_HW_CSUM \
+                                       | NETIF_F_TSO \
+                                       | NETIF_F_TSO6 \
                                        | NETIF_F_GRO_HW
 #else
 #define EDMA_NETDEV_FEATURES		NETIF_F_FRAGLIST \
 					| NETIF_F_SG \
 					| NETIF_F_RXCSUM \
-					| NETIF_F_HW_CSUM
+					| NETIF_F_HW_CSUM \
+					| NETIF_F_TSO \
+					| NETIF_F_TSO6
 #endif
 
 #define EDMA_SWITCH_DEV_ID	0
