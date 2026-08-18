@@ -34,6 +34,7 @@
 #endif
 #include "nss_dp_hal.h"
 #include <ppe_drv.h>
+#include <ppe_drv_port.h>
 #ifdef CONFIG_IPQ_PON
 #include "nss_dp_gem.h"
 #endif
@@ -1420,9 +1421,11 @@ EXPORT_SYMBOL(nss_dp_is_netdev_physical);
 int32_t nss_dp_get_port_num(struct net_device *netdev)
 {
 	struct nss_dp_dev *dp_priv;
+	int32_t port_id;
 
 	if (!nss_dp_is_netdev_physical(netdev)) {
-		return NSS_DP_INVALID_INTERFACE;
+		port_id = ppe_drv_port_num_from_dev(netdev);
+		return (port_id == PPE_DRV_PORT_ID_INVALID) ? NSS_DP_INVALID_INTERFACE : port_id;
 	}
 
 	dp_priv = netdev_priv(netdev);

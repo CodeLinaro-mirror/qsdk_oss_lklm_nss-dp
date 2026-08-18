@@ -247,7 +247,9 @@ bool nss_dp_is_netdev_physical(struct net_device *netdev);
 
 /**
  * nss_dp_get_port_num
- *	Returns the port number for the physical interface.
+ *	Returns the port number for the net device. For a physical interface
+ *	the port number is read directly; for any other interface it is
+ *	looked up via the PPE driver.
  *
  * @datatypes
  * net_device
@@ -255,7 +257,7 @@ bool nss_dp_is_netdev_physical(struct net_device *netdev);
  * @param[in] net_device pointer to netdev structure.
  *
  * @return
- * port number correspond to this net_device.
+ * port number correspond to this net_device, NSS_DP_INVALID_INTERFACE if not found.
  */
 int32_t nss_dp_get_port_num(struct net_device *netdev);
 
