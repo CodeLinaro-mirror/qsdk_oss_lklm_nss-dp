@@ -169,7 +169,7 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 		data = edma_reg_read(EDMA_REG_TXCMPL_PROD_IDX(txcmpl_ring->id));
 		prod_idx = data & EDMA_TXCMPL_PROD_IDX_MASK;
 
-		avail = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, EDMA_TX_RING_SIZE);
+		avail = EDMA_DESC_AVAIL_COUNT(prod_idx, cons_idx, txcmpl_ring->count);
 		txcmpl_ring->avail_pkt = avail;
 
 		if (unlikely(!avail)) {
@@ -186,14 +186,14 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 
 	count = avail;
 
-	end_idx = (cons_idx + avail) & EDMA_TX_RING_SIZE_MASK;
+	end_idx = (cons_idx + avail) & EDMA_TX_RING_SIZE_MASK(txcmpl_ring->count);
 	txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
 
 	if (end_idx > cons_idx) {
 		edma_dmac_inv_range_no_dsb((void *)txcmpl, txcmpl + avail);
 	} else {
 		edma_dmac_inv_range_no_dsb(txcmpl_ring->desc, txcmpl_ring->desc + end_idx);
-		edma_dmac_inv_range_no_dsb((void *)txcmpl, txcmpl_ring->desc + EDMA_TX_RING_SIZE);
+		edma_dmac_inv_range_no_dsb((void *)txcmpl, txcmpl_ring->desc + txcmpl_ring->count);
 	}
 
 	dsb(st);
@@ -205,7 +205,7 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 		/*
 		 * Fetching the (5th (cons_idx + 4)) descriptor for prefetch purpose
 		 */
-		pf_cons_idx = ((cons_idx + 4) & EDMA_TX_RING_SIZE_MASK);
+		pf_cons_idx = ((cons_idx + 4) & EDMA_TX_RING_SIZE_MASK(txcmpl_ring->count));
 		pf_desc = EDMA_TXCMPL_DESC(txcmpl_ring, pf_cons_idx);
 	}
 #endif
@@ -230,7 +230,7 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 			/*
 			 * Prefetch 6th descriptor's cache line from the current index
 			 */
-			pf_cons_idx = ((pf_cons_idx + 1) & EDMA_TX_RING_SIZE_MASK);
+			pf_cons_idx = ((pf_cons_idx + 1) & EDMA_TX_RING_SIZE_MASK(txcmpl_ring->count));
 			pf_desc = EDMA_TXCMPL_DESC(txcmpl_ring, pf_cons_idx);
 			prefetch(pf_desc);
 		}
@@ -245,7 +245,7 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 			u64_stats_update_begin(&txcmpl_stats->syncp);
 			++txcmpl_stats->desc_with_more_bit;
 			u64_stats_update_end(&txcmpl_stats->syncp);
-			cons_idx = ((cons_idx + 1) & EDMA_TX_RING_SIZE_MASK);
+			cons_idx = ((cons_idx + 1) & EDMA_TX_RING_SIZE_MASK(txcmpl_ring->count));
 			txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
 			continue;
 		}
@@ -314,7 +314,7 @@ uint32_t edma_tx_complete(uint32_t work_to_do, struct edma_txcmpl_ring *txcmpl_r
 			}
 		}
 
-		cons_idx = ((cons_idx + 1) & EDMA_TX_RING_SIZE_MASK);
+		cons_idx = ((cons_idx + 1) & EDMA_TX_RING_SIZE_MASK(txcmpl_ring->count));
 		txcmpl = EDMA_TXCMPL_DESC(txcmpl_ring, cons_idx);
 	}
 
@@ -455,7 +455,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 	 * Hold onto the index mapped to *txdesc.
 	 * This will be the index previous to that of current *hw_next_to_use
 	 */
-	start_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK) & EDMA_TX_RING_SIZE_MASK);
+	start_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK(txdesc_ring->count)) & EDMA_TX_RING_SIZE_MASK(txdesc_ring->count));
 
 	/*
 	 * Handle if the skb has nr_frags
@@ -506,7 +506,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 			EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
 		}
 
-		*hw_next_to_use = ((*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK);
+		*hw_next_to_use = ((*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK(txdesc_ring->count));
 		i++;
 	}
 
@@ -515,7 +515,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 	/*
 	 * This will be the index previous to that of current *hw_next_to_use
 	 */
-	end_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK) & EDMA_TX_RING_SIZE_MASK);
+	end_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK(txdesc_ring->count)) & EDMA_TX_RING_SIZE_MASK(txdesc_ring->count));
 
 	/*
 	 * Need to flush from initial *txdesc to accomodate for MORE bit change.
@@ -528,7 +528,7 @@ static uint32_t edma_tx_skb_nr_frags(struct edma_txdesc_ring *txdesc_ring, struc
 		edma_dmac_clean_range_no_dsb(txdesc_ring->pdesc,
 				txdesc_ring->pdesc + end_idx);
 		edma_dmac_clean_range_no_dsb((void *)(*txdesc),
-				txdesc_ring->pdesc + EDMA_TX_RING_SIZE);
+				txdesc_ring->pdesc + txdesc_ring->count);
 	}
 
 	*txdesc = txd;
@@ -709,7 +709,7 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	edma_dmac_clean_range_no_dsb((void *)(skb->data - EDMA_DDRQ_PREHEADER_SIZE),
 			 (void *)(skb->data + buf_len + EDMA_DDRQ_PREHEADER_SIZE));
 
-	*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK;
+	*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK(txdesc_ring->count);
 
 	return txd;
 }
@@ -759,8 +759,8 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 		 * Hold onto the index mapped to txd.
 		 * This will be the index previous to that of current *hw_next_to_use
 		 */
-		start_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK) & EDMA_TX_RING_SIZE_MASK);
-		start_desc = txd;
+	start_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK(txdesc_ring->count)) & EDMA_TX_RING_SIZE_MASK(txdesc_ring->count));
+	start_desc = txd;
 
 		/*
 		 * Walk through all fraglist skbs
@@ -804,9 +804,9 @@ static uint32_t edma_tx_skb_sg_fill_desc(struct nss_dp_dev *dp_dev, struct edma_
 				EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
 			}
 
-			*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK;
-			num_descs += 1;
-			num_sg_frag_list += 1;
+		*hw_next_to_use = (*hw_next_to_use + 1) & EDMA_TX_RING_SIZE_MASK(txdesc_ring->count);
+		num_descs += 1;
+		num_sg_frag_list += 1;
 
 			/*
 			 * skb fraglist skb can have nr_frags
@@ -832,8 +832,8 @@ skip_primary:
 		 * This will be the index previous to
 		 * that of current *hw_next_to_use
 		 */
-		end_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK) &
-					EDMA_TX_RING_SIZE_MASK);
+		end_idx = (((*hw_next_to_use) + EDMA_TX_RING_SIZE_MASK(txdesc_ring->count)) &
+					EDMA_TX_RING_SIZE_MASK(txdesc_ring->count));
 
 		/*
 		 * Need to flush from initial txd to accomodate for MORE bit change.
@@ -847,7 +847,7 @@ skip_primary:
 			edma_dmac_clean_range_no_dsb(txdesc_ring->pdesc,
 					txdesc_ring->pdesc + end_idx);
 			edma_dmac_clean_range_no_dsb((void *)(start_desc),
-					txdesc_ring->pdesc + EDMA_TX_RING_SIZE);
+					txdesc_ring->pdesc + txdesc_ring->count);
 		}
 
 		/*
@@ -876,7 +876,7 @@ static uint32_t edma_tx_avail_desc(struct edma_txdesc_ring *txdesc_ring, uint32_
 	data = edma_reg_read(EDMA_REG_TXDESC_CONS_IDX(txdesc_ring->id));
 	hw_next_to_clean = data & EDMA_TXDESC_CONS_IDX_MASK;
 
-	avail = EDMA_DESC_AVAIL_COUNT(hw_next_to_clean - 1, hw_next_to_use, EDMA_TX_RING_SIZE);
+	avail = EDMA_DESC_AVAIL_COUNT(hw_next_to_clean - 1, hw_next_to_use, txdesc_ring->count);
 
 	return avail;
 }

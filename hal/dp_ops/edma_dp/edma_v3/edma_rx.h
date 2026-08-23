@@ -11,7 +11,6 @@
 struct edma_gbl_ctx;
 
 #if defined(NSS_DP_HW_GRO)
-extern uint32_t edma_dp_gro_rx_ring_sz;
 #define EDMA_RX_GRO_BUFFER_SIZE (SKB_WITH_OVERHEAD(2048))
 #endif
 
@@ -56,7 +55,7 @@ extern uint32_t edma_dp_gro_rx_ring_sz;
 
 #define EDMA_RX_RING_SIZE		edma_gbl_ctx->rx_ring_sz
 
-#define EDMA_RX_RING_SIZE_MASK		(EDMA_RX_RING_SIZE - 1)
+#define EDMA_RX_RING_SIZE_MASK(count)	((count) - 1)
 #define EDMA_RX_RING_ID_MASK		0x1F
 #define EDMA_MAX_RXDESC_RINGS		NSS_DP_EDMA_MAX_RXDESC_RINGS
 #define EDMA_MAX_RXFILL_RINGS		NSS_DP_EDMA_MAX_RXFILL_RINGS

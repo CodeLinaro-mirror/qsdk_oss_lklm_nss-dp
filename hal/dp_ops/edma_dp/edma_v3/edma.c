@@ -96,6 +96,18 @@ MODULE_PARM_DESC(edma_dp_host_txcmpl_map, "TX to txcmpl map rings for host");
 module_param_array(edma_dp_host_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_host_tx_ring_to_core_map, "TX to core map");
 
+module_param(edma_dp_host_rx_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_host_rx_ring_sz, "Host RX descriptor ring size (default: 2048)");
+
+module_param(edma_dp_host_rxfill_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_host_rxfill_ring_sz, "Host RX fill ring size (default: 2048)");
+
+module_param(edma_dp_host_tx_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_host_tx_ring_sz, "Host TX descriptor ring size (default: 2048)");
+
+module_param(edma_dp_host_txcmpl_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_host_txcmpl_ring_sz, "Host TX completion ring size (default: 2048)");
+
 #ifdef NSS_DP_DDRQ_SUPPORT
 #ifdef NSS_DP_SFU_PROFILE
 int edma_passthrough_val = EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA;
@@ -236,6 +248,9 @@ MODULE_PARM_DESC(edma_dp_ppe_vp_num_tx_rings_per_core, "Number of host ppe_vp TX
 module_param_array(edma_dp_ppe_vp_tx_ring_to_core_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_ppe_vp_tx_ring_to_core_map, "TX to core map for host ppe_vp");
 
+module_param(edma_dp_ppe_vp_tx_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_host_tx_ring_sz, "Host TX descriptor ring size (default: 2048)");
+
 /*
  * PPE-VP feature ring information
  */
@@ -253,6 +268,12 @@ MODULE_PARM_DESC(edma_dp_ppe_vp_feat_rxfill_map, "RX ring to RX fill ring mappin
 
 module_param_array(edma_dp_ppe_vp_feat_type_map, int, NULL, S_IRUGO);
 MODULE_PARM_DESC(edma_dp_ppe_vp_feat_type_map, "VP feature sub-type per ppe_vp feature RX ring");
+
+module_param(edma_dp_ppe_vp_feat_rx_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_feat_rx_ring_sz, "PPE-VP feature RX descriptor ring size (default: 4096)");
+
+module_param(edma_dp_ppe_vp_feat_rxfill_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_ppe_vp_feat_rxfill_ring_sz, "PPE-VP feature RX fill ring size (default: 4096)");
 
 /*
  * Each bit denotes the configured mode for that particular EDMA Tx/Rx rings IDs:
@@ -302,9 +323,11 @@ MODULE_PARM_DESC(edma_dp_gro_rxfill_map, "RX ring to RX fill ring mapping");
 /*
  * Ensure that GRO rx ring size is multiple of 2
  */
-uint32_t edma_dp_gro_rx_ring_sz = 512;
 module_param(edma_dp_gro_rx_ring_sz, uint, 0640);
-MODULE_PARM_DESC(edma_dp_gro_rx_ring_sz, "GRO RX fill and RX descriptor ring size (default: 512)");
+MODULE_PARM_DESC(edma_dp_gro_rx_ring_sz, "GRO RX descriptor ring size (default: 512)");
+
+module_param(edma_dp_gro_rxfill_ring_sz, uint, 0640);
+MODULE_PARM_DESC(edma_dp_gro_rxfill_ring_sz, "GRO RX fill ring size (default: 512)");
 #endif
 
 /*
@@ -1184,6 +1207,20 @@ static int edma_validate_host_ring_info(void)
 		return 0;
 	}
 
+	/* Validate VP feat rx ring size: must be non-zero and a power of 2 */
+	if (!edma_dp_ppe_vp_feat_rx_ring_sz || (edma_dp_ppe_vp_feat_rx_ring_sz & (edma_dp_ppe_vp_feat_rx_ring_sz - 1))) {
+		edma_err("Invalid VP feat rx ring size: %u (must be a non-zero power of 2)\n",
+			 edma_dp_ppe_vp_feat_rx_ring_sz);
+		return -EINVAL;
+	}
+
+	/* Validate VP feat rxfill ring size: must be non-zero and a power of 2 */
+	if (!edma_dp_ppe_vp_feat_rxfill_ring_sz || (edma_dp_ppe_vp_feat_rxfill_ring_sz & (edma_dp_ppe_vp_feat_rxfill_ring_sz - 1))) {
+		edma_err("Invalid VP feat rxfill ring size: %u (must be a non-zero power of 2)\n",
+			 edma_dp_ppe_vp_feat_rxfill_ring_sz);
+		return -EINVAL;
+	}
+
 	/*
 	 * Build the bitmap
 	 */
@@ -1267,6 +1304,12 @@ static int edma_validate_gro_ring_info(void)
 	/* Validate GRO ring size: must be non-zero and a power of 2 */
 	if (!edma_dp_gro_rx_ring_sz || (edma_dp_gro_rx_ring_sz & (edma_dp_gro_rx_ring_sz - 1))) {
 		edma_err("Invalid GRO rx ring size: %u (must be a non-zero power of 2)\n", edma_dp_gro_rx_ring_sz);
+		return -EINVAL;
+	}
+
+	/* Validate GRO Fill ring size: must be non-zero and a power of 2 */
+	if (!edma_dp_gro_rxfill_ring_sz || (edma_dp_gro_rxfill_ring_sz & (edma_dp_gro_rxfill_ring_sz - 1))) {
+		edma_err("Invalid GRO rxfill ring size: %u (must be a non-zero power of 2)\n", edma_dp_gro_rxfill_ring_sz);
 		return -EINVAL;
 	}
 
@@ -2431,7 +2474,7 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	num_rxfill_rings = host_info->common_info.edma_num_rxfill_rings;
 	edma_init_rxfill_rings(egc, host_info->common_info.edma_rxfill_ring_map,
 				num_rxfill_rings, EDMA_RING_TYPE_HOST,
-				EDMA_RING_TYPE_FLAGS_HOST_COMMON, EDMA_RX_RING_SIZE,
+				EDMA_RING_TYPE_FLAGS_HOST_COMMON, edma_dp_host_rxfill_ring_sz,
 				alloc_size, buf_len, egc->rx_page_mode);
 
 	/*
@@ -2440,7 +2483,7 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	num_txcmpl_rings = host_info->common_info.edma_num_txcmpl_rings;
 	edma_init_txcmpl_rings(egc, host_info->common_info.edma_txcmpl_ring_map,
 				num_txcmpl_rings, EDMA_RING_TYPE_HOST,
-				EDMA_RING_TYPE_FLAGS_HOST_COMMON, EDMA_TX_RING_SIZE);
+				EDMA_RING_TYPE_FLAGS_HOST_COMMON, edma_dp_host_txcmpl_ring_sz);
 
 	/*
 	 * Mark the Host SFE TX and RX rings into the global TX RX rings pool.
@@ -2448,12 +2491,12 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	num_rx_rings = rx_rings->num_rx_rings;
 	edma_init_rxdesc_rings(egc, rx_rings->rx_map, num_rx_rings,
 				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_COMMON,
-				EDMA_RX_RING_SIZE, rx_rings->num_queues_per_ring);
+				edma_dp_host_rx_ring_sz, rx_rings->num_queues_per_ring);
 
 	num_tx_rings = tx_rings->num_tx_rings;
 	edma_init_txdesc_rings(egc, tx_rings->tx_map, num_tx_rings,
 				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_COMMON,
-				EDMA_TX_RING_SIZE);
+				edma_dp_host_tx_ring_sz);
 
 	/*
 	 * Mark PPEVP rings.
@@ -2465,10 +2508,13 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	 */
 	edma_init_txdesc_rings(egc, tx_rings->tx_map, tx_rings->num_tx_rings,
 				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_VP,
-				EDMA_TX_RING_SIZE);
+				edma_dp_ppe_vp_tx_ring_sz);
 
 	/*
 	 * Mark the GRO RX rings into the global RX rings pool.
+
+
+
 	 * GRO rings use a fixed page pool buffer size.
 	 * TODO: Parameters will be extracted from GRO structure rather than
 	 * module param
@@ -2479,7 +2525,7 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	edma_init_rxfill_rings(egc, edma_dp_gro_rxfill_map,
 				edma_dp_gro_num_rxfill_rings, EDMA_RING_TYPE_HOST,
 				EDMA_RING_TYPE_FLAGS_HOST_GRO | EDMA_RING_TYPE_FLAGS_PAGE_POOL,
-				edma_dp_gro_rx_ring_sz,
+				edma_dp_gro_rxfill_ring_sz,
 				alloc_size, buf_len, egc->rx_page_mode);
 
 	/*
@@ -2517,12 +2563,12 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	edma_init_rxfill_rings(egc, edma_dp_ppe_vp_feat_rxfill_map,
 				rx_rings->num_rx_rings, EDMA_RING_TYPE_HOST,
 				EDMA_RING_TYPE_FLAGS_HOST_VP_FEAT,
-				EDMA_RX_RING_SIZE,
+				edma_dp_ppe_vp_feat_rxfill_ring_sz,
 				alloc_size, buf_len, egc->rx_page_mode);
 
 	edma_init_rxdesc_rings(egc, rx_rings->rx_map, rx_rings->num_rx_rings,
 				EDMA_RING_TYPE_HOST, EDMA_RING_TYPE_FLAGS_HOST_VP_FEAT,
-				EDMA_RX_RING_SIZE, rx_rings->num_queues_per_ring);
+				edma_dp_ppe_vp_feat_rx_ring_sz, rx_rings->num_queues_per_ring);
 
 	/*
 	 * Maps ring to specific feature type.

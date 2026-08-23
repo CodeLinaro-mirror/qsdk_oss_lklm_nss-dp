@@ -797,9 +797,24 @@ static void edma_cfg_rx_fill_ring_flow_control(uint32_t threshold_xoff, uint32_t
 	for (i = 0; i < edma_gbl_ctx->rxfill_ring_max; i++) {
 		if (edma_gbl_ctx->rxfill_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
 			struct edma_rxfill_ring *rxfill_ring;
+			uint32_t ring_data = data;
 
 			rxfill_ring = edma_gbl_ctx->rxfill_info[i].rxfill_ring;
-			edma_reg_write(EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id), data);
+
+			/*
+			 * If threshold_xoff or threshold_xon exceed the ring count, fall back
+			 * to the default X-OFF/X-ON values for this ring instead of skipping it.
+			 */
+			if (threshold_xoff > rxfill_ring->count || threshold_xon > rxfill_ring->count) {
+				edma_err("Rx fill ring %d: threshold_xoff(%u) or threshold_xon(%u) exceeds ring count(%u)."
+						" Using default xoff(%u)/xon(%u)\n",
+						i, threshold_xoff, threshold_xon, rxfill_ring->count,
+						NSS_DP_RX_FC_XOFF_DEF, NSS_DP_RX_FC_XON_DEF);
+				ring_data = (NSS_DP_RX_FC_XOFF_DEF & EDMA_RXFILL_FC_XOFF_THRE_MASK) << EDMA_RXFILL_FC_XOFF_THRE_SHIFT;
+				ring_data |= ((NSS_DP_RX_FC_XON_DEF & EDMA_RXFILL_FC_XON_THRE_MASK) << EDMA_RXFILL_FC_XON_THRE_SHIFT);
+			}
+
+			edma_reg_write(EDMA_REG_RXFILL_FC_THRE(rxfill_ring->ring_id), ring_data);
 		}
 	}
 }
@@ -817,16 +832,32 @@ static void edma_cfg_rx_desc_ring_flow_control(uint32_t threshold_xoff, uint32_t
 	for (i = 0; i < edma_gbl_ctx->rxdesc_ring_max; i++) {
 		if (edma_gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
 			struct edma_rxdesc_ring *rxdesc_ring;
+			uint32_t ring_data = data;
 
 			/*
 			 * If pre-header mode is enabled, then set the pre-header payload offset value
 			 */
 			rxdesc_ring = edma_gbl_ctx->rxdesc_info[i].rxdesc_ring;
-			if (rxdesc_ring->pre_hdr_mode_en) {
-				data |= EDMA_RXDESC_PAYLOAD_OFFSET_SET(EDMA_RXDESC_PH_PAYLOAD_OFFSET);
+
+			/*
+			 * If threshold_xoff or threshold_xon exceed the ring count, fall back
+			 * to the default X-OFF/X-ON values for this ring instead of skipping it.
+			 */
+			if (threshold_xoff > rxdesc_ring->count || threshold_xon > rxdesc_ring->count) {
+				edma_err("Rx descriptor ring %d: threshold_xoff(%u) or threshold_xon(%u) exceeds ring count(%u)."
+						" Using default xoff(%u)/xon(%u)\n",
+						i, threshold_xoff, threshold_xon, rxdesc_ring->count,
+						NSS_DP_RX_FC_XOFF_DEF, NSS_DP_RX_FC_XON_DEF);
+				ring_data = (NSS_DP_RX_FC_XOFF_DEF & EDMA_RXDESC_FC_XOFF_THRE_MASK) << EDMA_RXDESC_FC_XOFF_THRE_SHIFT;
+				ring_data |= ((NSS_DP_RX_FC_XON_DEF & EDMA_RXDESC_FC_XON_THRE_MASK) << EDMA_RXDESC_FC_XON_THRE_SHIFT);
 			}
-			edma_reg_write(EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id), data);
-			edma_info("EDMA_REG_RXDESC_FC_THRE : 0x%0x\n", data);
+
+			if (rxdesc_ring->pre_hdr_mode_en) {
+				ring_data |= EDMA_RXDESC_PAYLOAD_OFFSET_SET(EDMA_RXDESC_PH_PAYLOAD_OFFSET);
+			}
+
+			edma_reg_write(EDMA_REG_RXDESC_FC_THRE(rxdesc_ring->ring_id), ring_data);
+			edma_info("EDMA_REG_RXDESC_FC_THRE : 0x%0x\n", ring_data);
 		}
 	}
 }
@@ -2121,8 +2152,7 @@ void edma_cfg_rx_rings(struct edma_gbl_ctx *egc)
 		/*
 		 * Validate flow control X-OFF and X-ON configurations
 		 */
-		if ((nss_dp_rx_fc_xoff < EDMA_RX_FC_XOFF_THRE_MIN) ||
-				(nss_dp_rx_fc_xoff > EDMA_RX_RING_SIZE)) {
+		if (nss_dp_rx_fc_xoff < EDMA_RX_FC_XOFF_THRE_MIN) {
 			edma_err("Incorrect Rx Xoff flow control value: %d. Setting\n"
 					" it to default value: %d", nss_dp_rx_fc_xoff,
 					NSS_DP_RX_FC_XOFF_DEF);
@@ -2130,7 +2160,6 @@ void edma_cfg_rx_rings(struct edma_gbl_ctx *egc)
 		}
 
 		if ((nss_dp_rx_fc_xon < EDMA_RX_FC_XON_THRE_MIN) ||
-				(nss_dp_rx_fc_xon > EDMA_RX_RING_SIZE) ||
 				(nss_dp_rx_fc_xon < nss_dp_rx_fc_xoff)) {
 			edma_err("Incorrect Rx Xon flow control value: %d. Setting\n"
 					" it to default value: %d", nss_dp_rx_fc_xon,
@@ -2355,15 +2384,13 @@ int edma_cfg_rx_fc_enable_handler(struct ctl_table *table, int write,
 		/*
 		 * Validate flow control X-OFF and X-ON configurations
 		 */
-		if ((nss_dp_rx_fc_xoff < EDMA_RX_FC_XOFF_THRE_MIN) ||
-				(nss_dp_rx_fc_xoff > EDMA_RX_RING_SIZE)) {
+		if (nss_dp_rx_fc_xoff < EDMA_RX_FC_XOFF_THRE_MIN) {
 			edma_err("Incorrect Rx Xoff flow control value: %d. Setting\n"
 					" it to default value: %d", nss_dp_rx_fc_xoff,
 					NSS_DP_RX_FC_XOFF_DEF);
 			nss_dp_rx_fc_xoff = NSS_DP_RX_FC_XOFF_DEF;
 		}
 		if ((nss_dp_rx_fc_xon < EDMA_RX_FC_XON_THRE_MIN) ||
-				(nss_dp_rx_fc_xon > EDMA_RX_RING_SIZE) ||
 				(nss_dp_rx_fc_xon < nss_dp_rx_fc_xoff)) {
 			edma_err("Incorrect Rx Xon flow control value: %d. Setting\n"
 					" it to default value: %d", nss_dp_rx_fc_xon,

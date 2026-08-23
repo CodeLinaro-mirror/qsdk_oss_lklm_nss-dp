@@ -43,9 +43,7 @@ struct edma_tx_cb {
 
 #define EDMA_TX_MAX_PRIORITY_LEVEL	1
 
-#define EDMA_TX_RING_SIZE		edma_gbl_ctx->tx_ring_sz
-
-#define EDMA_TX_RING_SIZE_MASK		(EDMA_TX_RING_SIZE - 1)
+#define EDMA_TX_RING_SIZE_MASK(count)	((count) - 1)
 
 #ifdef NSS_DP_IPQ54XX
 #define EDMA_TX_TSO_SEG_MAX		48	/* Max segment processing capacity of HW for TSO */

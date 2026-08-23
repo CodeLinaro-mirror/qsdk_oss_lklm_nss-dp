@@ -21,6 +21,10 @@ int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,2,3,4,5
 int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
 int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10};
 int edma_dp_boot_rx_fill_cnt = 0;
+uint32_t edma_dp_host_rx_ring_sz = 2048;
+uint32_t edma_dp_host_rxfill_ring_sz = 2048;
+uint32_t edma_dp_host_tx_ring_sz = 2048;
+uint32_t edma_dp_host_txcmpl_ring_sz = 2048;
 
 int edma_dp_ppe_ds_rx_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
 int edma_dp_ppe_ds_rx_queue_map[EDMA_PPEDS_MAX_NODES] = {210, 218};
@@ -39,6 +43,7 @@ int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP] = {2,3,4,5};
 int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP] = {2,3,4,5};
 int edma_dp_ppe_vp_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
 int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5};
+uint32_t edma_dp_ppe_vp_tx_ring_sz = 2048;
 
 /*
  * VP features ring info - disabled for ipq52xx
@@ -48,9 +53,13 @@ int edma_dp_ppe_vp_feat_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {-1};
 int edma_dp_ppe_vp_feat_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {-1};
 int edma_dp_ppe_vp_feat_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {-1};
 int edma_dp_ppe_vp_feat_type_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {-1};
+uint32_t edma_dp_ppe_vp_feat_rx_ring_sz = 4096;
+uint32_t edma_dp_ppe_vp_feat_rxfill_ring_sz = 4096;
 
 #ifdef NSS_DP_HW_GRO
 int edma_dp_gro_ppe_queue_base = EDMA_GRO_PPE_QUEUE_BASE;
+uint32_t edma_dp_gro_rx_ring_sz = 512;
+uint32_t edma_dp_gro_rxfill_ring_sz = 512;
 #endif
 
 /*
@@ -129,6 +138,32 @@ int nss_dp_hal_cache_info_setup(void *ctx)
 
 	egc->cache_data = NULL;
 	return 0;
+}
+
+/*
+ * nss_dp_hal_configure_ring_size()
+ *	Configure the ring size.
+ */
+void nss_dp_hal_configure_ring_size(uint32_t flags)
+{
+	/*
+	 * Set the profile ring sizes according to the profile.
+	 */
+	if (flags & NSS_DP_MEM_PROFILE_OPTIMIZED) {
+		edma_dp_host_rx_ring_sz = edma_dp_host_rxfill_ring_sz = 512;
+		edma_dp_host_tx_ring_sz	= edma_dp_host_txcmpl_ring_sz = edma_dp_ppe_vp_tx_ring_sz = 1024;
+        } else if (flags & NSS_DP_MEM_PROFILE_BALANCED) {
+		edma_dp_host_rx_ring_sz = edma_dp_host_rxfill_ring_sz = 1024;
+		edma_dp_host_tx_ring_sz	= edma_dp_host_txcmpl_ring_sz = edma_dp_ppe_vp_tx_ring_sz = 1024;
+        } else if (flags & NSS_DP_MEM_PROFILE_HIGH) {
+		edma_dp_host_rx_ring_sz = edma_dp_host_rxfill_ring_sz = 2048;
+		edma_dp_host_tx_ring_sz	= edma_dp_host_txcmpl_ring_sz = edma_dp_ppe_vp_tx_ring_sz = 2048;
+        } else {
+		edma_dp_host_rx_ring_sz = edma_dp_host_rxfill_ring_sz = 2048;
+		edma_dp_host_tx_ring_sz	= edma_dp_host_txcmpl_ring_sz = edma_dp_ppe_vp_tx_ring_sz = 2048;
+        }
+
+	return;
 }
 
 /*
