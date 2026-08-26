@@ -561,11 +561,15 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	if (dptxi->svp) {
 		EDMA_SRC_INFO_SET(txd, dptxi->svp);
 		EDMA_DST_INFO_SET(txd, 0);
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.src_pt_mode_val);
+		(dptxi->flags & NSS_DP_VP_TX_FLAG_PKT_MODE) ?
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dptxi->pkt_mode):
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.src_pt_mode_val);
 	} else {
 		EDMA_SRC_INFO_SET(txd, 0);
 		EDMA_DST_INFO_SET(txd, dptxi->dvp);
-		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
+		(dptxi->flags & NSS_DP_VP_TX_FLAG_PKT_MODE) ?
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dptxi->pkt_mode):
+			EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
 	}
 }
 
