@@ -59,6 +59,9 @@ nss_dp_gem_rx_cb_t nss_dp_gem_rx_reg_cb_g = NULL;
 void * nss_dp_gem_rx_app_data_g = NULL;
 nss_dp_gem_tx_cb_t nss_dp_gem_tx_reg_cb_g = NULL;
 void * nss_dp_gem_tx_app_data_g = NULL;
+
+/* PON drainout callback for UMAC reset */
+nss_dp_pon_drainout_cb_t nss_dp_pon_drainout_reg_cb_g = NULL;
 #endif
 /* Module params */
 static int page_mode;
@@ -1507,6 +1510,55 @@ void nss_dp_gem_tx_unregister_cb(void)
 	synchronize_rcu();
 }
 EXPORT_SYMBOL(nss_dp_gem_tx_unregister_cb);
+
+/*
+ * nss_dp_pon_drainout_register_cb()
+ *	Register PON TCONT drainout callback for UMAC reset.
+ *
+ *	Called by the PON driver to register pon_tcf_bwmrpt_drainout_tcont_by_bitmap
+ *	so that qca-nss-dp can invoke it during UMAC reset without a hard
+ *	module dependency.
+ */
+void nss_dp_pon_drainout_register_cb(nss_dp_pon_drainout_cb_t cb)
+{
+	rcu_assign_pointer(nss_dp_pon_drainout_reg_cb_g, cb);
+	synchronize_rcu();
+}
+EXPORT_SYMBOL(nss_dp_pon_drainout_register_cb);
+
+/*
+ * nss_dp_pon_drainout_unregister_cb()
+ *	Unregister PON TCONT drainout callback.
+ */
+void nss_dp_pon_drainout_unregister_cb(void)
+{
+	rcu_assign_pointer(nss_dp_pon_drainout_reg_cb_g, NULL);
+	synchronize_rcu();
+}
+EXPORT_SYMBOL(nss_dp_pon_drainout_unregister_cb);
+
+/*
+ * nss_dp_pon_drainout()
+ *	PON TCONT drainout for UMAC reset.
+ *
+ *	Calls pon_tcf_bwmrpt_drainout_tcont_by_bitmap() to flush TCF SRAM
+ *	and zero PPE TCONT credits for all T-CONTs specified by tcont_bitmap.
+ */
+int nss_dp_pon_drainout(unsigned int tcont_bitmap, const char *context_str)
+{
+	nss_dp_pon_drainout_cb_t drainout_cb;
+
+	rcu_read_lock();
+	drainout_cb = rcu_dereference(nss_dp_pon_drainout_reg_cb_g);
+	if (!drainout_cb) {
+		rcu_read_unlock();
+		pr_debug("nss_dp: PON drainout callback not registered, skipping\n");
+		return 0;
+	}
+	rcu_read_unlock();
+	return drainout_cb(tcont_bitmap, context_str);
+}
+EXPORT_SYMBOL(nss_dp_pon_drainout);
 #endif
 
 /*
