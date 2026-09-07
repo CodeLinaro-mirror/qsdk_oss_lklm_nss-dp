@@ -83,5 +83,48 @@ bool nss_dp_gem_tx_register_cb(void *app_data, nss_dp_gem_tx_cb_t cb);
  */
 void nss_dp_gem_tx_unregister_cb(void);
 
+#define NSS_DP_PON_TCONT_BITMAP_ALL 0xffffffff	/* Select all T-CONT slots for drainout */
+
+/**
+ * nss_dp_pon_drainout_cb_t
+ *	PON TCONT drainout callback typedef for UMAC reset.
+ *
+ *	Registered by the PON driver pointing to
+ *	pon_tcf_bwmrpt_drainout_tcont_by_bitmap.
+ *
+ * @param[in] tcont_bitmap   Bitmask of T-CONT internal IDs to drain.
+ * @param[in] context_str    Debug label string for logging.
+ * @return 0 on success, negative on error.
+ */
+typedef int (*nss_dp_pon_drainout_cb_t)(unsigned int tcont_bitmap, const char *context_str);
+
+/**
+ * nss_dp_pon_drainout_register_cb
+ *	Register PON TCONT drainout callback.
+ *
+ * @param[in] cb	Callback function pointer (NULL to unregister).
+ */
+void nss_dp_pon_drainout_register_cb(nss_dp_pon_drainout_cb_t cb);
+
+/**
+ * nss_dp_pon_drainout_unregister_cb
+ *	Unregister PON TCONT drainout callback.
+ */
+void nss_dp_pon_drainout_unregister_cb(void);
+
+/**
+ * nss_dp_pon_drainout
+ *	PON TCONT drainout for UMAC reset.
+ *
+ *	Calls pon_tcf_bwmrpt_drainout_tcont_by_bitmap() to flush TCF SRAM
+ *	and zero PPE TCONT credits for the specified T-CONTs.
+ *	Safe to call from process context.
+ *
+ * @param[in] tcont_bitmap   Bitmask of T-CONT internal IDs to drain.
+ * @param[in] context_str    Debug label string for logging.
+ * @return 0 on success or callback not registered, negative on error.
+ */
+int nss_dp_pon_drainout(unsigned int tcont_bitmap, const char *context_str);
+
 #endif /* __NSS_DP_GEM_H__ */
 #endif

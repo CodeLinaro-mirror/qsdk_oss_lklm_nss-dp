@@ -290,3 +290,64 @@ int edma_ppeds_init(struct edma_ppeds_drv *drv)
 
 	return 0;
 }
+
+#ifdef NSS_DP_PON_SUPPORT
+/*
+ * edma_ppeds_pon_pq_disable()
+ *	Disable enqueue/dequeue and flush all PON MAC PPE queues.
+ *
+ *	Called during UMAC reset (inst_stop) to stop PON upstream traffic
+ *	from entering TCF before the TCF drainout.
+ *	ppe_drv_qos_queue_disable handles enqueue disable, dequeue disable
+ *	and PPE HW ESRAM flush per PQ atomically.
+ */
+void edma_ppeds_pon_pq_disable(void)
+{
+	int pon_start_pq = ppe_drv_pon_port_start_pq_get();
+	int pon_max_pq = ppe_drv_pon_port_max_pq_get();
+	int pq;
+
+	/*
+	 * pon_max_pq is 0 when the PON port has not been initialized
+	 * (non-PON board variant). Skip silently in that case.
+	 */
+	if (!pon_max_pq) {
+		edma_debug("PON port not initialized, skipping PQ disable\n");
+		return;
+	}
+
+	for (pq = pon_start_pq; pq < (pon_start_pq + pon_max_pq); pq++) {
+		if (ppe_drv_qos_queue_disable(0, pq) != PPE_DRV_RET_SUCCESS)
+			edma_err("Failed to disable/flush PON PQ %d\n", pq);
+	}
+}
+
+/*
+ * edma_ppeds_pon_pq_enable()
+ *	Re-enable enqueue and dequeue for all PON MAC PPE queues.
+ *
+ *	Called during UMAC reset (inst_start) after DDR queue flush
+ *	is complete and normal operation resumes.
+ */
+void edma_ppeds_pon_pq_enable(void)
+{
+	int pon_start_pq = ppe_drv_pon_port_start_pq_get();
+	int pon_max_pq = ppe_drv_pon_port_max_pq_get();
+	int pq;
+
+	/*
+	 * pon_max_pq is 0 when the PON port has not been initialized
+	 * (non-PON board variant). Skip silently in that case.
+	 */
+	if (!pon_max_pq) {
+		edma_debug("PON port not initialized, skipping PQ enable\n");
+		return;
+	}
+
+	for (pq = pon_start_pq; pq < (pon_start_pq + pon_max_pq); pq++) {
+		if (ppe_drv_qos_queue_enable(pq) != PPE_DRV_RET_SUCCESS)
+			edma_err("Failed to enable PON PQ %d\n", pq);
+	}
+}
+#endif /* NSS_DP_PON_SUPPORT */
+
