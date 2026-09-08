@@ -13,6 +13,12 @@
 #include "edma.h"
 #include "edma_debug.h"
 
+/*
+ * IPQ96XX platform variants ship with either 4 or 5 CPU cores enabled.
+ * EDMA ring maps are initialised based on NR_CPUS, which is fixed at
+ * kernel build time to match the target board profile.
+ */
+#if (NR_CPUS == 5)
 int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
 int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0,8,16,24,32,-1,-1,-1,-1,-1};
 int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1,-1,-1};
@@ -20,6 +26,18 @@ int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,11,-1,-1,-1
 int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,11,2,3,4,5,6};
 int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,11,2,3,4,5,6};
 int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10,11,11};
+#elif (NR_CPUS == 4)
+int edma_dp_host_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {7,8,9,10,-1,-1,-1,-1};
+int edma_dp_host_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {0,8,16,24,-1,-1,-1,-1};
+int edma_dp_host_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {7,8,9,10,-1,-1,-1,-1};
+int edma_dp_host_tx_rings[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,-1,-1,-1,-1};
+int edma_dp_host_txcmpl_rings[EDMA_MAX_TXCMPL_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
+int edma_dp_host_txcmpl_map[EDMA_MAX_TXDESC_RING_PER_TYPE] = {7,8,9,10,2,3,4,5};
+int edma_dp_host_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {7,7,8,8,9,9,10,10};
+#else
+#error "Unsupported NR_CPUS for ipq96xx EDMA host ring maps"
+#endif
+
 int edma_dp_boot_rx_fill_cnt = 1024;
 uint32_t edma_dp_host_rx_ring_sz = 2048;
 uint32_t edma_dp_host_rxfill_ring_sz = 2048;
@@ -39,11 +57,7 @@ int edma_dp_ppe_ds_txcmpl_rings[EDMA_PPEDS_MAX_NODES] = {0, 1};
  * PPEVP ring info
  */
 int edma_dp_ppe_vp_num_tx_rings = EDMA_MAX_TXDESC_RING_PPEVP;
-int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP] = {2,3,4,5,6};
-int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP] = {2,3,4,5,6};
 int edma_dp_ppe_vp_num_tx_rings_per_core = EDMA_MAX_TX_RINGS_PER_CORE;
-int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5, 6, 6};
-uint32_t edma_dp_ppe_vp_tx_ring_sz = 2048;
 
 /*
  * VP features ring info.
@@ -52,12 +66,30 @@ uint32_t edma_dp_ppe_vp_tx_ring_sz = 2048;
  * NSS_DP_VP_FEAT_NUM_RINGS and the arrays below.
  */
 int edma_dp_ppe_vp_feat_num_rings = NSS_DP_VP_FEAT_NUM_RINGS;
+uint32_t edma_dp_ppe_vp_feat_rx_ring_sz = 4096;
+uint32_t edma_dp_ppe_vp_feat_rxfill_ring_sz = 4096;
+uint32_t edma_dp_ppe_vp_tx_ring_sz = 2048;
+
+#if (NR_CPUS == 5)
+int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP] = {2,3,4,5,6};
+int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP] = {2,3,4,5,6};
+int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5, 6, 6};
+
 int edma_dp_ppe_vp_feat_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {12, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 int edma_dp_ppe_vp_feat_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {40, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 int edma_dp_ppe_vp_feat_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {12, -1, -1, -1, -1, -1, -1, -1, -1, -1};
 int edma_dp_ppe_vp_feat_type_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {EDMA_VP_FEAT_TYPE_CAPWAP, -1, -1, -1, -1, -1, -1, -1, -1, -1};
-uint32_t edma_dp_ppe_vp_feat_rx_ring_sz = 4096;
-uint32_t edma_dp_ppe_vp_feat_rxfill_ring_sz = 4096;
+#elif (NR_CPUS == 4)
+int edma_dp_ppe_vp_tx_rings[EDMA_MAX_TXDESC_RING_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_txcmpl_map[EDMA_MAX_TXCMPL_RING_PPEVP] = {2,3,4,5};
+int edma_dp_ppe_vp_tx_ring_to_core_map[EDMA_MAX_TXDESC_TO_CORE_MAP_PER_TYPE] = {2, 2, 3, 3, 4, 4, 5, 5};
+int edma_dp_ppe_vp_feat_rx_rings[EDMA_MAX_RXDESC_RING_PER_TYPE] = {12, -1, -1, -1, -1, -1, -1, -1};
+int edma_dp_ppe_vp_feat_rx_queue_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {40, -1, -1, -1, -1, -1, -1, -1};
+int edma_dp_ppe_vp_feat_rxfill_map[EDMA_MAX_RXFILL_RING_PER_TYPE] = {12, -1, -1, -1, -1, -1, -1, -1};
+int edma_dp_ppe_vp_feat_type_map[EDMA_MAX_RXDESC_RING_PER_TYPE] = {EDMA_VP_FEAT_TYPE_CAPWAP, -1, -1, -1, -1, -1, -1, -1};
+#else
+#error "Unsupported NR_CPUS for ipq96xx EDMA PPE-VP ring maps"
+#endif
 
 #ifdef NSS_DP_HW_GRO
 int edma_dp_gro_ppe_queue_base = EDMA_GRO_PPE_QUEUE_BASE;
