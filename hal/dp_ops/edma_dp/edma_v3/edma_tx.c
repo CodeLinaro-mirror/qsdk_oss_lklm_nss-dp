@@ -431,6 +431,46 @@ static inline bool edma_tx_is_tso_eligible(struct sk_buff *skb)
 }
 
 /*
+ * edma_tx_fill_tso_desc()
+ *	Populate common TSO fields on Tx descriptor
+ */
+static inline void edma_tx_fill_tso_desc(struct edma_pri_txdesc *txd, struct sk_buff *skb,
+					struct edma_tx_stats *stats)
+{
+	uint32_t mss;
+
+	/*
+	 * Check if the packet needs TSO
+	 * This will be mostly true for SG packets.
+	 */
+	if (unlikely(!edma_tx_is_tso_eligible(skb))) {
+		return;
+	}
+
+	mss = skb_shinfo(skb)->gso_size;
+
+	/*
+	 * If MSS<256, HW will do TSO using MSS=256,
+	 * if MSS>10K, HW will do TSO using MSS=10K,
+	 * else HW will report error 0x200000 in Tx Cmpl
+	 */
+	if (mss < EDMA_TX_TSO_MSS_MIN)
+		mss = EDMA_TX_TSO_MSS_MIN;
+	else if (mss > EDMA_TX_TSO_MSS_MAX)
+		mss = EDMA_TX_TSO_MSS_MAX;
+
+	EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
+	EDMA_TXDESC_MSS_SET(txd, mss);
+
+	/*
+	 * Update tso stats
+	 */
+	u64_stats_update_begin(&stats->syncp);
+	stats->tx_tso_pkts++;
+	u64_stats_update_end(&stats->syncp);
+}
+
+/*
  * edma_tx_skb_nr_frags()
  *	Process Tx for skb with nr_frags
  */
@@ -578,7 +618,7 @@ static inline void edma_tx_fill_vp_desc(struct nss_dp_dev *dp_dev, struct edma_p
  *	Populate descriptor fields to bypass PPE processing and forward
  */
 static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_pri_txdesc *txd,
-					struct sk_buff *skb, struct edma_tx_stats *stats)
+					struct sk_buff *skb)
 {
 	/*
 	 * Offload L3/L4 checksum computation
@@ -593,35 +633,6 @@ static inline void edma_tx_fill_pp_desc(struct nss_dp_dev *dp_dev, struct edma_p
 	EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, dp_dev->pt_info.dst_pt_mode_val);
 	EDMA_TXDESC_SERVICE_CODE_SET(txd, dp_dev->pt_info.sc);
 	EDMA_TXDESC_INT_PRI_SET(txd, skb_get_int_pri(skb));
-
-	/*
-	 * Check if the packet needs TSO
-	 * This will be mostly true for SG packets.
-	 */
-	if (unlikely(edma_tx_is_tso_eligible(skb))) {
-		uint32_t mss;
-		mss = skb_shinfo(skb)->gso_size;
-
-		/*
-		 * If MSS<256, HW will do TSO using MSS=256,
-		 * if MSS>10K, HW will do TSO using MSS=10K,
-		 * else HW will report error 0x200000 in Tx Cmpl
-		 */
-		if (mss < EDMA_TX_TSO_MSS_MIN)
-			mss = EDMA_TX_TSO_MSS_MIN;
-		else if (mss > EDMA_TX_TSO_MSS_MAX)
-			mss = EDMA_TX_TSO_MSS_MAX;
-
-		EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
-		EDMA_TXDESC_MSS_SET(txd, mss);
-
-		/*
-		 * Update tso stats
-		 */
-		u64_stats_update_begin(&stats->syncp);
-		stats->tx_tso_pkts++;
-		u64_stats_update_end(&stats->syncp);
-	}
 
 	/*
 	 * Set the src info as destination dev in case if
@@ -686,8 +697,10 @@ static struct edma_pri_txdesc *edma_tx_skb_first_desc(struct nss_dp_dev *dp_dev,
 	if (dptxi) {
 		edma_tx_fill_vp_desc(dp_dev, txd, skb, dptxi);
 	} else {
-		edma_tx_fill_pp_desc(dp_dev, txd, skb, stats);
+		edma_tx_fill_pp_desc(dp_dev, txd, skb);
 	}
+
+	edma_tx_fill_tso_desc(txd, skb, stats);
 
 	if (unlikely(skb_cloned(skb))) {
 		EDMA_TXDESC_PASS_THROUGH_MODE_SET(txd, EDMA_TXDESC_PASS_THROUGH_MODE_FULL_DATA);
