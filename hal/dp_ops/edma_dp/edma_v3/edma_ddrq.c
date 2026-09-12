@@ -2333,6 +2333,9 @@ static int edma_ddrq_get_ddrq_mem_regions(void)
  */
 int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg)
 {
+	int i;
+	bool ac_en, ac_fc_en;
+
 	if (edma_ddrq_get_def_cfg(ddrq_cfg)) {
 		edma_err("Error in getting DDRQ default configuration\n");
 		return -EINVAL;
@@ -2356,6 +2359,20 @@ int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg)
 	if (!ppe_drv_isram_queue_profile_init(edma_ddrq_isq_base)) {
 		edma_err("Error in configuring ISRAM queue (%d) base for PPE ports\n", edma_ddrq_isq_base);
 		return -EINVAL;
+	}
+
+	/*
+	 * Enable packets drop for the ISQs.
+	 * When ac_en/ac_fc_en are set to 1, the flow control will be overriden
+	 * for that queue and packets drop gets enabled.
+	 */
+	ac_en = true;
+	ac_fc_en = true;
+	for (i = 0; i < EDMA_DDRQ_ISQ_NUM; i++) {
+		if (!ppe_drv_qos_ac_ctrl_cfg(edma_ddrq_isq_base + i, ac_en, ac_fc_en)) {
+			edma_err("Error in configuring ISQ qid:%d ac_en:%d ac_fc_en:%d configuration\n",
+					edma_ddrq_isq_base + i, ac_en, ac_fc_en);
+		}
 	}
 
 	if (edma_ddrq_occupancy_stats_start() != DDRQ_RET_SUCCESS) {
