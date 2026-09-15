@@ -22,6 +22,13 @@
 #define NSS_DP_HW_MAX_FC_GRP		32
 
 /*
+ * TX maximum supported ports for HTT switch
+ */
+#ifdef NSS_DP_NETSTANDBY
+#define NSS_DP_HAL_HTT_SWT_MAX_PORTS	5
+#endif
+
+/*
  * Maximum supported GSO segments
  */
 #define NSS_DP_HAL_GSO_MAX_SEGS		GSO_MAX_SEGS
