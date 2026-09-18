@@ -12,6 +12,7 @@
 #include "edma_cfg_rx.h"
 #include "edma_cfg_tx.h"
 #include <ppe_drv.h>
+#include <ppe_drv_public.h>
 
 void *edma_ppeds_tx_ring_sec_mem;
 int edma_ppeds_tx_ring_entries;
@@ -305,19 +306,20 @@ void edma_ppeds_pon_pq_disable(void)
 {
 	int pon_start_pq = ppe_drv_pon_port_start_pq_get();
 	int pon_max_pq = ppe_drv_pon_port_max_pq_get();
+	uint32_t pon_port = ppe_drv_qos_pon_port_get();
 	int pq;
 
 	/*
-	 * pon_max_pq is 0 when the PON port has not been initialized
-	 * (non-PON board variant). Skip silently in that case.
+	 * pon_port and pon_max_pq is 0 when the PON port has not been initialized
+	 * (non-PON board variant). In that case don't diable the pqs.
 	 */
-	if (!pon_max_pq) {
+	if (!pon_port || !pon_max_pq) {
 		edma_debug("PON port not initialized, skipping PQ disable\n");
 		return;
 	}
 
 	for (pq = pon_start_pq; pq < (pon_start_pq + pon_max_pq); pq++) {
-		if (ppe_drv_qos_queue_disable(0, pq) != PPE_DRV_RET_SUCCESS)
+		if (ppe_drv_qos_queue_disable(pon_port, pq) != PPE_DRV_RET_SUCCESS)
 			edma_err("Failed to disable/flush PON PQ %d\n", pq);
 	}
 }
