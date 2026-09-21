@@ -1569,6 +1569,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 	rxfill_info[ring_id].ring_type = EDMA_RING_TYPE_DS;
 	rxfill_info[ring_id].status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 	rxfill_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+	rxfill_info[ring_id].rxfill_ring = &wifi7_cfg->rxfill_ring;
 
 	ring_id = wifi7_cfg->rx_ring.ring_id;
 	if (rxdesc_info[ring_id].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
@@ -1582,6 +1583,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 	rxdesc_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
 	rxdesc_info[ring_id].ppe_queue_base = wifi7_cfg->ppe_qid;
 	rxdesc_info[ring_id].ppe_num_queues = wifi7_cfg->ppe_num_queues;
+	rxdesc_info[ring_id].rxdesc_ring = &wifi7_cfg->rx_ring;
 
 	ring_id = wifi7_cfg->tx_ring.id;
 	if (txdesc_info[ring_id].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
@@ -1593,6 +1595,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 	txdesc_info[ring_id].ring_type = EDMA_RING_TYPE_DS;
 	txdesc_info[ring_id].status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 	txdesc_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+	txdesc_info[ring_id].txdesc_ring = &wifi7_cfg->tx_ring;
 
 	ring_id = wifi7_cfg->txcmpl_ring.id;
 	if (txcmpl_info[ring_id].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE) {
@@ -1604,6 +1607,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 	txcmpl_info[ring_id].ring_type = EDMA_RING_TYPE_DS;
 	txcmpl_info[ring_id].status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 	txcmpl_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+	txcmpl_info[ring_id].txcmpl_ring = &wifi7_cfg->txcmpl_ring;
 
 	edma_debug("PPE-DS node(%d): Rxfill ring: %d, Tx complete ring: %d,"
 			" Rx ring: %d, Tx ring: %d, Queue start id: %d,"

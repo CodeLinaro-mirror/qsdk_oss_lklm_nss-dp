@@ -1118,6 +1118,7 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 		rxfill_info = &egc->rxfill_info[ring_num];
 		rxfill_info->status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 		rxfill_info->type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+		rxfill_info->rxfill_ring = &wifi8_cfg->rxfill_ring;
 
 		/*
 		 * Primary txcmpl ring (HW managed)
@@ -1134,6 +1135,7 @@ static bool edma_ppeds_get_ring_info_to_node(struct edma_ppeds *ppeds_node, nss_
 		txcmpl_info = &egc->txcmpl_info[ring_num];
 		txcmpl_info->status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 		txcmpl_info->type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+		txcmpl_info->txcmpl_ring = &wifi8_cfg->txcmpl_ring;
 	} else {
 		ring_num = node_info->rx_map[0].rx_fill_ring_id;
 		wifi8_cfg->rxfill_ring.ring_id = ring_num;
@@ -2166,6 +2168,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 	rxfill_info[ring_id].ring_type = EDMA_RING_TYPE_DS;
 	rxfill_info[ring_id].status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 	rxfill_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+	rxfill_info[ring_id].rxfill_ring = &wifi8_cfg->rxfill_ring;
 
 	for (j = 0; j < node_info->num_rx_rings; j++) {
 		ring_id = wifi8_cfg->rx_ring[j].ring_id;
@@ -2180,6 +2183,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 		rxdesc_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
 		rxdesc_info[ring_id].ppe_queue_base = wifi8_cfg->ppe_qid[j];
 		rxdesc_info[ring_id].ppe_num_queues = wifi8_cfg->ppe_num_queues[j];
+		rxdesc_info[ring_id].rxdesc_ring = &wifi8_cfg->rx_ring[j];
 	}
 
 	for (j = 0; j < node_info->num_tx_rings; j++) {
@@ -2193,6 +2197,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 		txdesc_info[ring_id].ring_type = EDMA_RING_TYPE_DS;
 		txdesc_info[ring_id].status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 		txdesc_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+		txdesc_info[ring_id].txdesc_ring = &wifi8_cfg->tx_ring[j];
 	}
 
 	ring_id = wifi8_cfg->txcmpl_ring.id;
@@ -2205,6 +2210,7 @@ static nss_dp_ppeds_handle_t *edma_ppeds_inst_alloc(const struct nss_dp_ppeds_cb
 	txcmpl_info[ring_id].ring_type = EDMA_RING_TYPE_DS;
 	txcmpl_info[ring_id].status_flags |= EDMA_RING_STATUS_FLAGS_IN_USE;
 	txcmpl_info[ring_id].type_flags |= EDMA_RING_TYPE_FLAGS_DS;
+	txcmpl_info[ring_id].txcmpl_ring = &wifi8_cfg->txcmpl_ring;
 
 	drv->ppeds_node_cfg[i].node_state = EDMA_PPEDS_NODE_STATE_ALLOC;
 	write_unlock_bh(&drv->lock);

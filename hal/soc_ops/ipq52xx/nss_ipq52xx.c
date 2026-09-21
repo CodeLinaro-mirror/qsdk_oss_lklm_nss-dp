@@ -299,7 +299,10 @@ int32_t nss_dp_hal_configure_clocks(void *ctx)
  */
 int32_t nss_dp_hal_hw_reset(void *ctx)
 {
-	struct reset_control *edma_hw_rst, *edma_cfg_rst;
+	struct reset_control *edma_hw_rst;
+#if defined(NSS_DP_CONFIG_RST)
+	struct reset_control *edma_cfg_rst;
+#endif
 	struct platform_device *pdev = (struct platform_device *)ctx;
 
 	edma_hw_rst = devm_reset_control_get(&pdev->dev, EDMA_HW_RESET_ID);
@@ -308,11 +311,13 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
 		return -EINVAL;
 	}
 
+#if defined(NSS_DP_CONFIG_RST)
 	edma_cfg_rst = devm_reset_control_get(&pdev->dev, EDMA_CFG_RESET_ID);
 	if (IS_ERR(edma_hw_rst)) {
 		edma_err("Error: edma HW CFG reset failed\n");
 		return -EINVAL;
 	}
+#endif
 
 	/*
  	 * Store the obtained hardware reset handle (`edma_hw_rst`) in the global context
@@ -333,17 +338,21 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
 	reset_control_assert(edma_hw_rst);
 	udelay(100);
 
-	reset_control_deassert(edma_hw_rst);
+#if defined(NSS_DP_CONFIG_RST)
+	reset_control_assert(edma_cfg_rst);
 	udelay(100);
+#endif
 
 	/*
 	 * EDMA configuration reset.
 	 */
-	reset_control_assert(edma_cfg_rst);
+	reset_control_deassert(edma_hw_rst);
 	udelay(100);
 
+#if defined(NSS_DP_CONFIG_RST)
 	reset_control_deassert(edma_cfg_rst);
 	udelay(100);
+#endif
 
 	return 0;
 }

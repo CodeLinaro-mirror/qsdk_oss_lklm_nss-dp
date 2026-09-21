@@ -227,6 +227,7 @@ void edma_ppeds_reset_gbl_ds_ctx()
 				(gbl_ctx->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)) {
 			gbl_ctx->rxdesc_info[i].status_flags = 0;
 			gbl_ctx->rxdesc_info[i].type_flags = 0;
+			gbl_ctx->rxdesc_info[i].rxdesc_ring = NULL;
 			edma_debug("Reset DS ring for RX descriptor ring %u\n", i);
 		}
 	}
@@ -240,6 +241,7 @@ void edma_ppeds_reset_gbl_ds_ctx()
 			gbl_ctx->rxfill_info[i].status_flags = 0;
 			gbl_ctx->rxfill_info[i].type_flags = 0;
 			gbl_ctx->rxfill_info[i].flags = 0;
+			gbl_ctx->rxfill_info[i].rxfill_ring = NULL;
 			edma_debug("Reset DS ring for RX fill ring %u\n", i);
 		}
 	}
@@ -252,6 +254,7 @@ void edma_ppeds_reset_gbl_ds_ctx()
 				(gbl_ctx->txdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)) {
 			gbl_ctx->txdesc_info[i].status_flags = 0;
 			gbl_ctx->txdesc_info[i].type_flags = 0;
+			gbl_ctx->txdesc_info[i].txdesc_ring = NULL;
 			edma_debug("Reset DS ring for TX descriptor ring %u\n", i);
 		}
 	}
@@ -264,6 +267,7 @@ void edma_ppeds_reset_gbl_ds_ctx()
 				(gbl_ctx->txcmpl_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE)) {
 			gbl_ctx->txcmpl_info[i].status_flags = 0;
 			gbl_ctx->txcmpl_info[i].type_flags = 0;
+			gbl_ctx->txcmpl_info[i].txcmpl_ring = NULL;
 			edma_debug("Reset DS ring for TX completion ring %u\n", i);
 		}
 	}
