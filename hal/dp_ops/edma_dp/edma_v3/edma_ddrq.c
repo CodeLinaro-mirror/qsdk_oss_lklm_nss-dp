@@ -1594,8 +1594,14 @@ static int edma_ddrq_def_lp_cfg_set(edma_ddrq_lp_cfg_t *lp_cfg, edma_ddrq_idv_cf
 		edma_err("Error in setting DDRQ LP cpu codes configurations\n");
 		return -EINVAL;
 	}
+
 	if (!ppe_drv_sc_ucast_qbase_profile_set(PPE_DRV_SC_DDRQ_LP_SC, lp_cfg->queue_base)) {
 		edma_err("Error in setting service code queue base for DDRQ special loopback SC:%d\n", PPE_DRV_SC_DDRQ_LP_SC);
+		return -EINVAL;
+	}
+
+	if (!ppe_drv_sc_ucast_qbase_profile_set(PPE_DRV_SC_DDRQ_LP_SC_BRIDGE, lp_cfg->queue_base)) {
+		edma_err("Error in setting service code queue base for DDRQ special bridged loopback SC:%d\n", PPE_DRV_SC_DDRQ_LP_SC_BRIDGE);
 		return -EINVAL;
 	}
 
