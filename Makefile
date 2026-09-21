@@ -109,6 +109,7 @@ endif
 
 ifeq ($(SoC),$(filter $(SoC),ipq52xx ipq96xx))
 ccflags-y += -DNSS_DP_MAX_TXCOMP_TIMEOUT
+ccflags-y += -DNSS_DP_CONFIG_RST
 qca-nss-dp-objs += nss_dp_vp_main.o \
 		   nss_dp_ethtool_priv.o \
 		   hal/dp_ops/edma_dp/edma_v3/edma.o \

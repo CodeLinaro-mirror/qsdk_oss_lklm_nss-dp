@@ -779,9 +779,9 @@ void edma_cfg_tx_rings_cleanup(struct edma_gbl_ctx *egc)
 
 		if (egc->txdesc_info[i].txdesc_ring) {
 			kfree(egc->txdesc_info[i].txdesc_ring);
-			egc->txdesc_info[i].txdesc_ring = NULL;
 		}
 
+		egc->txdesc_info[i].txdesc_ring = NULL;
 		egc->txdesc_info[i].status_flags = 0;
 	}
 
@@ -798,9 +798,9 @@ void edma_cfg_tx_rings_cleanup(struct edma_gbl_ctx *egc)
 
 		if (egc->txcmpl_info[i].txcmpl_ring) {
 			kfree(egc->txcmpl_info[i].txcmpl_ring);
-			egc->txcmpl_info[i].txcmpl_ring = NULL;
 		}
 
+		egc->txcmpl_info[i].txcmpl_ring = NULL;
 		egc->txcmpl_info[i].status_flags = 0;
 	}
 }

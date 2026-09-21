@@ -73,6 +73,8 @@ static inline void edma_cfg_rx_pp_free(struct edma_rxfill_ring *rxfill_ring)
 		return;
 	}
 
+	WRITE_ONCE(rxfill_ring->page_pool->p.napi, NULL);
+
 	page_pool_destroy(rxfill_ring->page_pool);
 	rxfill_ring->page_pool = NULL;
 }
@@ -236,7 +238,9 @@ void edma_cfg_rx_fill_ring_cleanup(struct edma_gbl_ctx *egc,
 		}
 
 		if (rxfill_ring->page_pool) {
-			napi_pp_put_page(virt_to_page(opaque), false);
+			if (opaque)
+				page_pool_put_full_page(rxfill_ring->page_pool, virt_to_page(opaque), false);
+
 			continue;
 		}
 
@@ -1712,6 +1716,12 @@ void edma_cfg_rx_desc_ring_disable(struct edma_rxdesc_ring *rxdesc_ring)
 	data |= EDMA_RXDESC_RX_DISABLE;
 	edma_reg_write(EDMA_REG_RXDESC_DISABLE(rxdesc_ring->ring_id), data);
 
+	/*
+	 * TODO: This delay was added because of a hardware issue where the DISABLE_DONE
+	 * register was not indicating if the ring disable is successful or not.
+	 * Once this bug is fixed, revert to the original while loop to check the DISABLE_DONE bit.
+	 */
+	mdelay(5);
 	edma_debug("rx ring %d disabled\n", rxdesc_ring->ring_id);
 }
 
@@ -2051,9 +2061,9 @@ void edma_cfg_rx_rings_cleanup(struct edma_gbl_ctx *egc)
 
 		if (egc->rxfill_info[i].rxfill_ring) {
 			kfree(egc->rxfill_info[i].rxfill_ring);
-			egc->rxfill_info[i].rxfill_ring = NULL;
 		}
 
+		egc->rxfill_info[i].rxfill_ring = NULL;
 		egc->rxfill_info[i].status_flags = 0;
 	}
 
@@ -2070,9 +2080,9 @@ void edma_cfg_rx_rings_cleanup(struct edma_gbl_ctx *egc)
 
 		if (egc->rxdesc_info[i].rxdesc_ring) {
 			kfree(egc->rxdesc_info[i].rxdesc_ring);
-			egc->rxdesc_info[i].rxdesc_ring = NULL;
 		}
 
+		egc->rxdesc_info[i].rxdesc_ring = NULL;
 		egc->rxdesc_info[i].status_flags = 0;
 	}
 }
