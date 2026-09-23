@@ -980,15 +980,25 @@ enum edma_tx edma_tx_process_gem(struct sk_buff *skb,
 
 	app_data = rcu_dereference(nss_dp_gem_tx_app_data_g);
 
-	/* Allow memory debug accounting around the callback. */
-	mem_debug_update_skb(skb);
-	consumed = gem_tx_cb(app_data, skb, gem_txi);
-	mem_debug_update_skb(skb);
+	/*
+	 * Allow memory debug accounting around the callback. This is
+	 * needed only when the packet is not fast forwarded/fast xmited.
+	 *
+	 * gem_tx_cb() is called only for non-SFE forwarded packets. For
+	 * SFE forwarded packets it is expected that PON specific
+	 * inputs/processing are already taken care by SFE.
+	 */
+	if (!(skb->fast_forwarded || skb->fast_xmit)) {
+		mem_debug_update_skb(skb);
+		consumed = gem_tx_cb(app_data, skb, gem_txi);
+		mem_debug_update_skb(skb);
 
-	if (unlikely(consumed)) {
-		rcu_read_unlock();
-		return EDMA_TX_GEM_CONSUMED;
+		if (unlikely(consumed)) {
+			rcu_read_unlock();
+			return EDMA_TX_GEM_CONSUMED;
+		}
 	}
+
 	rcu_read_unlock();
 
 	return EDMA_TX_OK;

@@ -1290,22 +1290,12 @@ static int edma_rx_dp_extension_process(struct nss_dp_dev *dp_dev, struct sk_buf
 bool edma_rx_process_gem(const struct edma_rxdesc_desc *rxdesc_desc,
 		struct sk_buff *skb)
 {
-	nss_dp_gem_rx_cb_t gem_rx_cb;
 	struct gem_skb_ext *gem_ext;
-	void *app_data;
-
-	rcu_read_lock();
-	gem_rx_cb = rcu_dereference(nss_dp_gem_rx_reg_cb_g);
-	if (unlikely(!gem_rx_cb)) {
-		rcu_read_unlock();
-		return false;
-	}
 
 	/* Attach GEM id to skb for downstream consumers. */
 	gem_ext = skb_ext_add(skb, SKB_EXT_GEM);
 	if (unlikely(!gem_ext)) {
 		mem_debug_update_skb(skb);
-		rcu_read_unlock();
 		return false;
 	}
 
@@ -1313,14 +1303,6 @@ bool edma_rx_process_gem(const struct edma_rxdesc_desc *rxdesc_desc,
 
 	mem_debug_update_skb(skb);
 
-	app_data  = rcu_dereference(nss_dp_gem_rx_app_data_g);
-	if (unlikely(gem_rx_cb(app_data, skb))) {
-		mem_debug_update_skb(skb);
-		rcu_read_unlock();
-		return true;
-	}
-
-	rcu_read_unlock();
 	return false;
 }
 #endif
