@@ -110,13 +110,13 @@ static void edma_rx_wifi_qos_udp_st(struct edma_gbl_ctx *egc, struct edma_rxdesc
 				    struct nss_dp_vp_rx_info *vprxi_p, struct edma_rxdesc_sec_desc *rxdesc_sec);
 
 static edma_rx_wifi_qos_handler_t edma_rx_wifi_qos_handlers[] = {
-	edma_rx_wifi_qos_none,        /**< PPE_DRV_TREE_ID_TYPE_NONE */
-	edma_rx_wifi_qos_sawf,        /**< PPE_DRV_TREE_ID_TYPE_SAWF */
-	edma_rx_wifi_qos_scs,         /**< PPE_DRV_TREE_ID_TYPE_SCS */
-	edma_rx_wifi_qos_wifi_tid,    /**< PPE_DRV_TREE_ID_TYPE_WIFI_TID */
-	edma_rx_wifi_qos_mlo_assist,  /**< PPE_DRV_TREE_ID_TYPE_MLO_ASSIST */
-	edma_rx_wifi_qos_wifi8_ppeds, /**< PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS */
-	edma_rx_wifi_qos_udp_st       /**< PPE_DRV_TREE_ID_TYPE_UDP_ST */
+	[PPE_DRV_TREE_ID_TYPE_NONE] = edma_rx_wifi_qos_none,		/**< PPE_DRV_TREE_ID_TYPE_NONE */
+	[PPE_DRV_TREE_ID_TYPE_SAWF] = edma_rx_wifi_qos_sawf,		/**< PPE_DRV_TREE_ID_TYPE_SAWF */
+	[PPE_DRV_TREE_ID_TYPE_SCS] = edma_rx_wifi_qos_scs,		/**< PPE_DRV_TREE_ID_TYPE_SCS */
+	[PPE_DRV_TREE_ID_TYPE_WIFI_TID] = edma_rx_wifi_qos_wifi_tid,	/**< PPE_DRV_TREE_ID_TYPE_WIFI_TID */
+	[PPE_DRV_TREE_ID_TYPE_MLO_ASSIST] = edma_rx_wifi_qos_mlo_assist,/**< PPE_DRV_TREE_ID_TYPE_MLO_ASSIST */
+	[PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS] = edma_rx_wifi_qos_wifi8_ppeds,	/**< PPE_DRV_TREE_ID_TYPE_WIFI8_PPEDS */
+	[PPE_DRV_TREE_ID_TYPE_UDP_ST] = edma_rx_wifi_qos_udp_st		/**< PPE_DRV_TREE_ID_TYPE_UDP_ST */
 };
 
 /*
