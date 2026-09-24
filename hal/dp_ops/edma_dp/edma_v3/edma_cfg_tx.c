@@ -256,11 +256,14 @@ static void edma_cfg_tx_desc_ring_configure(struct edma_txdesc_ring *txdesc_ring
 	/*
 	 * Configure group ID for flow control and TSO IDENT UPDATE CTRL for this Tx ring
 	 * FC_GRP_ID: Flow control group identifier for this ring
-	 * TSO_IDENT_UPDATE_CTRL: Set to EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER to allow
-	 * hardware parser to update TSO identifier fields
+	 * TSO_IDENT_UPDATE_CTRL: Configurable via edma_tso_ipid_update_ctrl module param.
+	 * Default is EDMA_TXDESC_TSO_IDENT_UPDATE_BY_DESCRIPTOR (Case 2, bits[14:13]=01)
+	 * so the per-descriptor tso_ipid_mode flag is consulted by the HW.
+	 * In Case 2, when tso_ipid_mode==1 the HW further checks DF/MF/offset flags;
+	 * when tso_ipid_mode==0 the HW always increments IPID by 1.
 	 */
 	ring_ctrl_cfg |= (EDMA_TXDESC_CTRL_FC_GRP_ID_SET(txdesc_ring->fc_grp_id) |
-			EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL_SET(EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER));
+			EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL_SET(txdesc_ring->tso_ident_update_ctrl));
 	edma_reg_write(EDMA_REG_TXDESC_CTRL(txdesc_ring->id), ring_ctrl_cfg);
 	edma_info("EDMA_REG_TXDESC_CTRL (%d) configured value is 0x%0x, reg value : 0x%0x\n",
 				 txdesc_ring->id, ring_ctrl_cfg,
@@ -665,6 +668,12 @@ static int edma_cfg_tx_rings_setup(struct edma_gbl_ctx *egc)
 			edma_info("Edma Tx ring: (%d) configured mode value is %d. edma_tx_ring_mode_bitmask: 0x%0x\n",
 					 txdesc_ring->id, txdesc_ring->pre_hdr_mode_en,
 					 edma_tx_ring_mode_bitmask);
+
+			txdesc_ring->tso_ident_update_ctrl = (uint8_t)edma_tso_ipid_update_ctrl;
+
+			edma_info("Edma Tx ring: (%d) tso_ident_update_ctrl: %d\n",
+					 txdesc_ring->id, txdesc_ring->tso_ident_update_ctrl);
+
 
 			ret = edma_cfg_tx_desc_ring_setup(txdesc_ring);
 			if (ret != 0) {

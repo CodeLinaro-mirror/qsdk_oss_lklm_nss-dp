@@ -81,6 +81,16 @@ struct edma_tx_cb {
 #define EDMA_TXDESC_MSS_SHIFT			16
 #define EDMA_TXDESC_MSS_MASK			0xFFFF0000
 #define EDMA_TXDESC_MSS_SET(desc, x)		((desc)->word6 |= (((x) << EDMA_TXDESC_MSS_SHIFT) & EDMA_TXDESC_MSS_MASK))
+/*
+ * adding the below three macros for enabling support for fixed IP IDs. 
+ * since fixed IP ID is now supported in hardware.
+ */
+#define EDMA_TXDESC_TSO_IPID_MODE_SHIFT     15
+#define EDMA_TXDESC_TSO_IPID_MODE_MASK      (0x1 << EDMA_TXDESC_TSO_IPID_MODE_SHIFT)
+#define EDMA_TXDESC_TSO_IPID_MODE_SET(desc, x) \
+      ((desc)->word7 |= (((x) << EDMA_TXDESC_TSO_IPID_MODE_SHIFT) & EDMA_TXDESC_TSO_IPID_MODE_MASK))
+
+
 #define EDMA_TXDESC_MORE_BIT_MASK	0x40000000
 #define EDMA_TXDESC_MORE_BIT_SHIFT	30
 #define EDMA_TXDESC_MORE_BIT_SET(desc, x)	((desc)->word1 |= (((x) << EDMA_TXDESC_MORE_BIT_SHIFT) & EDMA_TXDESC_MORE_BIT_MASK))
@@ -366,6 +376,7 @@ struct edma_txdesc_ring {
 	uint32_t count;			/* Number of descriptors */
 	uint32_t desc_size;		/* Size of the ring descriptor in bytes */
 	uint8_t fc_grp_id;		/* Flow control group ID */
+	uint8_t tso_ident_update_ctrl;	/* TSO IDENT UPDATE CTRL value for this ring */
 };
 
 /*
