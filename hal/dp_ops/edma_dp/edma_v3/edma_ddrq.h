@@ -72,7 +72,14 @@ static inline void edma_reg_write(uint32_t reg_off, uint32_t val);
 #define OFFSET_IN_WORD(n)	(32 - ((n) % 32))
 #define OFFSET_IN_DOUBLE_WORD(n)	(64 - ((n) % 64))
 
+/*
+ * Given the DDRQ index in EDMA_DDRQ_CMN_IDX(index), this will convert
+ * the DDRQ index to the correct index value for EDMA registers which
+ * are common for Loopback rings and DDRQ rings.
+ * Indexes (0-15) are for Loopback rings and (16-175) are for DDRQs (0-159).
+ */
 #define EDMA_DDRQ_CFG_BASE_INDEX		16
+#define EDMA_DDRQ_CMN_IDX(x)		((x) + EDMA_DDRQ_CFG_BASE_INDEX)
 
 #define EDMA_DDRQ_AC_QUEUE_STATE_ENABLED	1
 
