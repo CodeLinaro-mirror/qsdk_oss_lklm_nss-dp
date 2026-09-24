@@ -26,11 +26,11 @@
 #include "nss_dp_hal.h"
 
 #define DP_STANDBY_SWITCH_DEV_ID 0
-#define DP_STANDBY_SWITCH_MHT_DEV_ID 1
+#define DP_STANDBY_SWITCH_EXT_DEV_ID 1	/* MHT switch (ipq53xx/ipq54xx) and HTT switch (ipq52xx/ipq96xx) */
 
 struct nss_dp_netstandby_gbl_ctx standby_gbl_ctx;
 
-#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX) || defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
 /*
  * nss_dp_netstandby_is_switch_connected()
  *	Check if switch is connected
@@ -72,13 +72,13 @@ int nss_dp_netstandby_exit_standby(void *app_data, struct netstandby_exit_info *
 		return -ENOTSUPP;
 	}
 
-#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX) || defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
 	if (!nss_dp_netstandby_is_switch_connected(gbl_ctx))
 		goto exit_completion;
 
-	sw_err = fal_erp_standby_exit(DP_STANDBY_SWITCH_MHT_DEV_ID);
+	sw_err = fal_erp_standby_exit(DP_STANDBY_SWITCH_EXT_DEV_ID);
 	if (sw_err != SW_OK) {
-		pr_warn("Error in bringing MHT device out of power state\n");
+		pr_warn("Error in bringing external switch device out of power state\n");
 		return -ENOTSUPP;
 	}
 
@@ -111,9 +111,9 @@ int nss_dp_netstandby_enter_standby(void *app_data, struct netstandby_entry_info
 	struct net_device *dev;
 	int32_t mac_id = 0;
 	uint32_t port_active_bmap = 0;
-#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
-	uint32_t port_mht_active_bmap = 0;
-	bool all_mht_down = false;
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX) || defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
+	uint32_t port_ext_active_bmap = 0;
+	bool all_ext_down = false;
 	int index;
 #endif
 
@@ -140,7 +140,7 @@ int nss_dp_netstandby_enter_standby(void *app_data, struct netstandby_entry_info
 			for (j = 0; j < entry_info->iface_cnt; j++) {
 				if (entry_info->dev[j] == dev) {
 					mac_id = ctx->nss_dp[i]->macid;
-#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX) || defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
 					index = nss_dp_get_idx_from_macid(mac_id);
 					if (ctx->nss_dp[index]->is_switch_connected) {
 						break;
@@ -160,31 +160,39 @@ int nss_dp_netstandby_enter_standby(void *app_data, struct netstandby_entry_info
 		return -ENOTSUPP;
 	}
 
-#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX) || defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
 	if (!nss_dp_netstandby_is_switch_connected(gbl_ctx))
 		goto enter_completion;
 
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
 	if (entry_info->nss_info.port_id > NSS_DP_HAL_MHT_SWT_MAX_PORTS) {
 		pr_warn("%p Port_id out of range(%d)\n", ctx, entry_info->nss_info.port_id);
 		fal_erp_standby_exit(DP_STANDBY_SWITCH_DEV_ID);
 		return -EINVAL;
 	}
+#elif defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
+	if (entry_info->nss_info.port_id > NSS_DP_HAL_HTT_SWT_MAX_PORTS) {
+		pr_warn("%p Port_id out of range(%d)\n", ctx, entry_info->nss_info.port_id);
+		fal_erp_standby_exit(DP_STANDBY_SWITCH_DEV_ID);
+		return -EINVAL;
+	}
+#endif
 
 	if ((entry_info->nss_info.flags & NETSTANDBY_ENTER_NSS_FLAG_VALID_PORT_IDX) == NETSTANDBY_ENTER_NSS_FLAG_VALID_PORT_IDX)
-		port_mht_active_bmap |= (1 << entry_info->nss_info.port_id);
+		port_ext_active_bmap |= (1 << entry_info->nss_info.port_id);
 	else if ((entry_info->nss_info.flags & NETSTANDBY_ENTER_NSS_FLAG_VALID_PORT_NONE) == NETSTANDBY_ENTER_NSS_FLAG_VALID_PORT_NONE)
-		all_mht_down = true;
+		all_ext_down = true;
 
 	/*
 	 * TODO: remove this when APP sets NETSTANDBY_ENTER_NSS_FLAG_VALID_PORT_NONE for cases
 	 * where enter command does not take any dev (all port should go down).
 	 */
 	if (entry_info->iface_cnt == 0) {
-		all_mht_down = true;
+		all_ext_down = true;
 	}
 
-	if (port_mht_active_bmap || all_mht_down) {
-		sw_err = fal_erp_standby_enter(DP_STANDBY_SWITCH_MHT_DEV_ID, port_mht_active_bmap);
+	if (port_ext_active_bmap || all_ext_down) {
+		sw_err = fal_erp_standby_enter(DP_STANDBY_SWITCH_EXT_DEV_ID, port_ext_active_bmap);
 		if (sw_err != SW_OK) {
 			pr_warn("%p Error in putting device(%d) to power state(%d)\n", ctx, mac_id, FAL_ERP_LOW_POWER);
 			fal_erp_standby_exit(DP_STANDBY_SWITCH_DEV_ID);
@@ -216,7 +224,7 @@ bool nss_dp_get_eth_info(struct nss_dp_eth_netdev_info ethinfo[], uint8_t array_
 	struct nss_dp_global_ctx *dp_global = &dp_global_ctx;
 	struct nss_dp_dev *dp_priv;
 	uint8_t i  = 0;
-#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX) || defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
 	int port_id = 0;
 	sw_error_t ret;
 	a_bool_t status;
@@ -234,11 +242,11 @@ bool nss_dp_get_eth_info(struct nss_dp_eth_netdev_info ethinfo[], uint8_t array_
 		}
 
 		ethinfo[i].netdev = dp_priv->netdev;
-#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX)
+#if defined(NSS_DP_IPQ53XX) || defined(NSS_DP_IPQ54XX) || defined(NSS_DP_IPQ52XX) || defined(NSS_DP_IPQ96XX)
 		if (dp_global->nss_dp[i]->is_switch_connected) {
 			ethinfo[i].switch_connected = true;
 			for (port_id = 1; port_id <= MAX_MHT_PORTS ; port_id++) {
-				ret = fal_port_link_status_get(DP_STANDBY_SWITCH_MHT_DEV_ID, port_id,  &status);
+				ret = fal_port_link_status_get(DP_STANDBY_SWITCH_EXT_DEV_ID, port_id,  &status);
 				if (ret != SW_OK) {
 					pr_warn("Link get status failed for port:%d ret:%d\n", port_id, ret);
 					return false;
