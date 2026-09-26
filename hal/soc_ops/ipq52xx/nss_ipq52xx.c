@@ -309,7 +309,7 @@ int32_t nss_dp_hal_hw_reset(void *ctx)
 	}
 
 	edma_cfg_rst = devm_reset_control_get(&pdev->dev, EDMA_CFG_RESET_ID);
-	if (IS_ERR(edma_hw_rst)) {
+	if (IS_ERR(edma_cfg_rst)) {
 		edma_err("Error: edma HW CFG reset failed\n");
 		return -EINVAL;
 	}
@@ -483,6 +483,15 @@ nss_dp_ddrq_ret_t nss_dp_hal_ddrq_drop_cnt_stats_get(nss_dp_ddrq_obj_id_t *obj, 
 nss_dp_ddrq_ret_t nss_dp_hal_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats)
 {
 	return edma_ddrq_accu_stats_get(obj, ddrq_accu_stats_info, ddrq_stats);
+}
+
+/*
+ * nss_dp_hal_ddrq_bypass_cfg_set()
+ *	API to set/reset DDRQ bypass configuration
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set)
+{
+	return edma_ddrq_bypass_cfg_set(obj, set);
 }
 #endif 		/* NSS_DP_DDRQ_SUPPORT */
 

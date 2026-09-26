@@ -66,6 +66,7 @@ extern nss_dp_ddrq_ret_t nss_dp_hal_ddrq_occupancy_stats_status_get(uint32_t ddr
 extern nss_dp_ddrq_ret_t nss_dp_hal_ddrq_pending_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_pending_stats_t *ddrq_stats, uint8_t count);
 extern nss_dp_ddrq_ret_t nss_dp_hal_ddrq_drop_cnt_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats);
 extern nss_dp_ddrq_ret_t nss_dp_hal_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats);
+extern nss_dp_ddrq_ret_t nss_dp_hal_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set);
 #endif
 
 #endif	/* __NSS_DP_HAL_H__ */

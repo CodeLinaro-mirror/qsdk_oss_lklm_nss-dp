@@ -159,3 +159,13 @@ nss_dp_ddrq_ret_t nss_dp_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_d
 	return nss_dp_hal_ddrq_accu_stats_get(obj, ddrq_accu_stats_info, ddrq_stats);
 }
 EXPORT_SYMBOL(nss_dp_ddrq_accu_stats_get);
+
+/*
+ * nss_dp_ddrq_bypass_cfg_set()
+ *	API to set/reset DDRQ bypass configuration
+ */
+nss_dp_ddrq_ret_t nss_dp_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set)
+{
+	return nss_dp_hal_ddrq_bypass_cfg_set(obj, set);
+}
+EXPORT_SYMBOL(nss_dp_ddrq_bypass_cfg_set);
