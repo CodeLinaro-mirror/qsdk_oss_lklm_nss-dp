@@ -481,6 +481,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *s
 nss_dp_ddrq_ret_t edma_ddrq_pending_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_pending_stats_t *ddrq_stats, uint8_t count);
 nss_dp_ddrq_ret_t edma_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats);
 nss_dp_ddrq_ret_t edma_ddrq_drop_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats);
+nss_dp_ddrq_ret_t edma_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set);
 int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg);
 int32_t edma_ddrq_dp_dev_set(struct net_device *dev);
 #endif		/* __EDMA_DDRQ_H__ */
