@@ -205,6 +205,21 @@ static int32_t edma_ddrq_ac_queue_cfg_tbl_get(uint32_t index, edma_ddrq_ac_queue
 }
 
 /*
+ * edma_ddrq_drop_cnt_tbl_get()
+ *	API to get DDRQ drop count table statistics
+ */
+static int32_t edma_ddrq_drop_cnt_tbl_get(uint32_t index, edma_ddrq_ac_queue_drop_cnt_tbl_u *ddrq_drop_stats)
+{
+	uint32_t i;
+
+	for (i = 0; i < sizeof(edma_ddrq_ac_queue_drop_cnt_tbl_u)/sizeof(uint32_t); i++) {
+		ddrq_drop_stats->val[i] = edma_reg_read((EDMA_REG_DDRQ_AC_QUEUE_DROP_CNT_TBL(index) + i * 4));
+	}
+
+	return 0;
+}
+
+/*
  * edma_ddrq_ac_queue_cfg_tbl_set()
  *	API to set DDRQ AC queue configuration values
  */
@@ -462,6 +477,36 @@ done:
 }
 
 /*
+ * edma_ddrq_accu_stats_tbl_get()
+ *	API to get DDRQ accumulate statistics
+ */
+static int32_t edma_ddrq_accu_stats_tbl_get(uint32_t index, edma_ddrq_acc_stats_u *ddrq_stats)
+{
+	uint32_t i;
+
+	for (i = 0; i < sizeof(edma_ddrq_acc_stats_u)/sizeof(uint32_t); i++) {
+		ddrq_stats->val[i] = edma_reg_read((EDMA_REG_DDRQ_ACCU_PKT_CNT_OFFSET(index) + i * 4));
+	}
+
+	return 0;
+}
+
+/*
+ * edma_ddrq_accu_stats_tbl_set()
+ *	API to set DDRQ accumulate statistics
+ */
+static int32_t edma_ddrq_accu_stats_tbl_set(uint32_t index, edma_ddrq_acc_stats_u *ddrq_stats)
+{
+	uint32_t i;
+
+	for (i = 0; i < sizeof(edma_ddrq_acc_stats_u)/sizeof(uint32_t); i++) {
+		edma_reg_write((EDMA_REG_DDRQ_ACCU_PKT_CNT_OFFSET(index) + i * 4), ddrq_stats->val[i]);
+	}
+
+	return 0;
+}
+
+/*
  * edma_ddrq_cfg_set_inval()
  *	API to set DDRQ configuration values to invalid
  */
@@ -506,6 +551,71 @@ static void edma_ddrq_grp_cfg_set_inval(nss_dp_ddrq_ac_grp_cfg_tbl_t *cfg)
 }
 
 /*
+ * edma_ddrq_ac_queue_drop_cnt_tbl_copy_from_local()
+ *	API to copy DDRQ AC queue drop count table from hardware format to software format
+ */
+static __maybe_unused void edma_ddrq_ac_queue_drop_cnt_tbl_copy_from_local(nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *tgt,
+					edma_ddrq_ac_queue_drop_cnt_tbl_t *src)
+{
+	if (!tgt || !src) {
+		return;
+	}
+
+	tgt->ac_drop_cnt_tbl_grn_pro_drop_pkt = src->ac_drop_cnt_tbl_grn_pro_drop_pkt;
+	tgt->ac_drop_cnt_tbl_grn_pro_drop_byte = src->ac_drop_cnt_tbl_grn_pro_drop_byte_0 |
+				(((uint64_t)src->ac_drop_cnt_tbl_grn_pro_drop_byte_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_GRN_PRO_DROP_BYTE_OFFSET));
+	tgt->ac_drop_cnt_tbl_grn_tail_drop_pkt = src->ac_drop_cnt_tbl_grn_tail_drop_pkt_0 |
+				(((uint32_t)src->ac_drop_cnt_tbl_grn_tail_drop_pkt_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_GRN_TAIL_DROP_PKT_OFFSET));
+	tgt->ac_drop_cnt_tbl_grn_tail_drop_byte = src->ac_drop_cnt_tbl_grn_tail_drop_byte_0 |
+				(((uint64_t)src->ac_drop_cnt_tbl_grn_tail_drop_byte_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_GRN_TAIL_DROP_BYTE_OFFSET));
+	tgt->ac_drop_cnt_tbl_yel_pro_drop_pkt = src->ac_drop_cnt_tbl_yel_pro_drop_pkt_0 |
+				(((uint32_t)src->ac_drop_cnt_tbl_yel_pro_drop_pkt_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_YEL_PRO_DROP_PKT_OFFSET));
+	tgt->ac_drop_cnt_tbl_yel_pro_drop_byte = src->ac_drop_cnt_tbl_yel_pro_drop_byte_0 |
+				(((uint64_t)src->ac_drop_cnt_tbl_yel_pro_drop_byte_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_YEL_PRO_DROP_BYTE_OFFSET));
+	tgt->ac_drop_cnt_tbl_yel_tail_drop_pkt = src->ac_drop_cnt_tbl_yel_tail_drop_pkt_0 |
+				(((uint32_t)src->ac_drop_cnt_tbl_yel_tail_drop_pkt_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_YEL_TAIL_DROP_PKT_OFFSET));
+	tgt->ac_drop_cnt_tbl_yel_tail_drop_byte = src->ac_drop_cnt_tbl_yel_tail_drop_byte_0 |
+				(((uint64_t)src->ac_drop_cnt_tbl_yel_tail_drop_byte_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_YEL_TAIL_DROP_BYTE_OFFSET));
+	tgt->ac_drop_cnt_tbl_red_pro_drop_pkt = src->ac_drop_cnt_tbl_red_pro_drop_pkt;
+	tgt->ac_drop_cnt_tbl_red_pro_drop_byte = src->ac_drop_cnt_tbl_red_pro_drop_byte_0 |
+				(((uint64_t)src->ac_drop_cnt_tbl_red_pro_drop_byte_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_RED_PRO_DROP_BYTE_OFFSET));
+	tgt->ac_drop_cnt_tbl_red_tail_drop_pkt = src->ac_drop_cnt_tbl_red_tail_drop_pkt_0 |
+				(((uint32_t)src->ac_drop_cnt_tbl_red_tail_drop_pkt_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_RED_TAIL_DROP_PKT_OFFSET));
+	tgt->ac_drop_cnt_tbl_red_tail_drop_byte = src->ac_drop_cnt_tbl_red_tail_drop_byte_0 |
+				(((uint64_t)src->ac_drop_cnt_tbl_red_tail_drop_byte_1) <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_AC_DROP_CNT_RED_TAIL_DROP_BYTE_OFFSET));
+}
+
+/*
+ * edma_ddrq_accu_stats_copy_from_local()
+ *	API to copy DDRQ statistics from the local get instance to a exported structure
+ */
+static void edma_ddrq_accu_stats_copy_from_local(nss_dp_ddrq_accu_stats_t *tgt,  edma_ddrq_acc_stats_t *src)
+{
+	if (!tgt || !src) {
+		return;
+	}
+
+	tgt->ddrq_accu_rx_pkts = src->accu_pkts_rx_0 | \
+					(src->accu_pkts_rx_1 << OFFSET_IN_WORD(EDMA_DDRQ_ACCU_STATS_RXPKTS_OFFSET));
+	tgt->ddrq_accu_tx_pkts = src->accu_pkts_tx_0 | \
+					(src->accu_pkts_tx_1 << OFFSET_IN_WORD(EDMA_DDRQ_ACCU_STATS_TXPKTS_OFFSET));
+	tgt->ddrq_accu_rx_bytes = src->accu_bytes_rx_0 | \
+					(((uint64_t)src->accu_bytes_rx_1) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_ACCU_STATS_RXBYTES_OFFSET));
+	tgt->ddrq_accu_tx_bytes = src->accu_bytes_tx_0 | \
+					(((uint64_t)src->accu_bytes_tx_1) << OFFSET_IN_WORD(EDMA_DDRQ_ACCU_STATS_TXBYTES_OFFSET));
+}
+
+/*
  * edma_ddrq_dbg_cnt_occ_stats_copy_from_local()
  *	API to copy DDRQ occupancy statistics from hardware format to the software format
  */
@@ -518,10 +628,10 @@ static void edma_ddrq_dbg_cnt_occ_stats_copy_from_local(nss_dp_ddrq_occupancy_st
 	tgt->peak_pkts = src->peak_pkts;
 	tgt->pkts = src->pkts;
 	tgt->peak_bytes = src->peak_bytes_0 | \
-				      (((uint64_t)src->peak_bytes_1) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_PEAK_BYTES_OFFSET));
+					(((uint64_t)src->peak_bytes_1) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_PEAK_BYTES_OFFSET));
 	tgt->bytes = src->bytes_0 | \
-				      (((uint64_t)src->bytes_1) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_1)) | \
-				      (((uint64_t)src->bytes_2) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_2));
+					(((uint64_t)src->bytes_1) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_1)) | \
+					(((uint64_t)src->bytes_2) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_2));
 }
 
 /*
@@ -1643,6 +1753,78 @@ static int edma_ddrq_def_lp_cfg_set(edma_ddrq_lp_cfg_t *lp_cfg, edma_ddrq_idv_cf
 }
 
 /*
+ * edma_ddrq_drop_stats_get_local()
+ *	API to get DDRQ drop count statistics from the hardware
+ */
+static int edma_ddrq_drop_stats_get_local(uint32_t ddrq_id, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats)
+{
+	edma_ddrq_ac_queue_drop_cnt_tbl_u ddrq_drop_cnt_l = {0};
+
+	if (edma_ddrq_drop_cnt_tbl_get(ddrq_id, &ddrq_drop_cnt_l)) {
+		edma_err("Error in getting ddrq drop count tbl for %d idx\n", ddrq_id);
+		return -EINVAL;
+	}
+
+	edma_ddrq_ac_queue_drop_cnt_tbl_copy_from_local(ddrq_drop_stats, &ddrq_drop_cnt_l.ddrq_drop_stats);
+
+	edma_warn("DDRQ AC queue drop count get successful for %d idx\n", ddrq_id);
+
+	return 0;
+}
+
+/*
+ * edma_ddrq_accu_stats_get_local()
+ *	API to get DDRQ accumulate statistics
+ */
+static int edma_ddrq_accu_stats_get_local(uint32_t ddrq_id, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats)
+{
+	edma_ddrq_acc_stats_u ddrq_acc_stats_l = {0};
+
+	ddrq_acc_stats_l.ddrq_stats.ddrq_id = ddrq_id;
+
+	if (ddrq_accu_stats_info->oper_type == NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_START) {
+		if (edma_ddrq_accu_stats_tbl_set(ddrq_accu_stats_info->stats_id, &ddrq_acc_stats_l)) {
+			edma_err("Error in setting the DDRQ accumulate stats for %d ddrq, stats_id: %d\n", ddrq_id, ddrq_accu_stats_info->stats_id);
+			return -EINVAL;
+		}
+		edma_ddrq_occupancy_stats_start();
+		if (!ddrq_stats) {
+			return 0;
+		}
+	}
+
+	edma_ddrq_accu_stats_tbl_get(ddrq_accu_stats_info->stats_id, &ddrq_acc_stats_l);
+	edma_ddrq_accu_stats_copy_from_local(ddrq_stats, &ddrq_acc_stats_l.ddrq_stats);
+
+	return 0;
+}
+
+/*
+ * edma_ddrq_pending_stats_get_local()
+ *	API to get DDRQ pending statistics
+ */
+static int edma_ddrq_pending_stats_get_local(uint32_t ddrq_id, nss_dp_ddrq_pending_stats_t *ddrq_stats)
+{
+	uint32_t data;
+	sw_error_t sw_err;
+	fal_queue_stats_t q_stats = {0};
+
+	data =  edma_reg_read(EDMA_REG_DDRQ_AC_QUEUE_CNT_TBL_OFFSET(ddrq_id));
+	ddrq_stats->ddrq_pending_stats = data;
+
+	sw_err = fal_queue_counter_get(EDMA_SWITCH_DEV_ID, ddrq_id, &q_stats);
+	if (sw_err != SW_OK) {
+		edma_err("Error (%d) in getting the DDRQ packet & byte count statistics\n", sw_err);
+		return -EINVAL;
+	}
+
+	ddrq_stats->isramq_enq_stats = q_stats.ddrq_packets;
+	ddrq_stats->ddrq_enq_stats = q_stats.ddrq_bytes;
+
+	return 0;
+}
+
+/*
  * edma_ddrq_occupancy_stats_reset()
  *	API to reset DDRQ occupancy statistics
  */
@@ -1698,9 +1880,7 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_stop(void)
 	}
 
 	data = edma_reg_read(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET);
-
-	data |= EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_GO_SET(EDMA_DDRQ_DBG_CNT_BYTE_PKT_GO_STOP);
-	edma_reg_write(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET, data);
+	edma_reg_write(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET, EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_GO_CLEAR(data));
 
 	return DDRQ_RET_SUCCESS;
 }
@@ -1800,6 +1980,122 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *s
 	reg_offset = (ddrq_id >> EDMA_DDRQ_MAX_CNT_WORD);
 	data =  edma_reg_read(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_STATUS_OFFSET(reg_offset));
 	*status = ((data & (1 << (ddrq_id % EDMA_BITS_IN_WORD))) ? true : false);
+
+	return DDRQ_RET_SUCCESS;
+}
+
+/*
+ * edma_ddrq_accu_stats_get()
+ *	API to get DDRQ accumulate statistics
+ */
+nss_dp_ddrq_ret_t edma_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_accu_stats_info_t *ddrq_accu_stats_info, nss_dp_ddrq_accu_stats_t *ddrq_stats)
+{
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+		edma_warn("DDRQ global software knob is disabled\n");
+		return DDRQ_RET_ERR;
+	}
+
+	if (!obj || !ddrq_accu_stats_info) {
+		edma_err("Invalid input parameters in DDRQ accumulate statistics get API\n");
+		return DDRQ_RET_INVAL;
+	}
+
+	if (ddrq_accu_stats_info->oper_type >= NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_MAX) {
+		edma_err("Invalid input operation type (%d)\n", ddrq_accu_stats_info->oper_type);
+		return DDRQ_RET_INVAL;
+	}
+
+	if ((ddrq_accu_stats_info->oper_type == NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_GET) && !ddrq_stats) {
+		edma_err("DDRQ ACCU GET operation needs the valid DDRQ stats pointer\n");
+		return DDRQ_RET_INVAL;
+	}
+
+	/*
+	 * Check for the accumulate statistics stop request
+	 */
+	if (ddrq_accu_stats_info->oper_type == NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_STOP) {
+		edma_ddrq_occupancy_stats_stop();
+		return DDRQ_RET_SUCCESS;
+	}
+
+	if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_QUEUE) {
+
+		if (obj->cfg_id >= NSS_DP_DDRQ_MAX_CNT) {
+			edma_err("Invalid queue id (%d) passed for getting the DDRQ accumulate statistics\n",
+						obj->cfg_id);
+			return DDRQ_RET_INVAL;
+		}
+
+		if (edma_ddrq_accu_stats_get_local(obj->cfg_id, ddrq_accu_stats_info, ddrq_stats)) {
+			edma_err("Error in getting DDRQ accumulate statistics\n");
+			return DDRQ_RET_INVAL;
+		}
+	}
+
+	return DDRQ_RET_SUCCESS;
+}
+
+/*
+ * edma_ddrq_drop_stats_get()
+ *	API to get DDRQ drop count statistics
+ */
+nss_dp_ddrq_ret_t edma_ddrq_drop_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_queue_drop_cnt_tbl_t *ddrq_drop_stats)
+{
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+		edma_warn("DDRQ global software knob is disabled\n");
+		return DDRQ_RET_ERR;
+	}
+
+	if (!obj || !ddrq_drop_stats) {
+		edma_err("Invalid input parameters in DDRQ drop statistics get API\n");
+		return DDRQ_RET_INVAL;
+	}
+
+	if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_QUEUE) {
+
+		if (obj->cfg_id >= NSS_DP_DDRQ_MAX_CNT) {
+			edma_err("Invalid queue id (%d) passed for getting the DDRQ drop statistics\n",
+						obj->cfg_id);
+			return DDRQ_RET_INVAL;
+		}
+
+		if (edma_ddrq_drop_stats_get_local(obj->cfg_id, ddrq_drop_stats)) {
+			edma_err("Error in getting DDRQ drop count statistics\n");
+			return DDRQ_RET_INVAL;
+		}
+	}
+
+	return DDRQ_RET_SUCCESS;
+}
+
+/*
+ * edma_ddrq_pending_stats_get()
+ *	API to get DDRQ pending statistics
+ */
+nss_dp_ddrq_ret_t edma_ddrq_pending_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_pending_stats_t *ddrq_stats, uint8_t count)
+{
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+		edma_warn("DDRQ global software knob is disabled\n");
+		return DDRQ_RET_ERR;
+	}
+
+	if (!obj || !ddrq_stats) {
+		edma_err("Invalid input parameters in DDRQ pending statistics get API\n");
+		return DDRQ_RET_INVAL;
+	}
+
+	if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_QUEUE) {
+		if (obj->cfg_id >= NSS_DP_DDRQ_MAX_CNT) {
+			edma_err("Invalid queue id (%d) passed for getting the DDRQ pending statistics\n",
+						obj->cfg_id);
+			return DDRQ_RET_INVAL;
+		}
+
+		if (edma_ddrq_pending_stats_get_local(obj->cfg_id, ddrq_stats)) {
+			edma_err("Error in getting DDRQ pending statistics\n");
+			return DDRQ_RET_INVAL;
+		}
+	}
 
 	return DDRQ_RET_SUCCESS;
 }
