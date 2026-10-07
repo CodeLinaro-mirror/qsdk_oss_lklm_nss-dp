@@ -146,6 +146,21 @@ static int32_t edma_ddrq_reg_dbg_cnt_occ_stats_get(uint32_t reg_addr_idx, uint32
 }
 
 /*
+ * edma_ddrq_reg_dbg_cnt_occ_stats_set()
+ *	API to set DDRQ occupancy statistics to the hardware
+ */
+static int32_t edma_ddrq_reg_dbg_cnt_occ_stats_set(uint32_t reg_addr_idx, uint32_t *val, uint32_t num)
+{
+	uint32_t i = 0;
+
+	for(i = 0; i < num; i++) {
+		edma_reg_write((EDMA_REG_DDRQ_DBG_CNT_STATS_OFFSET(reg_addr_idx) + i * 4), val[i]);
+	}
+
+	return 0;
+}
+
+/*
  * edma_ddrq_ac_queue_cfg_dump_local()
  *	API to dump local DDRQ AC queue configurations
  */
@@ -350,7 +365,8 @@ static int32_t edma_ddrq_deq_drop(uint32_t ddrq_id, bool drop)
  */
 static int32_t edma_ddrq_dbg_cnt_threshold_get(uint32_t index, edma_ddrq_occupancy_threshold_u *thres_cfg)
 {
-	return edma_ddrq_reg_dbg_cnt_threshold_get(index, thres_cfg->val, sizeof(edma_ddrq_occupancy_threshold_u)/sizeof(uint32_t));
+	return edma_ddrq_reg_dbg_cnt_threshold_get(index, thres_cfg->val,
+			sizeof(edma_ddrq_occupancy_threshold_u)/sizeof(uint32_t));
 }
 
 /*
@@ -359,7 +375,8 @@ static int32_t edma_ddrq_dbg_cnt_threshold_get(uint32_t index, edma_ddrq_occupan
  */
 static int32_t edma_ddrq_dbg_cnt_threshold_set(uint32_t index, edma_ddrq_occupancy_threshold_u *thres_cfg)
 {
-	return edma_ddrq_reg_dbg_cnt_threshold_set(index, thres_cfg->val, sizeof(edma_ddrq_occupancy_threshold_u)/sizeof(uint32_t));
+	return edma_ddrq_reg_dbg_cnt_threshold_set(index, thres_cfg->val,
+			sizeof(edma_ddrq_occupancy_threshold_u)/sizeof(uint32_t));
 }
 
 /*
@@ -368,7 +385,18 @@ static int32_t edma_ddrq_dbg_cnt_threshold_set(uint32_t index, edma_ddrq_occupan
  */
 static int32_t edma_ddrq_dbg_cnt_occ_stats_get(uint32_t index, edma_ddrq_occupancy_stats_u *occ_stats)
 {
-	return edma_ddrq_reg_dbg_cnt_occ_stats_get(index, occ_stats->val, sizeof(edma_ddrq_occupancy_stats_u)/sizeof(uint32_t));
+	return edma_ddrq_reg_dbg_cnt_occ_stats_get(index, occ_stats->val,
+			sizeof(edma_ddrq_occupancy_stats_u)/sizeof(uint32_t));
+}
+
+/*
+ * edma_ddrq_dbg_cnt_occ_stats_reset()
+ *	API to reset DDRQ occupancy statistics
+ */
+static int32_t edma_ddrq_dbg_cnt_occ_stats_reset(uint32_t index, edma_ddrq_occupancy_stats_u *occ_stats)
+{
+	return edma_ddrq_reg_dbg_cnt_occ_stats_set(index, occ_stats->val,
+			sizeof(edma_ddrq_occupancy_stats_u)/sizeof(uint32_t));
 }
 
 #ifdef NSS_DP_PON_SUPPORT
@@ -627,11 +655,11 @@ static void edma_ddrq_dbg_cnt_occ_stats_copy_from_local(nss_dp_ddrq_occupancy_st
 
 	tgt->peak_pkts = src->peak_pkts;
 	tgt->pkts = src->pkts;
-	tgt->peak_bytes = src->peak_bytes_0 | \
-					(((uint64_t)src->peak_bytes_1) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_PEAK_BYTES_OFFSET));
-	tgt->bytes = src->bytes_0 | \
-					(((uint64_t)src->bytes_1) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_1)) | \
-					(((uint64_t)src->bytes_2) << OFFSET_IN_DOUBLE_WORD(EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_2));
+	tgt->peak_bytes = (uint64_t)src->peak_bytes_0 |
+			((uint64_t)src->peak_bytes_1 << EDMA_DDRQ_DBG_CNT_OCC_STATS_PEAK_BYTES_OFFSET);
+	tgt->bytes = (uint64_t)src->bytes_0 |
+			((uint64_t)src->bytes_1 << EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_1) |
+			((uint64_t)src->bytes_2 << EDMA_DDRQ_DBG_CNT_OCC_STATS_BYTES_OFFSET_2);
 }
 
 /*
@@ -645,8 +673,9 @@ static void edma_ddrq_dbg_cnt_threshold_copy_from_local(nss_dp_ddrq_occupancy_th
 	}
 
 	tgt->threshold_type = src->threshold_type;
-	tgt->threshold_val = src->threshold_val_0 | \
-				      (((int64_t)src->threshold_val_1) << OFFSET_IN_WORD(EDMA_DDRQ_DBG_CNT_OCC_THRESHOLD_OFFSET));
+	tgt->threshold_val = (int64_t)((uint64_t)src->threshold_val_0 |
+				((uint64_t)src->threshold_val_1 <<
+				 OFFSET_IN_WORD(EDMA_DDRQ_DBG_CNT_OCC_THRESHOLD_OFFSET)));
 }
 
 /*
@@ -655,6 +684,8 @@ static void edma_ddrq_dbg_cnt_threshold_copy_from_local(nss_dp_ddrq_occupancy_th
  */
 static void edma_ddrq_dbg_cnt_threshold_copy_new_cfg(edma_ddrq_occupancy_threshold_t *tgt, nss_dp_ddrq_occupancy_threshold_t *src)
 {
+	uint64_t threshold_val;
+
 	if (!tgt || !src) {
 		return;
 	}
@@ -664,9 +695,10 @@ static void edma_ddrq_dbg_cnt_threshold_copy_new_cfg(edma_ddrq_occupancy_thresho
 	}
 
 	if (src->threshold_val != NSS_DP_DDRQ_INV_VAL) {
-		tgt->threshold_val_0 = src->threshold_val;
-		tgt->threshold_val_1 = src->threshold_val >>
-						 OFFSET_IN_WORD(EDMA_DDRQ_DBG_CNT_OCC_THRESHOLD_OFFSET);
+		threshold_val = (uint64_t)src->threshold_val;
+		tgt->threshold_val_0 = (uint32_t)threshold_val;
+		tgt->threshold_val_1 = (uint32_t)(threshold_val >>
+					OFFSET_IN_WORD(EDMA_DDRQ_DBG_CNT_OCC_THRESHOLD_OFFSET));
 	}
 
 }
@@ -1767,8 +1799,6 @@ static int edma_ddrq_drop_stats_get_local(uint32_t ddrq_id, nss_dp_ddrq_ac_queue
 
 	edma_ddrq_ac_queue_drop_cnt_tbl_copy_from_local(ddrq_drop_stats, &ddrq_drop_cnt_l.ddrq_drop_stats);
 
-	edma_warn("DDRQ AC queue drop count get successful for %d idx\n", ddrq_id);
-
 	return 0;
 }
 
@@ -1786,10 +1816,6 @@ static int edma_ddrq_accu_stats_get_local(uint32_t ddrq_id, nss_dp_ddrq_accu_sta
 		if (edma_ddrq_accu_stats_tbl_set(ddrq_accu_stats_info->stats_id, &ddrq_acc_stats_l)) {
 			edma_err("Error in setting the DDRQ accumulate stats for %d ddrq, stats_id: %d\n", ddrq_id, ddrq_accu_stats_info->stats_id);
 			return -EINVAL;
-		}
-		edma_ddrq_occupancy_stats_start();
-		if (!ddrq_stats) {
-			return 0;
 		}
 	}
 
@@ -1827,20 +1853,30 @@ static int edma_ddrq_pending_stats_get_local(uint32_t ddrq_id, nss_dp_ddrq_pendi
 /*
  * edma_ddrq_occupancy_stats_reset()
  *	API to reset DDRQ occupancy statistics
+ *	For Hermosa/JUHU SoCs, the hardware based DDRQ occupancy stats reset
+ *	is not functional. So, as a WAR, writing 0s to the corresponding queue
+ *	based occupancy statistics instead.
  */
-nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_reset(void)
+nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_reset(uint32_t ddrq_id)
 {
-	uint32_t data;
+	edma_ddrq_occupancy_stats_u ddrq_occ_stats_l = {0};
+	int32_t ret;
 
 	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
 
-	data = edma_reg_read(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET);
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid ddrq_id=%u for occupancy stats reset\n", ddrq_id);
+		return DDRQ_RET_INVAL;
+	}
 
-	data |= EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CLEAN_SET(EDMA_DDRQ_DBG_CNT_BYTE_PKT_CLEAN_SET);
-	edma_reg_write(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET, data);
+	ret = edma_ddrq_dbg_cnt_occ_stats_reset(ddrq_id, &ddrq_occ_stats_l);
+	if (ret) {
+		edma_err("Failed to reset occupancy stats for ddrq_id=%u ret=%d\n", ddrq_id, ret);
+		return DDRQ_RET_ERR;
+	}
 
 	return DDRQ_RET_SUCCESS;
 }
@@ -1859,7 +1895,6 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_start(void)
 	}
 
 	data = edma_reg_read(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET);
-
 	data |= EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_GO_SET(EDMA_DDRQ_DBG_CNT_BYTE_PKT_GO_START);
 	edma_reg_write(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET, data);
 
@@ -1886,43 +1921,27 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_stop(void)
 }
 
 /*
- * edma_ddrq_occupancy_stats_restart()
- *	API to restart DDRQ occupancy stats test
- */
-nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_restart(void)
-{
-	uint32_t data;
-
-	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
-		edma_warn("DDRQ global software knob is disabled\n");
-		return DDRQ_RET_ERR;
-	}
-
-	edma_ddrq_occupancy_stats_reset();
-
-	data = edma_reg_read(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET);
-
-	data |= EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_GO_SET(EDMA_DDRQ_DBG_CNT_BYTE_PKT_GO_START);
-	edma_reg_write(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_CTR_OFFSET, data);
-
-	return DDRQ_RET_SUCCESS;
-}
-
-/*
  * edma_ddrq_occupancy_stats_threshold_get()
  *	API to get DDRQ occupancy threshold configuration
  */
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_threshold_t *threshold)
 {
 	edma_ddrq_occupancy_threshold_u ddrq_occ_thres_l = {0};
+	int32_t ret;
 
 	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
 
-	edma_ddrq_dbg_cnt_threshold_get(ddrq_id, &ddrq_occ_thres_l);
+	ret = edma_ddrq_dbg_cnt_threshold_get(ddrq_id, &ddrq_occ_thres_l);
+	if (ret) {
+		edma_err("Failed to get threshold from hw for ddrq_id=%u ret=%d\n", ddrq_id, ret);
+		return DDRQ_RET_ERR;
+	}
+
 	edma_ddrq_dbg_cnt_threshold_copy_from_local(threshold, &ddrq_occ_thres_l.ddrq_occ_thres_cfg);
+
 	return DDRQ_RET_SUCCESS;
 }
 
@@ -1933,15 +1952,26 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_get(uint32_t ddrq_id, nss_
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_set(uint32_t ddrq_id, nss_dp_ddrq_occupancy_threshold_t *threshold)
 {
 	edma_ddrq_occupancy_threshold_u ddrq_occ_thres_l = {0};
+	int32_t ret;
 
 	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
 
-	edma_ddrq_dbg_cnt_threshold_get(ddrq_id, &ddrq_occ_thres_l);
+	ret = edma_ddrq_dbg_cnt_threshold_get(ddrq_id, &ddrq_occ_thres_l);
+	if (ret) {
+		edma_err("Failed to get current threshold for ddrq_id=%u ret=%d\n", ddrq_id, ret);
+		return DDRQ_RET_ERR;
+	}
+
 	edma_ddrq_dbg_cnt_threshold_copy_new_cfg(&ddrq_occ_thres_l.ddrq_occ_thres_cfg, threshold);
-	edma_ddrq_dbg_cnt_threshold_set(ddrq_id, &ddrq_occ_thres_l);
+
+	ret = edma_ddrq_dbg_cnt_threshold_set(ddrq_id, &ddrq_occ_thres_l);
+	if (ret) {
+		edma_err("Failed to set threshold for ddrq_id=%u ret=%d\n", ddrq_id, ret);
+		return DDRQ_RET_ERR;
+	}
 
 	return DDRQ_RET_SUCCESS;
 }
@@ -1953,13 +1983,19 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_threshold_set(uint32_t ddrq_id, nss_
 nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_get(uint32_t ddrq_id, nss_dp_ddrq_occupancy_stats_t *ddrq_stats)
 {
 	edma_ddrq_occupancy_stats_u ddrq_occ_stats_l = {0};
+	int32_t ret;
 
 	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
 		return DDRQ_RET_ERR;
 	}
 
-	edma_ddrq_dbg_cnt_occ_stats_get(ddrq_id, &ddrq_occ_stats_l);
+	ret = edma_ddrq_dbg_cnt_occ_stats_get(ddrq_id, &ddrq_occ_stats_l);
+	if (ret) {
+		edma_err("Failed to read occupancy stats for ddrq_id=%u ret=%d\n", ddrq_id, ret);
+		return DDRQ_RET_ERR;
+	}
+
 	edma_ddrq_dbg_cnt_occ_stats_copy_from_local(ddrq_stats, &ddrq_occ_stats_l.ddrq_occ_stats);
 	return DDRQ_RET_SUCCESS;
 }
@@ -1974,6 +2010,11 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *s
 
 	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
 		edma_warn("DDRQ global software knob is disabled\n");
+		return DDRQ_RET_ERR;
+	}
+
+	if (!status) {
+		edma_err("Invalid NULL status pointer for ddrq_id=%u\n", ddrq_id);
 		return DDRQ_RET_ERR;
 	}
 
@@ -2014,7 +2055,6 @@ nss_dp_ddrq_ret_t edma_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddr
 	 * Check for the accumulate statistics stop request
 	 */
 	if (ddrq_accu_stats_info->oper_type == NSS_DP_DDRQ_SHRD_STATS_OPER_TYPE_STOP) {
-		edma_ddrq_occupancy_stats_stop();
 		return DDRQ_RET_SUCCESS;
 	}
 
@@ -2321,6 +2361,11 @@ int edma_ddrq_init(edma_ddrq_cfg_t *ddrq_cfg)
 
 	if (!ppe_drv_isram_queue_profile_init(edma_ddrq_isq_base)) {
 		edma_err("Error in configuring ISRAM queue (%d) base for PPE ports\n", edma_ddrq_isq_base);
+		return -EINVAL;
+	}
+
+	if (edma_ddrq_occupancy_stats_start() != DDRQ_RET_SUCCESS) {
+		edma_err("Error in starting DDRQ hardware based stats fetching\n");
 		return -EINVAL;
 	}
 
