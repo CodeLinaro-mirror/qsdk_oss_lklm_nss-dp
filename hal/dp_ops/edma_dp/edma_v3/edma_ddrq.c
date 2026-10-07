@@ -1028,7 +1028,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 		if (edma_ddrq_ac_queue_cfg_state_get(obj->cfg_id , ddrq_cfg)) {
 			edma_err("Error in getting the DDRQ state for %d idx\n", obj->cfg_id);
 		}
-		if (edma_ddrq_ac_queue_cfg_tbl_get(obj->cfg_id + EDMA_DDRQ_CFG_BASE_INDEX, &ddrq_cfg_l)) {
+		if (edma_ddrq_ac_queue_cfg_tbl_get(EDMA_DDRQ_CMN_IDX(obj->cfg_id), &ddrq_cfg_l)) {
 			edma_err("Error in getting ddrq cfg tbl cfg for %d idx\n", obj->cfg_id);
 			return DDRQ_RET_ERR;
 		}
@@ -1048,7 +1048,7 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_get(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 				edma_err("Error in getting the DDRQ state for %d idx\n", queue_id + i);
 			}
 
-			if (edma_ddrq_ac_queue_cfg_tbl_get(queue_id + i + EDMA_DDRQ_CFG_BASE_INDEX, &ddrq_cfg_l)) {
+			if (edma_ddrq_ac_queue_cfg_tbl_get(EDMA_DDRQ_CMN_IDX(queue_id + i), &ddrq_cfg_l)) {
 				edma_err("Error in getting ddrq cfg tbl cfg for %d idx\n", queue_id + i);
 				return DDRQ_RET_ERR;
 			}
@@ -1094,13 +1094,13 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 			return DDRQ_RET_INVAL;
 		}
 
-		if (edma_ddrq_ac_queue_cfg_tbl_get(obj->cfg_id + EDMA_DDRQ_CFG_BASE_INDEX, &ddrq_cfg_l)) {
+		if (edma_ddrq_ac_queue_cfg_tbl_get(EDMA_DDRQ_CMN_IDX(obj->cfg_id), &ddrq_cfg_l)) {
 			edma_err("Error in getting ddrq ac queue cfg tbl get for %d idx\n", obj->cfg_id);
 			return DDRQ_RET_ERR;
 		}
 
 		edma_ddrq_ac_queue_cfg_tbl_copy_new_cfg(&ddrq_cfg_l.ddrq_cfg, ddrq_cfg);
-		if (edma_ddrq_ac_queue_cfg_tbl_set(obj->cfg_id + EDMA_DDRQ_CFG_BASE_INDEX, &ddrq_cfg_l)) {
+		if (edma_ddrq_ac_queue_cfg_tbl_set(EDMA_DDRQ_CMN_IDX(obj->cfg_id), &ddrq_cfg_l)) {
 			edma_err("Error in setting DDRQ AC queue cfg tbl set for %d idx\n", obj->cfg_id);
 			return DDRQ_RET_ERR;
 		}
@@ -1170,12 +1170,12 @@ nss_dp_ddrq_ret_t edma_ddrq_cfg_set(nss_dp_ddrq_obj_id_t *obj, nss_dp_ddrq_ac_qu
 		edma_debug("port: %d, queue base: %d, queue cnt: %d\n", obj->cfg_id, queue_id, queue_cnt);
 
 		for (i = 0; i < queue_cnt; i++) {
-			if (edma_ddrq_ac_queue_cfg_tbl_get(queue_id + i + EDMA_DDRQ_CFG_BASE_INDEX, &ddrq_cfg_l)) {
+			if (edma_ddrq_ac_queue_cfg_tbl_get(EDMA_DDRQ_CMN_IDX(queue_id + i), &ddrq_cfg_l)) {
 				edma_err("Error in getting ddrq ac queue cfg tbl get for %d idx\n", queue_id + i);
 				return DDRQ_RET_ERR;
 			}
 			edma_ddrq_ac_queue_cfg_tbl_copy_new_cfg(&ddrq_cfg_l.ddrq_cfg, ddrq_cfg);
-			if (edma_ddrq_ac_queue_cfg_tbl_set(queue_id + i + EDMA_DDRQ_CFG_BASE_INDEX, &ddrq_cfg_l)) {
+			if (edma_ddrq_ac_queue_cfg_tbl_set(EDMA_DDRQ_CMN_IDX(queue_id + i), &ddrq_cfg_l)) {
 				edma_err("Error in setting DDRQ AC queue cfg tbl set for %d idx\n", queue_id + i);
 				return DDRQ_RET_ERR;
 			}
@@ -1333,7 +1333,7 @@ nss_dp_ddrq_ret_t edma_ddrq_enqueue_disable(nss_dp_ddrq_obj_id_t *obj, bool disa
 	}
 
 	if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_QUEUE) {
-		if (edma_ddrq_enq_disable(obj->cfg_id, disable)) {
+		if (edma_ddrq_enq_disable(EDMA_DDRQ_CMN_IDX(obj->cfg_id), disable)) {
 			edma_err("Error in EDMA ddrq enqueue disable\n");
 			return DDRQ_RET_INVAL;
 		}
@@ -1343,7 +1343,7 @@ nss_dp_ddrq_ret_t edma_ddrq_enqueue_disable(nss_dp_ddrq_obj_id_t *obj, bool disa
 			return DDRQ_RET_INVAL;
 		}
 		for (i = 0; i < EDMA_DDRQ_ESRAMQ_CNT_PER_PORT; i++) {
-			if (edma_ddrq_enq_disable(queue_id + i, disable)) {
+			if (edma_ddrq_enq_disable(EDMA_DDRQ_CMN_IDX(queue_id + i), disable)) {
 				edma_err("Error in EDMA ddrq enqueue disable\n");
 				return DDRQ_RET_INVAL;
 			}
@@ -1372,7 +1372,7 @@ nss_dp_ddrq_ret_t edma_ddrq_dequeue_drop(nss_dp_ddrq_obj_id_t *obj, bool drop)
 	}
 
 	if (obj->cfg_type == NSS_DP_DDRQ_CFG_TYPE_QUEUE) {
-		if (edma_ddrq_deq_drop(obj->cfg_id, drop)) {
+		if (edma_ddrq_deq_drop(EDMA_DDRQ_CMN_IDX(obj->cfg_id), drop)) {
 			edma_err("Error in EDMA ddrq dequeue drop\n");
 			return DDRQ_RET_INVAL;
 		}
@@ -1382,7 +1382,7 @@ nss_dp_ddrq_ret_t edma_ddrq_dequeue_drop(nss_dp_ddrq_obj_id_t *obj, bool drop)
 			return DDRQ_RET_INVAL;
 		}
 		for (i = 0; i < EDMA_DDRQ_ESRAMQ_CNT_PER_PORT; i++) {
-			if (edma_ddrq_deq_drop(queue_id + i, drop)) {
+			if (edma_ddrq_deq_drop(EDMA_DDRQ_CMN_IDX(queue_id + i), drop)) {
 				edma_err("Error in EDMA ddrq dequeue drop\n");
 				return DDRQ_RET_INVAL;
 			}
@@ -1835,7 +1835,7 @@ static int edma_ddrq_pending_stats_get_local(uint32_t ddrq_id, nss_dp_ddrq_pendi
 	sw_error_t sw_err;
 	fal_queue_stats_t q_stats = {0};
 
-	data =  edma_reg_read(EDMA_REG_DDRQ_AC_QUEUE_CNT_TBL_OFFSET(ddrq_id));
+	data =  edma_reg_read(EDMA_REG_DDRQ_AC_QUEUE_CNT_TBL_OFFSET(EDMA_DDRQ_CMN_IDX(ddrq_id)));
 	ddrq_stats->ddrq_pending_stats = data;
 
 	sw_err = fal_queue_counter_get(EDMA_SWITCH_DEV_ID, ddrq_id, &q_stats);
