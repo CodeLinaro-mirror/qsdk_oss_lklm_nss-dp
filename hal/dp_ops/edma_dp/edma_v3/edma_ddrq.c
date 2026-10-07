@@ -19,6 +19,7 @@
 #include <fal/fal_servcode.h>
 #include <fal/fal_pon.h>
 #include <ppe_drv.h>
+#include <ppe_drv_qos.h>
 #include "edma.h"
 #include "edma_regs.h"
 #include "edma_debug.h"
@@ -2018,9 +2019,58 @@ nss_dp_ddrq_ret_t edma_ddrq_occupancy_stats_status_get(uint32_t ddrq_id, bool *s
 		return DDRQ_RET_ERR;
 	}
 
+	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid ddrq_id (%u) in occupancy stats status get\n", ddrq_id);
+		return DDRQ_RET_INVAL;
+	}
+
 	reg_offset = (ddrq_id >> EDMA_DDRQ_MAX_CNT_WORD);
 	data =  edma_reg_read(EDMA_REG_DDRQ_DBG_CNT_BYTE_PKT_STATUS_OFFSET(reg_offset));
 	*status = ((data & (1 << (ddrq_id % EDMA_BITS_IN_WORD))) ? true : false);
+
+	return DDRQ_RET_SUCCESS;
+}
+
+/*
+ * edma_ddrq_bypass_cfg_set()
+ *	API to set/reset the DDRQ bypass configuration
+ */
+nss_dp_ddrq_ret_t edma_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set)
+{
+	if (!edma_gbl_ctx->ddrq_def_cfg.ddrq_gbl_cfg.ddrq_en_sw) {
+		edma_warn("DDRQ global software knob is disabled\n");
+		return DDRQ_RET_ERR;
+	}
+
+	if (!obj) {
+		edma_err("Invalid input parameters in DDRQ bypass configuration set API\n");
+		return DDRQ_RET_INVAL;
+	}
+
+	if (obj->cfg_type != NSS_DP_DDRQ_CFG_TYPE_QUEUE) {
+		edma_err("Invalid cfg type (%d). Currently supporting only queue id based"
+			       " DDRQ bypass configuration\n", obj->cfg_type);
+		return DDRQ_RET_INVAL;
+	}
+
+	if (obj->cfg_id >= NSS_DP_DDRQ_MAX_CNT) {
+		edma_err("Invalid queue id (%d) passed during DDRQ bypass configuration\n", obj->cfg_id);
+		return DDRQ_RET_INVAL;
+	}
+
+	if (set) {
+		if (ppe_drv_qos_ddrq_bypass_set(obj->cfg_id) != PPE_DRV_RET_SUCCESS) {
+			edma_err("Error in DDRQ bypass set configuration for qid: %d\n", obj->cfg_id);
+			return DDRQ_RET_ERR;
+		}
+		edma_info("Successfully configured DDRQ bypass set configuration for qid:%d\n", obj->cfg_id);
+	} else {
+		if (ppe_drv_qos_ddrq_bypass_reset(obj->cfg_id) != PPE_DRV_RET_SUCCESS) {
+			edma_err("Error in DDRQ bypass reset configuration for qid: %d\n", obj->cfg_id);
+			return DDRQ_RET_ERR;
+		}
+		edma_info("Successfully configured DDRQ bypass reset configuration for qid:%d\n", obj->cfg_id);
+	}
 
 	return DDRQ_RET_SUCCESS;
 }

@@ -729,6 +729,15 @@ nss_dp_ddrq_ret_t nss_dp_hal_ddrq_accu_stats_get(nss_dp_ddrq_obj_id_t *obj, nss_
 {
 	return edma_ddrq_accu_stats_get(obj, ddrq_accu_stats_info, ddrq_stats);
 }
+
+/*
+ * nss_dp_hal_ddrq_bypass_cfg_set()
+ *	API to set/reset DDRQ bypass configuration
+ */
+nss_dp_ddrq_ret_t nss_dp_hal_ddrq_bypass_cfg_set(nss_dp_ddrq_obj_id_t *obj, bool set)
+{
+	return edma_ddrq_bypass_cfg_set(obj, set);
+}
 #endif		/* NSS_DP_DDRQ_SUPPORT */
 
 /*
