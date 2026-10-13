@@ -7,6 +7,7 @@
 #include <linux/interrupt.h>
 #include <linux/phy.h>
 #include <linux/netdevice.h>
+#include <linux/ip.h>
 #include <linux/debugfs.h>
 #include <asm/cacheflush.h>
 #ifdef NSS_DP_PON_SUPPORT
@@ -422,11 +423,12 @@ static inline bool edma_tx_is_tso_eligible(struct sk_buff *skb)
 {
 	if (skb_is_gso(skb)) {
 		if ((skb_shinfo(skb)->gso_type == SKB_GSO_TCPV4) ||
-				(skb_shinfo(skb)->gso_type == SKB_GSO_TCPV6)) {
+				(skb_shinfo(skb)->gso_type == SKB_GSO_TCPV6) ||
+				(skb_shinfo(skb)->gso_type == (SKB_GSO_TCPV4 | SKB_GSO_TCP_FIXEDID)) ||
+				(skb_shinfo(skb)->gso_type == (SKB_GSO_TCPV6 | SKB_GSO_TCP_FIXEDID))) {
 			return true;
 		}
 	}
-
 	return false;
 }
 
@@ -461,6 +463,11 @@ static inline void edma_tx_fill_tso_desc(struct edma_pri_txdesc *txd, struct sk_
 
 	EDMA_TXDESC_TSO_ENABLE_SET(txd, 1);
 	EDMA_TXDESC_MSS_SET(txd, mss);
+
+	/*
+	 * Set IPID mode based on SKB_GSO_TCP_FIXEDID
+	 */
+	EDMA_TXDESC_TSO_IPID_MODE_SET(txd, !!(skb_shinfo(skb)->gso_type & SKB_GSO_TCP_FIXEDID));
 
 	/*
 	 * Update tso stats

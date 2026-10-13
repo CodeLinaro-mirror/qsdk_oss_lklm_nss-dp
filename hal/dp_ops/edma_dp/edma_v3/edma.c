@@ -288,6 +288,39 @@ int edma_tx_ring_mode_bitmask = EDMA_TX_RING_MODE_BITMASK_DEF;
 module_param(edma_tx_ring_mode_bitmask, int, 0640);
 MODULE_PARM_DESC(edma_tx_ring_mode_bitmask, "EDMA Tx ring mode (preheader/secondary ring) bitmask");
 
+int edma_tso_ipid_update_ctrl = EDMA_TXDESC_TSO_IDENT_UPDATE_BY_DESCRIPTOR;
+
+static int edma_tso_ipid_update_ctrl_set(const char *val, const struct kernel_param *kp)
+{
+	int new_val;
+	int ret;
+
+	ret = kstrtoint(val, 0, &new_val);
+	if (ret)
+		return ret;
+
+	if ((new_val != EDMA_TXDESC_TSO_IDENT_UPDATE_BY_DESCRIPTOR) &&
+			(new_val != EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER)) {
+		edma_err("Invalid edma_tso_ipid_update_ctrl value %d, "
+				"allowed values are %d (descriptor) and %d (parser). "
+				"Reverting to default (%d).\n",
+				new_val,
+				EDMA_TXDESC_TSO_IDENT_UPDATE_BY_DESCRIPTOR,
+				EDMA_TXDESC_TSO_IDENT_UPDATE_BY_PARSER,
+				EDMA_TXDESC_TSO_IDENT_UPDATE_BY_DESCRIPTOR);
+		edma_tso_ipid_update_ctrl = EDMA_TXDESC_TSO_IDENT_UPDATE_BY_DESCRIPTOR;
+		return 0;
+	}
+
+	edma_tso_ipid_update_ctrl = new_val;
+	return 0;
+}
+
+module_param_call(edma_tso_ipid_update_ctrl, edma_tso_ipid_update_ctrl_set,
+		param_get_int, &edma_tso_ipid_update_ctrl, 0640);
+MODULE_PARM_DESC(edma_tso_ipid_update_ctrl,
+		"TSO IP-ID update control: 1 (descriptor-driven) or 3 (parser-driven)");
+
 #ifdef NSS_DP_HW_GRO
 int edma_dp_gro_num_rxfill_rings = 4;
 module_param(edma_dp_gro_num_rxfill_rings, int, 0640);
@@ -2513,8 +2546,6 @@ void edma_fill_host_rings_info(struct edma_gbl_ctx *egc, struct edma_init_info *
 	/*
 	 * Mark the GRO RX rings into the global RX rings pool.
 
-
-
 	 * GRO rings use a fixed page pool buffer size.
 	 * TODO: Parameters will be extracted from GRO structure rather than
 	 * module param
@@ -2767,8 +2798,8 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	 *
 	 * Current Configuration:
 	 *	- Clearing bit 19 (GLOBAL_TSO_IDENT_UP_CTRL[3] = 0) to enable per-descriptor and per ring control
-	 *	- EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL[14:13] is set to 1x (configured while TX ring setup)
-	 *	- This enables fragmentation-aware IPID handling by PPE hardware instead of using per descriptor tso_ipid_mode.
+	 *	- EDMA_TXDESC_TSO_IDENT_UPDATE_CTRL[14:13] is set to 0x (01) (configured while TX ring setup)
+	 *	this enables fragmentation-aware IPID handling by PPE hardware instead of using per descriptor tso_ipid_mode
 	 */
 	data = edma_reg_read(EDMA_REG_TXQ_CTRL_2);
 	data &= ~EDMA_GLOBAL_TSO_IDENT_UP_CTRL_MASK;
@@ -3029,7 +3060,6 @@ int edma_rx_gro_max_buffer_len_cfg(struct ctl_table *table, int write,
 
 	return ret;
 }
-
 
 /*
  * edma_rx_gro_max_desc_count_cfg()
