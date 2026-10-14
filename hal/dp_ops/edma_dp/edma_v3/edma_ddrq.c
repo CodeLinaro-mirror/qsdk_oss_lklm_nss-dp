@@ -468,7 +468,7 @@ int32_t edma_ddrq_dp_dev_set(struct net_device *dev)
 		 */
 		if (edma_ddrq_en_port_bm & (1 << (mac_id - 1))) {
 			if (edma_passthrough_val == EDMA_PASSTHROUGH_VAL_INVALID) {
-				dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_0B;
+				dp_dev->pt_info.dst_pt_mode_val = EDMA_TXDESC_PASS_THROUGH_MODE_128B;
 			} else {
 				dp_dev->pt_info.dst_pt_mode_val = edma_passthrough_val;
 			}
