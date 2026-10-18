@@ -935,6 +935,13 @@ void edma_cleanup(bool is_dp_override)
 	 */
 	ppe_drv_acl_mirror_core_select_unregister_cb();
 
+#ifdef NSS_DP_DDRQ_SUPPORT
+	/*
+	 * Cleanup DDRQ state.
+	 */
+	edma_ddrq_exit();
+#endif
+
 	/*
 	 * Clean the procfs entries for EDMA ring stats
 	 */
@@ -2631,6 +2638,9 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 {
 	int ret = 0;
 	uint32_t data;
+#ifdef NSS_DP_DDRQ_SUPPORT
+	bool ddrq_init_done = false;
+#endif
 #ifdef NSS_DP_MHT_SW_PORT_MAP
 	fal_athtag_tx_cfg_t tx_cfg = {0};
 	sw_error_t fal_ret;
@@ -2663,6 +2673,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_err("Error in EDMA DDRQ initialization\n");
 		return -EINVAL;
 	}
+	ddrq_init_done = true;
 	edma_warn("DDRQ init successful\n");
 #endif
 
@@ -2690,7 +2701,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	ret = edma_alloc_and_setup_rings(egc);
 	if (ret) {
 		edma_err("Error in initializaing the rings. ret: %d\n", ret);
-		return ret;
+		goto edma_hw_init_fail;
 	}
 	edma_set_init_stage(EDMA_INIT_STAGE_RINGS_ALLOCATED);
 
@@ -2828,7 +2839,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		edma_cfg_tx_rings_disable(egc);
 		edma_cfg_tx_rings_cleanup(egc);
 		edma_cfg_rx_rings_cleanup(egc);
-		return ret;
+		goto edma_hw_init_fail;
 	}
 	edma_set_init_stage(EDMA_INIT_STAGE_PRIO_MAP_CFG);
 
@@ -2871,7 +2882,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 
 		ret = edma_alloc_loopback_ring(egc);
 		if (ret) {
-			return ret;
+			goto edma_hw_init_fail;
 		}
 
 		edma_cfg_rx_loopback_rings_disable(egc);
@@ -2898,7 +2909,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	ret = edma_hw_gro_init(egc);
 	if (ret) {
 		edma_err("HW GRO initialization failed\n");
-		return ret;
+		goto edma_hw_init_fail;
 	}
 #endif
 
@@ -2910,7 +2921,7 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 		ret = edma_cfg_tx_udp_st_ring_alloc(egc);
 		if (ret) {
 			edma_err("Error in initializaing the rings. ret: %d\n", ret);
-			return ret;
+			goto edma_hw_init_fail;
 		}
 		edma_set_init_stage(EDMA_INIT_STAGE_RINGS_ALLOCATED);
 
@@ -2926,6 +2937,14 @@ static int edma_hw_init(struct edma_gbl_ctx *egc)
 	edma_set_init_stage(EDMA_INIT_STAGE_PORT_ENABLED);
 
 	return 0;
+
+edma_hw_init_fail:
+#ifdef NSS_DP_DDRQ_SUPPORT
+	if (ddrq_init_done) {
+		edma_ddrq_exit();
+	}
+#endif
+	return ret;
 }
 
 /*
