@@ -29,6 +29,10 @@
 #include "edma_ddrq.h"
 #include "nss_dp_dev.h"
 
+#ifdef NSS_DP_PON_SUPPORT
+#include <nss_dp_gem.h>
+#endif
+
 /*
  * DDRQ memory region's block wise size map
  */
@@ -2436,8 +2440,9 @@ static int edma_ddrq_get_ddrq_mem_regions(void)
 static int nss_dp_ddrq_disable(uint32_t ddrq_id)
 {
 	nss_dp_ddrq_obj_id_t obj_id;
+	nss_dp_ddrq_pending_stats_t ddrq_stats = {0};
 	nss_dp_ddrq_ret_t ret;
-
+	uint32_t poll_timeout = EDMA_DDRQ_HW_CONSUME_LOOP_CNT;
 
 	if (ddrq_id >= NSS_DP_DDRQ_MAX_CNT) {
 		edma_err("Invalid queue id (%u) passed for DDRQ disable configuration\n",
@@ -2463,7 +2468,18 @@ static int nss_dp_ddrq_disable(uint32_t ddrq_id)
 		return -EINVAL;
 	}
 
-	mdelay(30);
+	do {
+		mdelay(5);
+		ret = edma_ddrq_pending_stats_get(&obj_id, &ddrq_stats, 1);
+		if (ret != DDRQ_RET_SUCCESS) {
+			edma_err("Error (%d) in ddrq_id: %d pending stats get\n", ret, obj_id.cfg_id);
+		}
+
+		if (--poll_timeout == 0) {
+			edma_err("Timeout waiting for DDRQ counters to stabilize\n");
+			break;
+		}
+	} while (ddrq_stats.ddrq_enq_stats);
 
 	edma_debug("DDRQ disable successful for queue:%u\n", ddrq_id);
 	return 0;
@@ -2938,6 +2954,17 @@ static int nss_dp_ddrq_accu_stats_stop(void)
 	return 0;
 }
 
+#ifdef NSS_DP_PON_SUPPORT
+/*
+ * nss_dp_ddrq_pon_drainout()
+ *	Drain all PON T-CONTs.
+ */
+static int nss_dp_ddrq_pon_drainout(void)
+{
+	return nss_dp_pon_drainout(NSS_DP_PON_TCONT_BITMAP_ALL, "ppe_qos_disable");
+}
+#endif
+
 /*
  * edma_ddrq_qos_ops
  *	DDRQ callbacks registered with PPE QoS layer.
@@ -2953,6 +2980,9 @@ static const struct ppe_drv_qos_ddrq_ops edma_ddrq_qos_ops = {
 	.ddrq_cfg_reset = nss_dp_ddrq_cfg_reset,
 	.ddrq_accu_stats_start = nss_dp_ddrq_accu_stats_start,
 	.ddrq_accu_stats_stop = nss_dp_ddrq_accu_stats_stop,
+#ifdef NSS_DP_PON_SUPPORT
+	.ddrq_pon_drainout = nss_dp_ddrq_pon_drainout,
+#endif
 };
 
 /*
