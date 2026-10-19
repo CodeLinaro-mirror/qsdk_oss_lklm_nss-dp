@@ -1209,6 +1209,12 @@ static int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		}
 	}
 
+	/*
+	 * Enable AC flow control (ac_fc_en) on all the PPE queues mapped to the
+	 * DS Rx rings.
+	 */
+	edma_ppeds_rx_ds_queue_ac_fc_configure(true);
+
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_START_DONE;
 	write_unlock_bh(&drv->lock);
@@ -1411,6 +1417,12 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		mdelay(5);
 		edma_ppeds_tx_complete(wifi7_cfg->txcmpl_ring.count, &wifi7_cfg->txcmpl_ring);
 	}
+
+	/*
+	 * Disable AC flow control (ac_fc_en) on all the PPE queues mapped to the
+	 * DS Rx rings.
+	 */
+	edma_ppeds_rx_ds_queue_ac_fc_configure(false);
 
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_STOP_DONE;
