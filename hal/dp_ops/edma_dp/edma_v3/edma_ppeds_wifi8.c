@@ -609,7 +609,6 @@ static void edma_ppeds_rxdesc_type_ds(uint32_t rx_ring_id)
 	edma_reg_write(EDMA_REG_RXDESC_CTRL(rx_ring_id), reg_val);
 }
 
-
 /*
  * edma_ppeds_cfg_rx()
  *	API to configure PPE-DS EDMA Rx ring
@@ -1736,6 +1735,12 @@ static int edma_ppeds_inst_start(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		}
 	}
 
+	/*
+	 * Enable AC flow control (ac_fc_en) on all the PPE queues mapped to the
+	 * DS Rx rings.
+	 */
+	edma_ppeds_rx_ds_queue_ac_fc_configure(true);
+
 	write_lock_bh(&drv->lock);
 	node_cfg->node_state = EDMA_PPEDS_NODE_STATE_START_DONE;
 	write_unlock_bh(&drv->lock);
@@ -1980,6 +1985,12 @@ static void edma_ppeds_inst_stop(nss_dp_ppeds_handle_t *ppeds_handle, uint8_t in
 		mdelay(5);
 		edma_ppeds_tx_complete(wifi8_cfg->txcmpl_ring.count, &wifi8_cfg->txcmpl_ring);
 	}
+
+	/*
+	 * Disable AC flow control (ac_fc_en) on all the PPE queues mapped to the
+	 * DS Rx rings.
+	 */
+	edma_ppeds_rx_ds_queue_ac_fc_configure(false);
 
 	edma_debug("%s: PPE-DS inst stop done: ppeds_node=%px, db_idx=%d, node_state=%d\n",
 		 __func__, ppeds_node, ppeds_node->db_idx, node_cfg->node_state);

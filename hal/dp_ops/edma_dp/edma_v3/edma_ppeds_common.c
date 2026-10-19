@@ -11,7 +11,10 @@
 #include "nss_dp_dev.h"
 #include "edma_cfg_rx.h"
 #include "edma_cfg_tx.h"
+#include "edma_ppeds_priv.h"
 #include <ppe_drv.h>
+#include <ppe_drv_public.h>
+#include <fal/fal_qm.h>
 
 void *edma_ppeds_tx_ring_sec_mem;
 int edma_ppeds_tx_ring_entries;
@@ -354,4 +357,68 @@ void edma_ppeds_pon_pq_enable(void)
 	}
 }
 #endif /* NSS_DP_PON_SUPPORT */
+
+/*
+ * edma_ppeds_rx_ds_queue_ac_fc_configure()
+ *	Enable/disable AC FC (ac_fc_en) on all PPE queues mapped to DS Rx rings.
+ *
+ * This goes over all the Rx descriptor rings, checks if the ring is of
+ * EDMA_RING_TYPE_FLAGS_DS type and, if so, enables/disables the queue level
+ * AC flow control (ac_fc_en) for each of its mapped PPE queues based on the
+ * 'enable' argument.
+ */
+void edma_ppeds_rx_ds_queue_ac_fc_configure(bool enable)
+{
+	struct edma_gbl_ctx *egc = edma_gbl_ctx;
+	uint32_t i, j, queue_id, num_queues;
+	fal_ac_obj_t obj;
+	fal_ac_ctrl_t ac_ctrl;
+
+	for (i = 0; i < egc->rxdesc_ring_max; i++) {
+
+		/*
+		 * Skip rings that are not in use.
+		 */
+		if (!(egc->rxdesc_info[i].status_flags & EDMA_RING_STATUS_FLAGS_IN_USE))
+			continue;
+
+		/*
+		 * Only process DS type rings.
+		 */
+		if (!(egc->rxdesc_info[i].type_flags & EDMA_RING_TYPE_FLAGS_DS))
+			continue;
+
+		/*
+		 * For DS rings the queue base is directly the PPE queue base
+		 * (rx_queue_start is 0 for DS rings).
+		 */
+		queue_id = egc->rxdesc_info[i].ppe_queue_base;
+		num_queues = egc->rxdesc_info[i].ppe_num_queues;
+
+		for (j = queue_id; j < (queue_id + num_queues); j++) {
+			/*
+			 * Enable/disable the state of the mapped queue's AC FC
+			 * configuration.
+			 */
+			memset(&obj, 0, sizeof(fal_ac_obj_t));
+			memset(&ac_ctrl, 0, sizeof(fal_ac_ctrl_t));
+			obj.type = FAL_AC_QUEUE;
+			obj.obj_id = j;
+			if (fal_ac_ctrl_get(EDMA_SWITCH_DEV_ID, &obj, &ac_ctrl) != SW_OK) {
+				edma_err("Error in getting %d queue's AC configuration\n",
+						obj.obj_id);
+				continue;
+			}
+
+			ac_ctrl.ac_fc_en = enable;
+			if (fal_ac_ctrl_set(EDMA_SWITCH_DEV_ID, &obj, &ac_ctrl) != SW_OK) {
+				edma_err("Error in changing queue's ac_fc state:%d"
+						" for DS queue:%d\n", enable, obj.obj_id);
+				continue;
+			}
+
+			edma_debug("DS Queue %d AC_FC is configuration set to %d\n", j, enable);
+		}
+	}
+}
 

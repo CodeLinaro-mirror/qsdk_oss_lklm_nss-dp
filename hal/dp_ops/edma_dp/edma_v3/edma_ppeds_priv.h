@@ -167,6 +167,7 @@ void edma_ppeds_tx_cmpl_ring_free(struct edma_txcmpl_ring *txcmpl_ring);
 int edma_ppeds_tx_secondary_alloc(struct edma_txdesc_ring *txdesc_ring);
 void edma_ppeds_service_status_update(nss_dp_ppeds_handle_t *ppeds_handle, bool enable);
 void edma_ppeds_reset_gbl_ds_ctx(void);
+void edma_ppeds_rx_ds_queue_ac_fc_configure(bool enable);
 
 #ifdef NSS_DP_PON_SUPPORT
 void edma_ppeds_pon_pq_disable(void);
